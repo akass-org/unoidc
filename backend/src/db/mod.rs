@@ -1,10 +1,10 @@
-use sqlx::{AnyPool, Pool, Any, query};
+use sqlx::PgPool;
 use std::fs;
 use tracing::{info, error};
 use anyhow::{Result, Context};
 
-pub async fn connect(database_url: &str) -> Result<Pool<Any>> {
-    AnyPool::connect(database_url)
+pub async fn connect(database_url: &str) -> Result<PgPool> {
+    PgPool::connect(database_url)
         .await
         .context("Failed to connect to database")
 }
@@ -12,8 +12,7 @@ pub async fn connect(database_url: &str) -> Result<Pool<Any>> {
 /// 运行数据库迁移
 ///
 /// 从 migrations/ 目录读取 SQL 文件并按顺序执行
-/// 支持开发环境（SQLite）和生产环境（PostgreSQL）
-pub async fn run_migrations(pool: &Pool<Any>) -> Result<()> {
+pub async fn run_migrations(pool: &PgPool) -> Result<()> {
     info!("Running database migrations...");
 
     // 获取 migrations 目录
@@ -69,7 +68,7 @@ pub async fn run_migrations(pool: &Pool<Any>) -> Result<()> {
 /// 执行迁移 SQL
 ///
 /// 处理包含多条语句的 SQL 文件
-async fn execute_migration_sql(pool: &Pool<Any>, sql: &str) -> Result<()> {
+async fn execute_migration_sql(pool: &PgPool, sql: &str) -> Result<()> {
     // 改进的 SQL 语句分割
     // 1. 按分号分割
     // 2. 移除注释
@@ -103,7 +102,7 @@ async fn execute_migration_sql(pool: &Pool<Any>, sql: &str) -> Result<()> {
                 };
                 info!("Executing SQL:\n{}", preview);
 
-                if let Err(e) = query(statement)
+                if let Err(e) = sqlx::query(statement)
                     .execute(pool)
                     .await
                 {
@@ -120,7 +119,7 @@ async fn execute_migration_sql(pool: &Pool<Any>, sql: &str) -> Result<()> {
     let statement = current_statement.trim();
     if !statement.is_empty() {
         tracing::debug!("Executing final SQL: {}", &statement[..statement.len().min(100)]);
-        query(statement)
+        sqlx::query(statement)
             .execute(pool)
             .await
             .context("Failed to execute SQL statement")?;

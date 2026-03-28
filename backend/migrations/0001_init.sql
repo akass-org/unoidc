@@ -201,22 +201,3 @@ CREATE INDEX idx_audit_logs_client ON audit_logs(client_id);
 CREATE INDEX idx_audit_logs_correlation ON audit_logs(correlation_id);
 CREATE INDEX idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX idx_audit_logs_created ON audit_logs(created_at);
-
--- ============================================
--- PostgreSQL vs SQLite 兼容性说明
--- ============================================
--- PostgreSQL 特性：
---   - UUID 类型原生支持（需要 gen_random_uuid() 或 uuid-ossp 扩展）
---   - JSONB 类型（这里使用 JSON 以兼容 SQLite）
---   - TIMESTAMP WITH TIME ZONE（这里使用 TIMESTAMP）
---
--- SQLite 特性：
---   - UUID 存储为 TEXT（应用层需要确保格式）
---   - JSON 类型在 SQLite 3.38+ 支持（使用 JSON 函数）
---   - TIMESTAMP 存储为 TEXT（ISO 8601 字符串）
---
--- 迁移策略：
---   - 使用 JSON 而非 JSONB 以保证兼容性
---   - 应用层负责 UUID 生成（使用 uuid::Uuid::new_v4()）
---   - 时间戳使用 time crate 处理，避免数据库特定函数
---   - 索引创建在两个数据库中都兼容
