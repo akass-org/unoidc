@@ -19,3 +19,6 @@ pub use group_service::GroupService;
 pub use client_service::ClientService;
 pub use consent_service::ConsentService;
 pub use auth_service::AuthService;
+pub use key_service::KeyService;
+pub use oidc_service::OidcService;
+pub use token_service::TokenService;

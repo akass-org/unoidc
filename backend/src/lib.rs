@@ -34,6 +34,14 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .route("/api/v1/auth/register", post(handler::auth::register))
         .route("/api/v1/auth/forgot-password", post(handler::auth::forgot_password))
 
+        // OIDC 路由
+        .route("/.well-known/openid-configuration", get(handler::oidc::discovery))
+        .route("/jwks.json", get(handler::oidc::jwks))
+        .route("/authorize", get(handler::oidc::authorize_get))
+        .route("/authorize/consent", post(handler::oidc::authorize_consent))
+        .route("/token", post(handler::oidc::token))
+        .route("/userinfo", get(handler::oidc::userinfo))
+
         // 添加中间件层
         .layer(
             ServiceBuilder::new()
