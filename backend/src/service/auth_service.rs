@@ -40,7 +40,7 @@ impl AuthService {
             .await
             .map_err(|e| {
                 warn!("Database error while finding user: {}", e);
-                AppError::InternalServerError
+                AppError::InternalServerError { error_code: None }
             })?
             .ok_or_else(|| {
                 info!("Login failed: user not found - {}", username);
@@ -50,20 +50,24 @@ impl AuthService {
         // 2. 检查账户是否被锁定
         if user.is_locked() {
             warn!("Login attempt on locked account: {}", username);
-            return Err(AppError::Forbidden);
+            return Err(AppError::Forbidden {
+                reason: Some("Account is locked".to_string()),
+            });
         }
 
         // 3. 检查账户是否启用
         if !user.enabled {
             warn!("Login attempt on disabled account: {}", username);
-            return Err(AppError::Forbidden);
+            return Err(AppError::Forbidden {
+                reason: Some("Account is disabled".to_string()),
+            });
         }
 
         // 4. 验证密码
         let password_valid = password::verify_password(password, &user.password_hash)
             .map_err(|e| {
                 warn!("Password verification error: {}", e);
-                AppError::InternalServerError
+                AppError::InternalServerError { error_code: None }
             })?;
 
         if !password_valid {
@@ -72,7 +76,7 @@ impl AuthService {
                 .await
                 .map_err(|e| {
                     warn!("Failed to increment login attempts: {}", e);
-                    AppError::InternalServerError
+                    AppError::InternalServerError { error_code: None }
                 })?;
 
             info!(
@@ -89,7 +93,7 @@ impl AuthService {
                     .await
                     .map_err(|e| {
                         warn!("Failed to lock account: {}", e);
-                        AppError::InternalServerError
+                        AppError::InternalServerError { error_code: None }
                     })?;
 
                 warn!(
@@ -97,7 +101,12 @@ impl AuthService {
                     username, lockout_until
                 );
 
-                return Err(AppError::Forbidden);
+                return Err(AppError::Forbidden {
+                    reason: Some(format!(
+                        "Account locked due to {} failed attempts",
+                        MAX_FAILED_ATTEMPTS
+                    )),
+                });
             }
 
             return Err(AppError::InvalidCredentials);
@@ -108,14 +117,14 @@ impl AuthService {
             .await
             .map_err(|e| {
                 warn!("Failed to reset login attempts: {}", e);
-                AppError::InternalServerError
+                AppError::InternalServerError { error_code: None }
             })?;
 
         UserRepo::update_last_login(pool, user.id)
             .await
             .map_err(|e| {
                 warn!("Failed to update last login time: {}", e);
-                AppError::InternalServerError
+                AppError::InternalServerError { error_code: None }
             })?;
 
         info!("User logged in successfully: {}", username);
@@ -126,7 +135,7 @@ impl AuthService {
             .await
             .map_err(|e| {
                 warn!("Failed to create session: {}", e);
-                AppError::InternalServerError
+                AppError::InternalServerError { error_code: None }
             })?;
 
         info!("Session created for user {}: {}", username, session.session_id);
@@ -142,7 +151,7 @@ impl AuthService {
             .await
             .map_err(|e| {
                 warn!("Failed to delete session: {}", e);
-                AppError::InternalServerError
+                AppError::InternalServerError { error_code: None }
             })?;
 
         info!("Session logged out: {}", session_id);
@@ -169,7 +178,7 @@ impl AuthService {
             }
             Err(e) => {
                 warn!("Database error while finding session: {}", e);
-                return Err(AppError::InternalServerError);
+                return Err(AppError::InternalServerError { error_code: None });
             }
         };
 
@@ -188,7 +197,7 @@ impl AuthService {
             }
             Err(e) => {
                 warn!("Database error while finding user: {}", e);
-                return Err(AppError::InternalServerError);
+                return Err(AppError::InternalServerError { error_code: None });
             }
         };
 
@@ -209,7 +218,7 @@ impl AuthService {
             .await
             .map_err(|e| {
                 warn!("Failed to delete user sessions: {}", e);
-                AppError::InternalServerError
+                AppError::InternalServerError { error_code: None }
             })?;
 
         info!("Logged out {} sessions for user {}", count, user_id);

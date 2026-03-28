@@ -63,8 +63,8 @@ pub async fn login(
         // 登录失败，返回相应的错误
         match e {
             AppError::InvalidCredentials => AppError::InvalidCredentials,
-            AppError::Forbidden => AppError::Forbidden,
-            _ => AppError::InternalServerError,
+            AppError::Forbidden { reason } => AppError::Forbidden { reason },
+            _ => AppError::InternalServerError { error_code: None },
         }
     })?;
 

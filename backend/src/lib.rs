@@ -20,6 +20,8 @@ pub async fn build_app() -> Router {
 
 pub fn build_app_with_state(state: Arc<AppState>) -> Router {
     use axum::routing::{get, post};
+    use tower::ServiceBuilder;
+    use crate::middleware::request_context_middleware;
 
     Router::new()
         // 健康检查
@@ -32,8 +34,14 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .route("/api/v1/auth/register", post(handler::auth::register))
         .route("/api/v1/auth/forgot-password", post(handler::auth::forgot_password))
 
-        // 添加客户端地址的layer (可选)
-        .layer(axum::Extension::<Option<std::net::SocketAddr>>(None))
+        // 添加中间件层
+        .layer(
+            ServiceBuilder::new()
+                // 请求上下文中间件（添加请求 ID 和关联 ID）
+                .layer(axum::middleware::from_fn(request_context_middleware))
+                // 添加客户端地址扩展
+                .layer(axum::Extension::<Option<std::net::SocketAddr>>(None))
+        )
 
         .with_state(state)
 }

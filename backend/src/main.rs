@@ -1,15 +1,16 @@
-use backend::{build_app, config::Config, db, metrics};
+use backend::{build_app, config::Config, db, metrics, middleware::LogRedactionLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 初始化日志
+    // 初始化日志（带脱敏功能）
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "backend=debug,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
+        .with(LogRedactionLayer)  // 添加日志脱敏层
         .init();
 
     // 加载配置
