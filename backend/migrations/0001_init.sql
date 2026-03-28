@@ -15,11 +15,11 @@ CREATE TABLE users (
     picture VARCHAR(512),
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    last_login_at TIMESTAMP,
+    last_login_at TIMESTAMPTZ,
     failed_login_attempts INTEGER NOT NULL DEFAULT 0,
-    locked_until TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    locked_until TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_users_username ON users(username);
@@ -32,7 +32,7 @@ CREATE TABLE groups (
     id UUID PRIMARY KEY,
     name VARCHAR(64) NOT NULL UNIQUE,
     description TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_groups_name ON groups(name);
@@ -43,7 +43,7 @@ CREATE INDEX idx_groups_name ON groups(name);
 CREATE TABLE user_groups (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, group_id)
 );
 
@@ -65,8 +65,8 @@ CREATE TABLE clients (
     token_endpoint_auth_method VARCHAR(32) NOT NULL,
     id_token_signed_response_alg VARCHAR(16) NOT NULL DEFAULT 'ES256',
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_clients_client_id ON clients(client_id);
@@ -88,9 +88,9 @@ CREATE TABLE user_consents (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
     scope VARCHAR(512) NOT NULL,
-    granted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    revoked_at TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    granted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    revoked_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, client_id)
 );
 
@@ -110,11 +110,11 @@ CREATE TABLE authorization_codes (
     nonce VARCHAR(255),
     code_challenge VARCHAR(255) NOT NULL,
     code_challenge_method VARCHAR(16) NOT NULL DEFAULT 'S256',
-    auth_time TIMESTAMP NOT NULL,
+    auth_time TIMESTAMPTZ NOT NULL,
     amr JSON NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    consumed_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_auth_codes_hash ON authorization_codes(code_hash);
@@ -130,11 +130,11 @@ CREATE TABLE refresh_tokens (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
     scope VARCHAR(512) NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    revoked_at TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ,
     replaced_by_token_hash VARCHAR(255),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    last_used_at TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_used_at TIMESTAMPTZ
 );
 
 CREATE INDEX idx_refresh_tokens_hash ON refresh_tokens(token_hash);
@@ -148,9 +148,9 @@ CREATE TABLE user_sessions (
     id UUID PRIMARY KEY,
     session_id VARCHAR(128) NOT NULL UNIQUE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ip_address VARCHAR(64),
     user_agent TEXT
 );
@@ -170,8 +170,8 @@ CREATE TABLE jwks (
     private_key_pem TEXT NOT NULL,
     public_key_jwk JSON NOT NULL,
     active BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    rotated_at TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    rotated_at TIMESTAMPTZ
 );
 
 CREATE INDEX idx_jwks_kid ON jwks(kid);
@@ -193,7 +193,7 @@ CREATE TABLE audit_logs (
     metadata JSON,
     ip_address VARCHAR(64),
     user_agent TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_audit_logs_actor ON audit_logs(actor_user_id);

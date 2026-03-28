@@ -15,6 +15,23 @@ pub struct Config {
     pub private_key_encryption_key: String,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            database_url: "sqlite:./dev.db".to_string(),
+            app_base_url: "http://localhost:3000".to_string(),
+            issuer: "http://localhost:3000".to_string(),
+            session_secret: "dev-secret-key-change-in-production".to_string(),
+            cookie_domain: None,
+            access_token_ttl: 3600,
+            refresh_token_ttl: 604800,
+            session_ttl: 86400,
+            storage_path: "./storage".to_string(),
+            private_key_encryption_key: "dev-encryption-key-32-chars-change!!".to_string(),
+        }
+    }
+}
+
 impl Config {
     pub fn from_env() -> Result<Self, anyhow::Error> {
         dotenvy::dotenv().ok();
