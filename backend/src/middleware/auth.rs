@@ -48,8 +48,8 @@ pub async fn require_auth_user(
         })
 }
 
-/// 从 Cookie 头中提取指定名称的 cookie 值
-fn extract_session_cookie(headers: &HeaderMap) -> Option<String> {
+/// 从 Cookie 头中提取 unoidc_session
+pub fn extract_session_cookie(headers: &HeaderMap) -> Option<String> {
     let cookie_header = headers.get("cookie")?.to_str().ok()?;
     extract_cookie_value(cookie_header, "unoidc_session")
 }

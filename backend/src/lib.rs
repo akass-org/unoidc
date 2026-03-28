@@ -12,11 +12,6 @@ pub mod metrics;
 use axum::Router;
 use std::sync::Arc;
 
-pub async fn build_app() -> Router {
-    // TODO: 从环境变量加载配置和数据库连接
-    // 现在先返回一个空的router用于测试
-    Router::new()
-}
 
 pub fn build_app_with_state(state: Arc<AppState>) -> Router {
     use axum::routing::{get, post};

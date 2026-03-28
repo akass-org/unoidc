@@ -90,14 +90,10 @@ pub fn verify_jwt<T: DeserializeOwned>(
 
     if let Some(iss) = issuer {
         validation.set_issuer(&[iss]);
-    } else {
-        validation.validate_aud = false;
-        // 不验证 issuer 和 audience（用于内部 token 验证）
-        validation.insecure_disable_signature_validation();
     }
 
-    if let Some(_aud) = audience {
-        validation.set_audience(&[_aud]);
+    if let Some(aud) = audience {
+        validation.set_audience(&[aud]);
     } else {
         validation.validate_aud = false;
     }

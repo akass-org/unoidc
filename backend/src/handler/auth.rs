@@ -4,13 +4,14 @@
 
 use axum::{
     extract::State,
+    http::HeaderMap,
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 
 use crate::{
-    error::{AppError, Result},
+    error::{AppError, OidcErrorCode, Result},
     service::AuthService,
     AppState,
 };
@@ -81,9 +82,13 @@ pub async fn login(
 /// POST /api/v1/auth/logout
 pub async fn logout(
     State(state): State<Arc<AppState>>,
-    Extension(session_id): Extension<String>,
+    headers: HeaderMap,
 ) -> Result<Json<LogoutResponse>> {
-    // 调用认证服务登出
+    let session_id = crate::middleware::auth::extract_session_cookie(&headers)
+        .ok_or(AppError::Unauthorized {
+            reason: Some("No session cookie".to_string()),
+        })?;
+
     AuthService::logout(&state.db, &session_id).await?;
 
     Ok(Json(LogoutResponse {
@@ -96,22 +101,18 @@ pub async fn logout(
 ///
 /// POST /api/v1/auth/register
 pub async fn register() -> Result<Json<LoginResponse>> {
-    // TODO: 实现注册逻辑
-    Ok(Json(LoginResponse {
-        success: true,
-        message: "Registration successful".to_string(),
-        session_id: None,
-    }))
+    Err(AppError::OidcError {
+        error: OidcErrorCode::TemporarilyUnavailable,
+        error_description: Some("Registration not yet implemented".to_string()),
+    })
 }
 
 /// 忘记密码
 ///
 /// POST /api/v1/auth/forgot-password
 pub async fn forgot_password() -> Result<Json<LoginResponse>> {
-    // TODO: 实现忘记密码逻辑
-    Ok(Json(LoginResponse {
-        success: true,
-        message: "Password reset email sent".to_string(),
-        session_id: None,
-    }))
+    Err(AppError::OidcError {
+        error: OidcErrorCode::TemporarilyUnavailable,
+        error_description: Some("Password reset not yet implemented".to_string()),
+    })
 }

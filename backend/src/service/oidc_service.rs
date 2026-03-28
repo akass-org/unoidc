@@ -63,32 +63,25 @@ impl OidcService {
         Ok((plain_code, auth_code))
     }
 
-    /// 通过哈希查找并消费授权码
+    /// 通过哈希查找并原子消费授权码
     ///
-    /// 原子操作：查找 → 验证 → 标记已消费
+    /// 使用条件 UPDATE 确保并发安全，防止授权码双花
     pub async fn exchange_authorization_code(
         pool: &PgPool,
         plain_code: &str,
     ) -> anyhow::Result<Option<AuthorizationCode>> {
         let code_hash = Self::hash_token(plain_code);
 
-        let auth_code = match AuthCodeRepo::find_by_hash(pool, &code_hash).await? {
+        // 原子操作：仅在未消费时标记并返回
+        let auth_code = match AuthCodeRepo::consume_and_return(pool, &code_hash).await? {
             Some(code) => code,
             None => return Ok(None),
         };
 
-        // 检查是否已消费
-        if auth_code.consumed_at.is_some() {
-            return Ok(None);
-        }
-
-        // 检查是否过期
+        // 检查是否过期（可能在消费窗口内过期）
         if auth_code.is_expired() {
             return Ok(None);
         }
-
-        // 标记已消费
-        AuthCodeRepo::consume(pool, &code_hash).await?;
 
         Ok(Some(auth_code))
     }

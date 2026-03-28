@@ -135,7 +135,7 @@ impl ClientService {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Client secret not configured"))?;
 
-        if !crypto::verify_client_secret(secret_hash, secret)? {
+        if !crypto::verify_client_secret(secret, secret_hash)? {
             return Err(anyhow::anyhow!("Invalid client secret"));
         }
 

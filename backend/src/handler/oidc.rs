@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-use crate::error::Result;
+use crate::error::{AppError, OidcErrorCode, Result};
 use crate::service::KeyService;
 use crate::AppState;
 
@@ -73,34 +73,46 @@ pub struct AuthorizeRequest {
     pub prompt: Option<String>,
 }
 
-/// GET /authorize — TODO: Task 10 完整实现
+/// GET /authorize — 尚未实现
 pub async fn authorize_get(
     State(_state): State<Arc<AppState>>,
     _headers: HeaderMap,
     Query(_req): Query<AuthorizeRequest>,
 ) -> Result<&'static str> {
-    Ok("authorize")
+    Err(AppError::OidcError {
+        error: OidcErrorCode::TemporarilyUnavailable,
+        error_description: Some("Authorization endpoint not yet implemented".to_string()),
+    })
 }
 
-/// POST /authorize/consent — TODO: Task 10 完整实现
+/// POST /authorize/consent — 尚未实现
 pub async fn authorize_consent() -> Result<Json<Value>> {
-    Ok(Json(json!({})))
+    Err(AppError::OidcError {
+        error: OidcErrorCode::TemporarilyUnavailable,
+        error_description: Some("Consent endpoint not yet implemented".to_string()),
+    })
 }
 
 // ============================================================
 // Token
 // ============================================================
 
-/// POST /token — TODO: Task 11 完整实现
+/// POST /token — 尚未实现
 pub async fn token() -> Result<Json<Value>> {
-    Ok(Json(json!({})))
+    Err(AppError::OidcError {
+        error: OidcErrorCode::TemporarilyUnavailable,
+        error_description: Some("Token endpoint not yet implemented".to_string()),
+    })
 }
 
 // ============================================================
 // UserInfo
 // ============================================================
 
-/// GET /userinfo — TODO: Task 12 完整实现
+/// GET /userinfo — 尚未实现
 pub async fn userinfo() -> Result<Json<Value>> {
-    Ok(Json(json!({})))
+    Err(AppError::OidcError {
+        error: OidcErrorCode::TemporarilyUnavailable,
+        error_description: Some("UserInfo endpoint not yet implemented".to_string()),
+    })
 }

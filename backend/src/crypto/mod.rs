@@ -5,6 +5,7 @@
 pub mod password;
 pub mod random;
 pub mod jwt;
+pub mod key_encryption;
 
 // 重新导出常用函数，方便使用
 pub use password::{hash_password, verify_password, hash_client_secret, verify_client_secret};

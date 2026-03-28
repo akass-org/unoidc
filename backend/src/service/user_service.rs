@@ -77,7 +77,7 @@ impl UserService {
         }
 
         // 验证密码
-        let password_valid = crypto::verify_password(&user.password_hash, password)?;
+        let password_valid = crypto::verify_password(password, &user.password_hash)?;
 
         if !password_valid {
             // 增加失败次数
@@ -145,7 +145,7 @@ impl UserService {
         let user = Self::get_user(pool, user_id).await?;
 
         // 验证旧密码
-        if !crypto::verify_password(&user.password_hash, old_password)? {
+        if !crypto::verify_password(old_password, &user.password_hash)? {
             return Err(anyhow::anyhow!("Invalid old password"));
         }
 

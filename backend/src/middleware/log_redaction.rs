@@ -1,9 +1,12 @@
 // 日志脱敏中间件和辅助函数
 //
 // 提供日志脱敏功能，确保密码、token、密钥等敏感信息不被泄露到日志中
+// 本模块同时负责日志格式化输出，替换标准 fmt::layer()
+
+use std::io::Write;
 
 use tracing::field::Visit;
-use tracing::{Event, Subscriber};
+use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::Layer;
 
@@ -21,7 +24,6 @@ const SENSITIVE_FIELDS: &[&str] = &[
     "client_secret",
     "private_key",
     "authorization",
-    "auth",
     "credential",
 ];
 
@@ -52,8 +54,6 @@ impl SensitiveValueRedactor {
     }
 
     /// 脱敏邮箱地址
-    ///
-    /// 显示前 2 个字符和域名
     pub fn redact_email(email: &str) -> String {
         if let Some(at_pos) = email.find('@') {
             let (local, domain) = email.split_at(at_pos);
@@ -67,24 +67,60 @@ impl SensitiveValueRedactor {
         }
     }
 
-    /// 脱敏 IP 地址
-    ///
-    /// IP 地址用于安全和审计，可以完整显示
+    /// 脱敏 IP 地址（不脱敏，用于安全审计）
     pub fn redact_ip(ip: &str) -> String {
-        ip.to_string() // IP 地址不脱敏
+        ip.to_string()
     }
 }
 
 /// 日志脱敏层
 ///
-/// 自动脱敏 tracing 日志中的敏感字段
+/// 替代 fmt::layer()，自身完成格式化输出并对敏感字段进行脱敏
 pub struct LogRedactionLayer;
 
 impl<S: Subscriber> Layer<S> for LogRedactionLayer {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
-        // 使用访问者模式检查和脱敏字段
         let mut visitor = RedactionVisitor::default();
         event.record(&mut visitor);
+
+        let metadata = event.metadata();
+        let level = match *metadata.level() {
+            Level::ERROR => "ERROR",
+            Level::WARN => " WARN",
+            Level::INFO => " INFO",
+            Level::DEBUG => "DEBUG",
+            Level::TRACE => "TRACE",
+        };
+        let target = metadata.target();
+
+        let mut output = String::with_capacity(256);
+
+        // 时间戳
+        let now = time::OffsetDateTime::now_utc();
+        if let Ok(ts) = now.format(&time::format_description::well_known::Rfc3339) {
+            output.push_str(&ts);
+        }
+        output.push(' ');
+
+        // 级别和模块
+        output.push_str(level);
+        output.push(' ');
+        output.push_str(target);
+        output.push_str(" -- ");
+
+        // 消息
+        if let Some(msg) = &visitor.message {
+            output.push_str(msg);
+        }
+
+        // 附加字段
+        for (name, value) in &visitor.fields {
+            output.push_str(&format!(" {}={}", name, value));
+        }
+
+        output.push('\n');
+
+        let _ = std::io::stdout().write_all(output.as_bytes());
     }
 }
 
@@ -143,8 +179,6 @@ impl Visit for RedactionVisitor {
 }
 
 /// 辅助宏：安全日志记录
-///
-/// 自动脱敏敏感信息
 #[macro_export]
 macro_rules! safe_info {
     ($($arg:tt)*) => {
@@ -227,13 +261,11 @@ mod tests {
         let ip = "192.168.1.100";
         let redacted = SensitiveValueRedactor::redact_ip(ip);
 
-        // IP 不应该被脱敏
         assert_eq!(redacted, ip);
     }
 
     #[test]
     fn test_sensitive_field_detection() {
-        // 测试各种字段名
         assert!(SENSITIVE_FIELDS.iter().any(|s| "password".contains(s)));
         assert!(SENSITIVE_FIELDS
             .iter()
@@ -242,5 +274,13 @@ mod tests {
         assert!(!SENSITIVE_FIELDS
             .iter()
             .any(|s| "username".to_lowercase().contains(s)));
+    }
+
+    #[test]
+    fn test_auth_field_is_sensitive() {
+        // "auth" 不再包含在敏感列表中，避免误脱敏 auth_time 等字段
+        let value = "2024-01-01T00:00:00Z";
+        let redacted = SensitiveValueRedactor::redact(value, "auth_time");
+        assert_eq!(redacted, value);
     }
 }

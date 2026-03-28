@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use tracing::info;
 
-use crate::crypto::generate_secure_token;
+use crate::crypto::{self, key_encryption};
 use crate::model::{CreateJwk, Jwk};
 use crate::repo::JwkRepo;
 
@@ -20,8 +20,8 @@ pub struct KeyService;
 
 impl KeyService {
     /// 生成新的 P-256 密钥对并存入数据库
-    pub async fn generate_key_pair(pool: &PgPool) -> Result<Jwk> {
-        let kid = generate_secure_token(16)?;
+    pub async fn generate_key_pair(pool: &PgPool, encryption_key: &str) -> Result<Jwk> {
+        let kid = crypto::generate_secure_token(16)?;
         let signing_key = SigningKey::random(&mut OsRng);
         let _verifying_key = signing_key.verifying_key();
 
@@ -34,11 +34,14 @@ impl KeyService {
         // 构造公钥 JWK
         let public_key_jwk = Self::build_public_jwk(&signing_key, &kid);
 
+        // 加密私钥后存储
+        let encrypted_pem = key_encryption::encrypt_private_key(&private_key_pem, encryption_key)?;
+
         let input = CreateJwk {
             kid,
             alg: "ES256".to_string(),
             kty: "EC".to_string(),
-            private_key_pem,
+            private_key_pem: encrypted_pem,
             public_key_jwk,
         };
 
@@ -50,23 +53,33 @@ impl KeyService {
         Ok(jwk)
     }
 
-    /// 获取当前激活的密钥，不存在则自动生成
-    pub async fn get_active_key(pool: &PgPool) -> Result<Jwk> {
-        if let Some(jwk) = JwkRepo::find_active(pool).await? {
-            return Ok(jwk);
-        }
-        info!("No active key found, generating initial key pair");
-        Self::generate_key_pair(pool).await
+    /// 解密 JWK 中的私钥
+    fn decrypt_jwk(jwk: Jwk, encryption_key: &str) -> Result<Jwk> {
+        let decrypted_pem = key_encryption::decrypt_private_key(&jwk.private_key_pem, encryption_key)?;
+        Ok(Jwk { private_key_pem: decrypted_pem, ..jwk })
     }
 
-    /// 根据 kid 查找密钥
-    pub async fn get_key_by_kid(pool: &PgPool, kid: &str) -> Result<Option<Jwk>> {
-        Ok(JwkRepo::find_by_kid(pool, kid).await?)
+    /// 获取当前激活的密钥，不存在则自动生成
+    pub async fn get_active_key(pool: &PgPool, encryption_key: &str) -> Result<Jwk> {
+        if let Some(jwk) = JwkRepo::find_active(pool).await? {
+            return Ok(Self::decrypt_jwk(jwk, encryption_key)?);
+        }
+        info!("No active key found, generating initial key pair");
+        let jwk = Self::generate_key_pair(pool, encryption_key).await?;
+        Ok(Self::decrypt_jwk(jwk, encryption_key)?)
+    }
+
+    /// 根据 kid 查找密钥（解密后返回）
+    pub async fn get_key_by_kid(pool: &PgPool, kid: &str, encryption_key: &str) -> Result<Option<Jwk>> {
+        match JwkRepo::find_by_kid(pool, kid).await? {
+            Some(jwk) => Ok(Some(Self::decrypt_jwk(jwk, encryption_key)?)),
+            None => Ok(None),
+        }
     }
 
     /// 轮换密钥：生成新密钥并激活，旧密钥保留用于验证
-    pub async fn rotate_key(pool: &PgPool) -> Result<Jwk> {
-        let new_key = Self::generate_key_pair(pool).await?;
+    pub async fn rotate_key(pool: &PgPool, encryption_key: &str) -> Result<Jwk> {
+        let new_key = Self::generate_key_pair(pool, encryption_key).await?;
         JwkRepo::activate(pool, new_key.id)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to activate new key: {}", e))?;

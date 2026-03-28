@@ -1,16 +1,15 @@
-use backend::{build_app, config::Config, db, metrics, middleware::LogRedactionLayer};
+use backend::{build_app_with_state, AppState, config::Config, db, metrics, middleware::LogRedactionLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 初始化日志（带脱敏功能）
+    // 初始化日志（LogRedactionLayer 替代 fmt::layer()，自带格式化和脱敏）
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "backend=debug,tower_http=debug".into()),
         )
-        .with(tracing_subscriber::fmt::layer())
-        .with(LogRedactionLayer)  // 添加日志脱敏层
+        .with(LogRedactionLayer)
         .init();
 
     // 加载配置
@@ -29,8 +28,9 @@ async fn main() -> anyhow::Result<()> {
     metrics::init();
     tracing::info!("Metrics initialized");
 
-    // 构建应用
-    let app = build_app().await;
+    // 构建应用（注入配置和数据库连接）
+    let state = AppState::new(config, db);
+    let app = build_app_with_state(state);
 
     // 启动服务器
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;

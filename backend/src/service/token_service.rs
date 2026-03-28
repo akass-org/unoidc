@@ -48,8 +48,8 @@ impl TokenService {
             .map(|g| g.name)
             .collect();
 
-        // 获取签名密钥
-        let jwk = KeyService::get_active_key(pool).await?;
+        // 获取签名密钥（解密后使用）
+        let jwk = KeyService::get_active_key(pool, &config.private_key_encryption_key).await?;
 
         // 签发 access_token
         let access_token = Self::create_access_token(config, &jwk.kid, &jwk.private_key_pem, &user, client, &auth_code.scope)?;
@@ -93,16 +93,20 @@ impl TokenService {
             return Err(anyhow::anyhow!("Client mismatch"));
         }
 
-        // 验证有效性
+        // 重放检测：如果 token 已被替换，说明有人用新 token 续签过，此 token 的重用就是重放攻击
+        if stored_token.is_replaced() {
+            tracing::warn!(
+                "Refresh token replay detected for user {} client {}",
+                stored_token.user_id, client.id
+            );
+            RefreshTokenRepo::revoke_user_client_tokens(
+                pool, stored_token.user_id, client.id,
+            ).await?;
+            return Err(anyhow::anyhow!("Replay detected - tokens revoked"));
+        }
+
+        // 标准有效性检查（过期/撤销）
         if !stored_token.is_valid() {
-            // 检测重放
-            if let Some(parent) = &stored_token.parent_token_hash {
-                if RefreshTokenRepo::detect_replay(pool, parent).await? {
-                    // 重放攻击！撤销所有 token
-                    RefreshTokenRepo::revoke_user_client_tokens(pool, stored_token.user_id, client.id).await?;
-                    return Err(anyhow::anyhow!("Replay detected - tokens revoked"));
-                }
-            }
             return Err(anyhow::anyhow!("Refresh token invalid or expired"));
         }
 
@@ -111,6 +115,11 @@ impl TokenService {
             .await?
             .ok_or_else(|| anyhow::anyhow!("User not found"))?;
 
+        // 检查用户是否仍允许登录
+        if !user.can_login() {
+            return Err(anyhow::anyhow!("User account is disabled or locked"));
+        }
+
         // 加载用户组
         let groups: Vec<String> = GroupRepo::find_user_groups(pool, user.id)
             .await?
@@ -118,8 +127,8 @@ impl TokenService {
             .map(|g| g.name)
             .collect();
 
-        // 获取签名密钥
-        let jwk = KeyService::get_active_key(pool).await?;
+        // 获取签名密钥（解密后使用）
+        let jwk = KeyService::get_active_key(pool, &config.private_key_encryption_key).await?;
 
         // 签发新 access_token
         let access_token = Self::create_access_token(config, &jwk.kid, &jwk.private_key_pem, &user, client, &stored_token.scope)?;

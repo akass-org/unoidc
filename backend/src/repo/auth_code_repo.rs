@@ -57,23 +57,23 @@ impl AuthCodeRepo {
         .await
     }
 
-    /// 标记授权码为已使用
-    pub async fn consume(pool: &PgPool, code_hash: &str) -> Result<(), sqlx::Error> {
+    /// 原子性消费授权码：仅在未消费时设置 consumed_at 并返回记录
+    /// 避免并发请求导致的授权码双花问题
+    pub async fn consume_and_return(pool: &PgPool, code_hash: &str) -> Result<Option<AuthorizationCode>, sqlx::Error> {
         let now = OffsetDateTime::now_utc();
 
-        sqlx::query(
+        sqlx::query_as::<_, AuthorizationCode>(
             r#"
             UPDATE authorization_codes
             SET consumed_at = $2
-            WHERE code_hash = $1
+            WHERE code_hash = $1 AND consumed_at IS NULL
+            RETURNING *
             "#,
         )
         .bind(code_hash)
         .bind(now)
-        .execute(pool)
-        .await?;
-
-        Ok(())
+        .fetch_optional(pool)
+        .await
     }
 
     /// 清理过期的授权码
