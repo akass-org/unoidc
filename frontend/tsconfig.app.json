@@ -16,11 +16,9 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Path alias */
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
+    /* Path alias - using Node.js subpath imports */
     "paths": {
-      "@/*": ["src/*"]
+      "#src/*": ["./src/*"]
     },
 
     /* Linting */
