@@ -1,0 +1,58 @@
+[package]
+name = "backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web 框架
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# 序列化
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# 错误处理
+thiserror = "2"
+anyhow = "1"
+
+# 日志
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# 数据库
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "sqlite", "uuid", "time", "json"] }
+
+# 密码哈希
+argon2 = "0.5"
+password-hash = "0.5"
+
+# JWT 和加密
+jsonwebtoken = "9"
+p256 = { version = "0.13", features = ["ecdsa", "pem"] }
+rand = "0.8"
+sha2 = "0.10"
+base64 = "0.22"
+pkcs8 = "0.10"
+ecdsa = { version = "0.16", features = ["pem"] }
+
+# 工具库
+uuid = { version = "1", features = ["v4", "serde"] }
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# 配置
+dotenvy = "0.15"
+
+# HTTP 类型
+http = "1"
+http-body = "1"
+
+# Metrics
+prometheus = "0.13"
+lazy_static = "1"
+
+[dev-dependencies]
+tokio-test = "0.4"
