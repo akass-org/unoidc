@@ -18,7 +18,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            database_url: "sqlite:./dev.db".to_string(),
+            database_url: "postgres://localhost/oidc_provider".to_string(),
             app_base_url: "http://localhost:3000".to_string(),
             issuer: "http://localhost:3000".to_string(),
             session_secret: "dev-secret-key-change-in-production".to_string(),
@@ -38,7 +38,7 @@ impl Config {
 
         Ok(Config {
             database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "sqlite:./dev.db".to_string()),
+                .unwrap_or_else(|_| "postgres://localhost/oidc_provider".to_string()),
             app_base_url: env::var("APP_BASE_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
             issuer: env::var("ISSUER")

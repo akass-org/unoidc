@@ -1,5 +1,9 @@
 // 数据库迁移烟雾测试
 // 验证迁移文件可以正常执行
+//
+// 注意：此测试需要运行中的 PostgreSQL 实例
+// 请设置 DATABASE_URL 环境变量，例如：
+// DATABASE_URL=postgres://user:password@localhost/oidc_provider_test cargo test
 
 use backend::db;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -10,22 +14,21 @@ fn init_tracing() {
         .try_init();
 }
 
+fn get_test_database_url() -> Option<String> {
+    std::env::var("DATABASE_URL").ok()
+}
+
 #[tokio::test]
 async fn migrations_run_successfully() {
     init_tracing();
 
-    // 安装 SQLx 默认驱动（Any 连接池需要）
-    sqlx::any::install_default_drivers();
-
-    // 使用临时文件数据库（而不是内存数据库，因为内存数据库每个连接独立）
-    let temp_dir = std::env::temp_dir();
-    let db_path = temp_dir.join(format!("unoidc_test_{}.db", uuid::Uuid::new_v4()));
-    let database_url = format!("sqlite://{}?mode=rwc", db_path.display());
-
-    // 确保在测试结束后删除临时文件
-    let _cleanup = scopeguard::guard(db_path.clone(), |path| {
-        let _ = std::fs::remove_file(path);
-    });
+    let database_url = match get_test_database_url() {
+        Some(url) => url,
+        None => {
+            eprintln!("Skipping test: DATABASE_URL not set");
+            return;
+        }
+    };
 
     // 连接数据库
     let pool = db::connect(&database_url)
@@ -37,7 +40,7 @@ async fn migrations_run_successfully() {
         .await
         .expect("Failed to run migrations");
 
-    // 验证关键表是否存在
+    // 验证关键表是否存在 (PostgreSQL 查询)
     let tables = vec![
         "users",
         "groups",
@@ -54,7 +57,7 @@ async fn migrations_run_successfully() {
 
     for table in tables {
         let query = format!(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{}'",
             table
         );
         let result: Option<(String,)> = sqlx::query_as(&query)
@@ -74,18 +77,14 @@ async fn migrations_run_successfully() {
 async fn migrations_are_idempotent() {
     init_tracing();
 
-    // 安装 SQLx 默认驱动
-    sqlx::any::install_default_drivers();
+    let database_url = match get_test_database_url() {
+        Some(url) => url,
+        None => {
+            eprintln!("Skipping test: DATABASE_URL not set");
+            return;
+        }
+    };
 
-    // 使用临时文件数据库
-    let temp_dir = std::env::temp_dir();
-    let db_path = temp_dir.join(format!("unoidc_test_idempotent_{}.db", uuid::Uuid::new_v4()));
-    let database_url = format!("sqlite://{}?mode=rwc", db_path.display());
-
-    // 清理
-    let _cleanup = scopeguard::guard(db_path.clone(), |path| {
-        let _ = std::fs::remove_file(path);
-    });
     let pool = db::connect(&database_url)
         .await
         .expect("Failed to connect to database");
