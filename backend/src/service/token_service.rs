@@ -302,6 +302,6 @@ impl TokenService {
     /// 哈希 token
     fn hash_token(token: &str) -> String {
         let hash = Sha256::digest(token.as_bytes());
-        URL_SAFE_NO_PAD.encode(&hash)
+        URL_SAFE_NO_PAD.encode(hash)
     }
 }

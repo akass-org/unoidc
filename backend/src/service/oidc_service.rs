@@ -91,7 +91,7 @@ impl OidcService {
     /// BASE64URL(SHA256(code_verifier)) == code_challenge
     pub fn verify_pkce_s256(code_verifier: &str, code_challenge: &str) -> bool {
         let hash = Sha256::digest(code_verifier.as_bytes());
-        let computed = URL_SAFE_NO_PAD.encode(&hash);
+        let computed = URL_SAFE_NO_PAD.encode(hash);
         computed == code_challenge
     }
 
@@ -141,7 +141,7 @@ impl OidcService {
     /// 用于授权码、refresh token 等的存储哈希
     pub fn hash_token(token: &str) -> String {
         let hash = Sha256::digest(token.as_bytes());
-        URL_SAFE_NO_PAD.encode(&hash)
+        URL_SAFE_NO_PAD.encode(hash)
     }
 }
 

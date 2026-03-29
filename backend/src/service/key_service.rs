@@ -6,7 +6,8 @@ use anyhow::Result;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use p256::ecdsa::SigningKey;
 use p256::elliptic_curve::rand_core::OsRng;
-use pkcs8::EncodePrivateKey;
+use p256::PublicKey;
+use pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
@@ -23,12 +24,18 @@ impl KeyService {
     pub async fn generate_key_pair(pool: &PgPool, encryption_key: &str) -> Result<Jwk> {
         let kid = crypto::generate_secure_token(16)?;
         let signing_key = SigningKey::random(&mut OsRng);
-        let _verifying_key = signing_key.verifying_key();
+        let verifying_key = signing_key.verifying_key();
 
         // 导出私钥为 PKCS8 PEM
         let private_key_pem = signing_key
             .to_pkcs8_pem(pkcs8::LineEnding::LF)
             .map_err(|e| anyhow::anyhow!("Failed to export private key: {}", e))?
+            .to_string();
+
+        // 导出公钥为 PEM（用于验证）
+        let _public_key_pem = verifying_key
+            .to_public_key_pem(LineEnding::LF)
+            .map_err(|e| anyhow::anyhow!("Failed to export public key: {}", e))?
             .to_string();
 
         // 构造公钥 JWK
@@ -62,11 +69,11 @@ impl KeyService {
     /// 获取当前激活的密钥，不存在则自动生成
     pub async fn get_active_key(pool: &PgPool, encryption_key: &str) -> Result<Jwk> {
         if let Some(jwk) = JwkRepo::find_active(pool).await? {
-            return Ok(Self::decrypt_jwk(jwk, encryption_key)?);
+            return Self::decrypt_jwk(jwk, encryption_key);
         }
         info!("No active key found, generating initial key pair");
         let jwk = Self::generate_key_pair(pool, encryption_key).await?;
-        Ok(Self::decrypt_jwk(jwk, encryption_key)?)
+        Self::decrypt_jwk(jwk, encryption_key)
     }
 
     /// 根据 kid 查找密钥（解密后返回）
@@ -93,16 +100,56 @@ impl KeyService {
         Ok(JwkRepo::find_all(pool).await?)
     }
 
+    /// 将 JWK 公钥转换为 PEM 格式
+    pub fn jwk_to_public_key_pem(jwk: &serde_json::Value) -> Result<String> {
+        let x = jwk["x"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Missing x in JWK"))?;
+        let y = jwk["y"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Missing y in JWK"))?;
+
+        let x_bytes = URL_SAFE_NO_PAD
+            .decode(x)
+            .map_err(|e| anyhow::anyhow!("Failed to decode x: {}", e))?;
+        let y_bytes = URL_SAFE_NO_PAD
+            .decode(y)
+            .map_err(|e| anyhow::anyhow!("Failed to decode y: {}", e))?;
+
+        // 转换为固定长度的数组
+        let x_arr: [u8; 32] = x_bytes
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Invalid x coordinate length"))?;
+        let y_arr: [u8; 32] = y_bytes
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Invalid y coordinate length"))?;
+
+        let encoded_point = p256::elliptic_curve::sec1::EncodedPoint::<p256::NistP256>::from_affine_coordinates(
+            &x_arr.into(),
+            &y_arr.into(),
+            false,
+        );
+
+        let public_key = PublicKey::from_sec1_bytes(encoded_point.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Failed to construct public key: {}", e))?;
+
+        let pem = public_key
+            .to_public_key_pem(LineEnding::LF)
+            .map_err(|e| anyhow::anyhow!("Failed to encode public key to PEM: {}", e))?;
+
+        Ok(pem)
+    }
+
     /// 哈希授权码（SHA-256 → base64url）
     pub fn hash_token(token: &str) -> String {
         let hash = Sha256::digest(token.as_bytes());
-        URL_SAFE_NO_PAD.encode(&hash)
+        URL_SAFE_NO_PAD.encode(hash)
     }
 
     /// PKCE S256 验证：BASE64URL(SHA256(code_verifier)) == code_challenge
     pub fn verify_pkce_s256(code_verifier: &str, code_challenge: &str) -> bool {
         let hash = Sha256::digest(code_verifier.as_bytes());
-        let computed = URL_SAFE_NO_PAD.encode(&hash);
+        let computed = URL_SAFE_NO_PAD.encode(hash);
         computed == code_challenge
     }
 
