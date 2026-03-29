@@ -10,6 +10,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
+use validator::Validate;
 
 use crate::{
     error::{AppError, OidcErrorCode, Result},
@@ -18,10 +19,32 @@ use crate::{
 };
 
 /// 登录请求
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct LoginRequest {
+    #[validate(length(min = 1, max = 100, message = "username must be 1-100 characters"))]
     pub username: String,
+
+    #[validate(length(min = 1, message = "password cannot be empty"))]
     pub password: String,
+}
+
+/// 注册请求
+#[derive(Debug, Deserialize, Validate)]
+pub struct RegisterRequest {
+    #[validate(length(min = 3, max = 100, message = "username must be 3-100 characters"))]
+    pub username: String,
+
+    #[validate(email(message = "invalid email format"))]
+    pub email: String,
+
+    #[validate(length(min = 8, max = 128, message = "password must be 8-128 characters"))]
+    pub password: String,
+
+    #[validate(length(max = 100, message = "given name must not exceed 100 characters"))]
+    pub given_name: Option<String>,
+
+    #[validate(length(max = 100, message = "family name must not exceed 100 characters"))]
+    pub family_name: Option<String>,
 }
 
 /// 登录响应
@@ -46,6 +69,12 @@ pub async fn login(
     Extension(addr): Extension<Option<SocketAddr>>,
     Json(req): Json<LoginRequest>,
 ) -> Result<Response> {
+    // 输入验证
+    req.validate().map_err(|e| AppError::ValidationError {
+        field: "request".to_string(),
+        message: e.to_string(),
+    })?;
+
     // 获取客户端信息
     let ip_address = addr.map(|a| a.to_string());
     let user_agent = None; // TODO: 从请求头中提取 User-Agent
@@ -115,7 +144,16 @@ pub async fn logout(
 /// 用户注册
 ///
 /// POST /api/v1/auth/register
-pub async fn register() -> Result<Json<LoginResponse>> {
+pub async fn register(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<RegisterRequest>,
+) -> Result<Json<LoginResponse>> {
+    // 输入验证
+    req.validate().map_err(|e| AppError::ValidationError {
+        field: "request".to_string(),
+        message: e.to_string(),
+    })?;
+
     Err(AppError::OidcError {
         error: OidcErrorCode::TemporarilyUnavailable,
         error_description: Some("Registration not yet implemented".to_string()),
