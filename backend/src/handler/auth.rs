@@ -4,7 +4,8 @@
 
 use axum::{
     extract::State,
-    http::HeaderMap,
+    http::{header, HeaderMap},
+    response::{IntoResponse, Response},
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
@@ -28,8 +29,6 @@ pub struct LoginRequest {
 pub struct LoginResponse {
     pub success: bool,
     pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
 }
 
 /// 登出响应
@@ -46,7 +45,7 @@ pub async fn login(
     State(state): State<Arc<AppState>>,
     Extension(addr): Extension<Option<SocketAddr>>,
     Json(req): Json<LoginRequest>,
-) -> Result<Json<LoginResponse>> {
+) -> Result<Response> {
     // 获取客户端信息
     let ip_address = addr.map(|a| a.to_string());
     let user_agent = None; // TODO: 从请求头中提取 User-Agent
@@ -69,12 +68,21 @@ pub async fn login(
         }
     })?;
 
-    // 登录成功，返回会话ID
-    Ok(Json(LoginResponse {
-        success: true,
-        message: "Login successful".to_string(),
-        session_id: Some(session.session_id),
-    }))
+    // 构造安全的 Cookie
+    let cookie_value = format!(
+        "unoidc_session={}; HttpOnly; Secure; SameSite=Strict; Path=/",
+        session.session_id
+    );
+
+    // 返回响应（带 Set-Cookie 头）
+    Ok((
+        [(header::SET_COOKIE, cookie_value)],
+        Json(LoginResponse {
+            success: true,
+            message: "Login successful".to_string(),
+        }),
+    )
+        .into_response())
 }
 
 /// 用户登出
@@ -83,7 +91,7 @@ pub async fn login(
 pub async fn logout(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-) -> Result<Json<LogoutResponse>> {
+) -> Result<Response> {
     let session_id = crate::middleware::auth::extract_session_cookie(&headers)
         .ok_or(AppError::Unauthorized {
             reason: Some("No session cookie".to_string()),
@@ -91,10 +99,17 @@ pub async fn logout(
 
     AuthService::logout(&state.db, &session_id).await?;
 
-    Ok(Json(LogoutResponse {
-        success: true,
-        message: "Logout successful".to_string(),
-    }))
+    // 清除 Cookie（设置过期时间为过去）
+    let cookie_value = "unoidc_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0";
+
+    Ok((
+        [(header::SET_COOKIE, cookie_value)],
+        Json(LogoutResponse {
+            success: true,
+            message: "Logout successful".to_string(),
+        }),
+    )
+        .into_response())
 }
 
 /// 用户注册

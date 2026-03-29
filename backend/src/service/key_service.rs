@@ -9,7 +9,6 @@ use p256::elliptic_curve::rand_core::OsRng;
 use p256::PublicKey;
 use pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use tracing::info;
 
@@ -142,15 +141,12 @@ impl KeyService {
 
     /// 哈希授权码（SHA-256 → base64url）
     pub fn hash_token(token: &str) -> String {
-        let hash = Sha256::digest(token.as_bytes());
-        URL_SAFE_NO_PAD.encode(hash)
+        crypto::hash_token(token)
     }
 
     /// PKCE S256 验证：BASE64URL(SHA256(code_verifier)) == code_challenge
     pub fn verify_pkce_s256(code_verifier: &str, code_challenge: &str) -> bool {
-        let hash = Sha256::digest(code_verifier.as_bytes());
-        let computed = URL_SAFE_NO_PAD.encode(hash);
-        computed == code_challenge
+        crypto::verify_pkce_s256(code_verifier, code_challenge)
     }
 
     /// 构造公钥 JWK JSON
@@ -196,8 +192,7 @@ mod tests {
     fn test_verify_pkce_s256() {
         // 手动计算: SHA256("my-verifier") → base64url
         let verifier = "my-verifier";
-        let hash = Sha256::digest(verifier.as_bytes());
-        let challenge = URL_SAFE_NO_PAD.encode(&hash);
+        let challenge = crypto::hash_token(verifier);
 
         assert!(KeyService::verify_pkce_s256(verifier, &challenge));
         assert!(!KeyService::verify_pkce_s256("wrong-verifier", &challenge));

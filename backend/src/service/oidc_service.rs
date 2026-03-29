@@ -2,8 +2,6 @@
 //
 // 授权流程业务逻辑：授权码签发、PKCE 验证、consent 管理
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use tracing::info;
@@ -38,7 +36,7 @@ impl OidcService {
         let plain_code = crypto::generate_authorization_code()?;
 
         // 哈希存储
-        let code_hash = Self::hash_token(&plain_code);
+        let code_hash = crypto::hash_token(&plain_code);
 
         let input = CreateAuthorizationCode {
             code_hash,
@@ -70,7 +68,7 @@ impl OidcService {
         pool: &PgPool,
         plain_code: &str,
     ) -> anyhow::Result<Option<AuthorizationCode>> {
-        let code_hash = Self::hash_token(plain_code);
+        let code_hash = crypto::hash_token(plain_code);
 
         // 原子操作：仅在未消费时标记并返回
         let auth_code = match AuthCodeRepo::consume_and_return(pool, &code_hash).await? {
@@ -84,15 +82,6 @@ impl OidcService {
         }
 
         Ok(Some(auth_code))
-    }
-
-    /// PKCE S256 验证
-    ///
-    /// BASE64URL(SHA256(code_verifier)) == code_challenge
-    pub fn verify_pkce_s256(code_verifier: &str, code_challenge: &str) -> bool {
-        let hash = Sha256::digest(code_verifier.as_bytes());
-        let computed = URL_SAFE_NO_PAD.encode(hash);
-        computed == code_challenge
     }
 
     /// 验证 scope 列表合法性
@@ -135,14 +124,6 @@ impl OidcService {
             _ => Ok(false),
         }
     }
-
-    /// 通用 token 哈希（SHA-256 → base64url）
-    ///
-    /// 用于授权码、refresh token 等的存储哈希
-    pub fn hash_token(token: &str) -> String {
-        let hash = Sha256::digest(token.as_bytes());
-        URL_SAFE_NO_PAD.encode(hash)
-    }
 }
 
 #[cfg(test)]
@@ -178,24 +159,23 @@ mod tests {
     #[test]
     fn test_verify_pkce_s256() {
         let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-        let hash = Sha256::digest(verifier.as_bytes());
-        let challenge = URL_SAFE_NO_PAD.encode(&hash);
+        let challenge = crypto::hash_token(verifier);
 
-        assert!(OidcService::verify_pkce_s256(verifier, &challenge));
-        assert!(!OidcService::verify_pkce_s256("wrong-verifier", &challenge));
+        assert!(crypto::verify_pkce_s256(verifier, &challenge));
+        assert!(!crypto::verify_pkce_s256("wrong-verifier", &challenge));
     }
 
     #[test]
     fn test_hash_token_deterministic() {
-        let h1 = OidcService::hash_token("my-code");
-        let h2 = OidcService::hash_token("my-code");
+        let h1 = crypto::hash_token("my-code");
+        let h2 = crypto::hash_token("my-code");
         assert_eq!(h1, h2);
     }
 
     #[test]
     fn test_hash_token_unique() {
-        let h1 = OidcService::hash_token("code-a");
-        let h2 = OidcService::hash_token("code-b");
+        let h1 = crypto::hash_token("code-a");
+        let h2 = crypto::hash_token("code-b");
         assert_ne!(h1, h2);
     }
 }

@@ -3,10 +3,8 @@
 // Token 签发业务逻辑
 
 use anyhow::Result;
-use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use time::OffsetDateTime;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
 use crate::config::Config;
 use crate::crypto::{self, jwt};
@@ -81,7 +79,7 @@ impl TokenService {
         plain_refresh_token: &str,
         client: &Client,
     ) -> Result<TokenResponse> {
-        let token_hash = Self::hash_token(plain_refresh_token);
+        let token_hash = crypto::hash_token(plain_refresh_token);
 
         // 查找 refresh token
         let stored_token = RefreshTokenRepo::find_by_hash(pool, &token_hash)
@@ -257,7 +255,7 @@ impl TokenService {
         scope: &str,
     ) -> Result<String> {
         let plain_token = crypto::generate_refresh_token()?;
-        let token_hash = Self::hash_token(&plain_token);
+        let token_hash = crypto::hash_token(&plain_token);
         let expires_at = OffsetDateTime::now_utc() + time::Duration::seconds(config.refresh_token_ttl);
 
         RefreshTokenRepo::create(pool, CreateRefreshToken {
@@ -279,7 +277,7 @@ impl TokenService {
         old_token: &RefreshToken,
     ) -> Result<String> {
         let plain_token = crypto::generate_refresh_token()?;
-        let new_hash = Self::hash_token(&plain_token);
+        let new_hash = crypto::hash_token(&plain_token);
         let expires_at = OffsetDateTime::now_utc() + time::Duration::seconds(config.refresh_token_ttl);
 
         // 创建新 token
@@ -297,11 +295,5 @@ impl TokenService {
         RefreshTokenRepo::update_last_used(pool, &old_token.token_hash).await?;
 
         Ok(plain_token)
-    }
-
-    /// 哈希 token
-    fn hash_token(token: &str) -> String {
-        let hash = Sha256::digest(token.as_bytes());
-        URL_SAFE_NO_PAD.encode(hash)
     }
 }
