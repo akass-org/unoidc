@@ -1,4 +1,7 @@
-use backend::{build_app_with_state, AppState, config::Config, db, metrics, middleware::LogRedactionLayer};
+use backend::{
+    build_app_with_state, AppState, config::Config, db, metrics,
+    middleware::LogRedactionLayer,
+};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]

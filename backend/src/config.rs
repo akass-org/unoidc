@@ -13,6 +13,8 @@ pub struct Config {
     pub session_ttl: i64,
     pub storage_path: String,
     pub private_key_encryption_key: String,
+    pub rate_limit_max_requests: u32,
+    pub rate_limit_window_secs: u64,
 }
 
 impl Default for Config {
@@ -28,6 +30,8 @@ impl Default for Config {
             session_ttl: 86400,
             storage_path: "./storage".to_string(),
             private_key_encryption_key: "dev-encryption-key-32-chars-change!!".to_string(),
+            rate_limit_max_requests: 100,
+            rate_limit_window_secs: 60,
         }
     }
 }
@@ -59,6 +63,12 @@ impl Config {
                 .unwrap_or_else(|_| "./storage".to_string()),
             private_key_encryption_key: env::var("PRIVATE_KEY_ENCRYPTION_KEY")
                 .unwrap_or_else(|_| "dev-encryption-key-32-chars-change!!".to_string()),
+            rate_limit_max_requests: env::var("RATE_LIMIT_MAX_REQUESTS")
+                .unwrap_or_else(|_| "100".to_string())
+                .parse()?,
+            rate_limit_window_secs: env::var("RATE_LIMIT_WINDOW_SECS")
+                .unwrap_or_else(|_| "60".to_string())
+                .parse()?,
         })
     }
 }

@@ -17,6 +17,13 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
     use axum::routing::{get, post};
     use tower::ServiceBuilder;
     use crate::middleware::request_context_middleware;
+    use crate::middleware::rate_limit::{rate_limit_middleware, create_rate_limiter};
+
+    // 创建限流器（从配置读取参数，默认 100 req/min）
+    let rate_limiter = create_rate_limiter(
+        state.config.rate_limit_max_requests,
+        state.config.rate_limit_window_secs,
+    );
 
     Router::new()
         // 健康检查
@@ -40,6 +47,9 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         // 添加中间件层
         .layer(
             ServiceBuilder::new()
+                // 限流中间件
+                .layer(axum::Extension(rate_limiter))
+                .layer(axum::middleware::from_fn(rate_limit_middleware))
                 // 请求上下文中间件（添加请求 ID 和关联 ID）
                 .layer(axum::middleware::from_fn(request_context_middleware))
                 // 添加客户端地址扩展

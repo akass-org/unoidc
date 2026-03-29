@@ -14,3 +14,6 @@ pub use request_context::{
 pub use log_redaction::{
     LogRedactionLayer, SensitiveValueRedactor,
 };
+pub use rate_limit::{
+    RateLimiter, RateLimitConfig, rate_limit_middleware, create_rate_limiter,
+};
