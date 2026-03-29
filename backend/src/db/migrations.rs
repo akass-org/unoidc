@@ -1,24 +1,38 @@
 // 数据库迁移模块
 //
-// 提供数据库连接和迁移执行功能
+// 提供数据库连接和幂等迁移执行功能
 
 use sqlx::PgPool;
+use anyhow::{Result, Context};
 use std::fs;
 use tracing::{info, error};
-use anyhow::{Result, Context};
 
 /// 连接到数据库
 pub async fn connect(database_url: &str) -> Result<PgPool> {
-    PgPool::connect(database_url)
+    sqlx::postgres::PgPoolOptions::new()
+        .max_connections(50)
+        .acquire_timeout(std::time::Duration::from_secs(30))
+        .connect(database_url)
         .await
         .context("Failed to connect to database")
 }
 
 /// 运行数据库迁移
 ///
-/// 从 migrations/ 目录读取 SQL 文件并按顺序执行
+/// 使用 _migrations 表跟踪已执行的迁移，确保幂等性
 pub async fn run_migrations(pool: &PgPool) -> Result<()> {
     info!("Running database migrations...");
+
+    // 创建迁移跟踪表
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS _migrations (
+            name VARCHAR(255) PRIMARY KEY,
+            executed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )"
+    )
+    .execute(pool)
+    .await
+    .context("Failed to create migrations tracking table")?;
 
     // 获取 migrations 目录
     let current_dir = std::env::current_dir()
@@ -48,20 +62,66 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
 
     info!("Found {} migration files", migrations.len());
 
-    // 执行每个迁移文件
+    // 获取已执行的迁移
+    let executed: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM _migrations"
+    )
+    .fetch_all(pool)
+    .await
+    .context("Failed to query executed migrations")?;
+
+    // 如果 _migrations 表是空的，但数据库已有表，说明是旧版本手动执行的迁移
+    // 自动检测并注册，确保向后兼容
+    if executed.is_empty() {
+        let table_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_name = 'users'
+            )"
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap_or(false);
+
+        if table_exists {
+            info!("Detected existing database schema, registering all migrations as executed");
+            for migration in &migrations {
+                sqlx::query("INSERT INTO _migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING")
+                    .bind(migration)
+                    .execute(pool)
+                    .await
+                    .ok();
+            }
+            info!("All existing migrations registered");
+            return Ok(());
+        }
+    }
+
+    // 执行未执行的迁移
     for migration in migrations {
+        if executed.contains(&migration) {
+            info!("Skipping already executed migration: {}", migration);
+            continue;
+        }
+
         let file_path = migrations_dir.join(&migration);
         let sql = fs::read_to_string(&file_path)
             .with_context(|| format!("Failed to read migration file: {}", migration))?;
 
         info!("Running migration: {}", migration);
 
-        // 执行 SQL（可能包含多条语句）
-        // 注意：SQLx 的 query() 函数每次只能执行一条 SQL 语句
-        // 对于包含多条语句的迁移文件，我们需要分割并逐条执行
         execute_migration_sql(pool, &sql)
             .await
             .with_context(|| format!("Failed to execute migration: {}", migration))?;
+
+        // 记录已执行的迁移
+        sqlx::query(
+            "INSERT INTO _migrations (name) VALUES ($1)"
+        )
+        .bind(&migration)
+        .execute(pool)
+        .await
+        .with_context(|| format!("Failed to record migration: {}", migration))?;
 
         info!("Completed migration: {}", migration);
     }
@@ -74,11 +134,6 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
 ///
 /// 处理包含多条语句的 SQL 文件
 async fn execute_migration_sql(pool: &PgPool, sql: &str) -> Result<()> {
-    // 改进的 SQL 语句分割
-    // 1. 按分号分割
-    // 2. 移除注释
-    // 3. 跳过空语句
-
     let mut current_statement = String::new();
 
     for line in sql.lines() {
@@ -99,14 +154,6 @@ async fn execute_migration_sql(pool: &PgPool, sql: &str) -> Result<()> {
         if trimmed.ends_with(';') {
             let statement = current_statement.trim();
             if !statement.is_empty() && statement != ";" {
-                // 输出即将执行的语句（截断到前200字符）
-                let preview = if statement.len() > 200 {
-                    format!("{}...", &statement[..200])
-                } else {
-                    statement.to_string()
-                };
-                info!("Executing SQL:\n{}", preview);
-
                 if let Err(e) = sqlx::query(statement)
                     .execute(pool)
                     .await
@@ -123,7 +170,6 @@ async fn execute_migration_sql(pool: &PgPool, sql: &str) -> Result<()> {
     // 执行最后一个语句（如果没有以分号结尾）
     let statement = current_statement.trim();
     if !statement.is_empty() {
-        tracing::debug!("Executing final SQL: {}", &statement[..statement.len().min(100)]);
         sqlx::query(statement)
             .execute(pool)
             .await

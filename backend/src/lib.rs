@@ -45,16 +45,12 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .route("/userinfo", get(handler::oidc::userinfo))
 
         // 添加中间件层
-        .layer(
-            ServiceBuilder::new()
-                // 限流中间件
-                .layer(axum::Extension(rate_limiter))
-                .layer(axum::middleware::from_fn(rate_limit_middleware))
-                // 请求上下文中间件（添加请求 ID 和关联 ID）
-                .layer(axum::middleware::from_fn(request_context_middleware))
-                // 添加客户端地址扩展
-                .layer(axum::Extension::<Option<std::net::SocketAddr>>(None))
-        )
+        // 注意：后调用的 .layer() 在更外层（先处理请求）
+        // 请求流程（从外到内）：SocketAddr 注入 → request_context → RateLimiter 注入 → rate_limit → handler
+        .layer(axum::middleware::from_fn(rate_limit_middleware))
+        .layer(axum::Extension(rate_limiter))
+        .layer(axum::middleware::from_fn(request_context_middleware))
+        .layer(axum::Extension::<Option<std::net::SocketAddr>>(None))
 
         .with_state(state)
 }
