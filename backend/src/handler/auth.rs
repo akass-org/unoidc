@@ -145,10 +145,9 @@ pub async fn logout(
 ///
 /// POST /api/v1/auth/register
 pub async fn register(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<LoginResponse>> {
-    // 输入验证
     req.validate().map_err(|e| AppError::ValidationError {
         field: "request".to_string(),
         message: e.to_string(),
