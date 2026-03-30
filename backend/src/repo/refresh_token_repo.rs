@@ -165,4 +165,23 @@ impl RefreshTokenRepo {
 
         Ok(result.0 > 0)
     }
+
+    /// 撤销用户的所有刷新令牌
+    pub async fn revoke_all_for_user(pool: &PgPool, user_id: Uuid) -> Result<u64, sqlx::Error> {
+        let now = OffsetDateTime::now_utc();
+
+        let result = sqlx::query(
+            r#"
+            UPDATE refresh_tokens
+            SET revoked_at = $2
+            WHERE user_id = $1 AND revoked_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .bind(now)
+        .execute(pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
 }

@@ -4,7 +4,8 @@
 
 use axum::{
     extract::{Query, State},
-    http::HeaderMap,
+    http,
+    response::IntoResponse,
     Json,
 };
 use serde::Deserialize;
@@ -12,11 +13,13 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::error::{AppError, OidcErrorCode, Result};
-use crate::service::KeyService;
+use crate::service::{KeyService, LogoutService};
 use crate::crypto::jwt::{self, AccessTokenClaims};
 use crate::repo::{UserRepo, GroupRepo};
 use crate::AppState;
 use crate::model::Jwk;
+
+type HeaderMap = http::HeaderMap;
 
 // ============================================================
 // Discovery
@@ -249,4 +252,75 @@ fn verify_access_token(
     Err(AppError::InvalidToken {
         reason: Some("Invalid or expired access token".to_string()),
     })
+}
+
+// ============================================================
+// Logout
+// ============================================================
+
+/// GET /logout — RP-Initiated Logout
+///
+/// 根据 OIDC Session Management 规范处理 RP 发起登出
+/// 支持 id_token_hint 和 post_logout_redirect_uri 参数
+#[derive(Debug, Deserialize)]
+pub struct LogoutRequest {
+    /// ID Token Hint - 包含当前用户信息的已签名 JWT
+    pub id_token_hint: Option<String>,
+    /// 登出后重定向 URI
+    pub post_logout_redirect_uri: Option<String>,
+    /// 状态参数，原样返回给客户端
+    pub state: Option<String>,
+}
+
+/// GET /logout
+///
+/// 处理 RP-Initiated Logout 请求
+pub async fn logout(
+    State(state): State<Arc<AppState>>,
+    Query(req): Query<LogoutRequest>,
+) -> Result<impl IntoResponse> {
+    use axum::http::StatusCode;
+
+    // 如果提供了 id_token_hint，验证并提取用户信息
+    if let Some(ref hint) = req.id_token_hint {
+        if !hint.is_empty() {
+            let hint_result = LogoutService::validate_id_token_hint::<serde_json::Value>(&state.db, hint).await;
+
+            if hint_result.is_err() {
+                return Err(AppError::InvalidToken {
+                    reason: Some("Invalid id_token_hint".to_string()),
+                });
+            }
+        }
+    }
+
+    // 构建重定向 URL
+    let base = &state.config.app_base_url;
+    let location = if let Some(ref redirect) = req.post_logout_redirect_uri {
+        if redirect.is_empty() {
+            return Err(AppError::InvalidRequest(
+                "post_logout_redirect_uri cannot be empty".to_string(),
+            ));
+        }
+        redirect.clone()
+    } else {
+        base.clone()
+    };
+
+    // 构建带 state 参数的完整重定向 URL
+    let final_location = if let Some(ref s) = req.state {
+        if location.contains('?') {
+            format!("{}&state={}", location, s)
+        } else {
+            format!("{}?state={}", location, s)
+        }
+    } else {
+        location
+    };
+
+    // 返回 302 重定向
+    Ok::<_, AppError>((
+        StatusCode::FOUND,
+        [(axum::http::header::LOCATION, final_location)],
+    ).into_response())
 }

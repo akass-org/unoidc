@@ -48,6 +48,7 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .route("/authorize/consent", post(handler::oidc::authorize_consent))
         .route("/token", post(handler::oidc::token))
         .route("/userinfo", get(handler::oidc::userinfo))
+        .route("/logout", get(handler::oidc::logout))
 
         // 请求流程（从外到内）：
         // CORS → rate_limit → csrf → request_context → handler

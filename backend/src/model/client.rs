@@ -20,7 +20,8 @@ pub struct Client {
     pub app_url: Option<String>,
     pub redirect_uris: serde_json::Value, // JSON array
     pub post_logout_redirect_uris: Option<serde_json::Value>, // JSON array
-    pub grant_types: serde_json::Value,   // JSON array
+    pub front_channel_logout_uri: Option<String>,
+    pub grant_types: serde_json::Value,    // JSON array
     pub response_types: serde_json::Value, // JSON array
     pub token_endpoint_auth_method: String,
     pub id_token_signed_response_alg: String,

@@ -12,6 +12,7 @@ pub mod token_service;
 pub mod audit_service;
 pub mod key_service;
 pub mod rate_limit_service;
+pub mod logout_service;
 
 // 重新导出常用类型
 pub use user_service::UserService;
@@ -22,3 +23,4 @@ pub use auth_service::AuthService;
 pub use key_service::KeyService;
 pub use oidc_service::OidcService;
 pub use token_service::TokenService;
+pub use logout_service::LogoutService;
