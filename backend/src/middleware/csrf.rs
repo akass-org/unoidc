@@ -68,10 +68,11 @@ pub async fn csrf_middleware(request: Request, next: Next) -> Response {
     }
 }
 
-pub fn generate_csrf_cookie(token: &str) -> String {
+pub fn generate_csrf_cookie(token: &str, secure: bool) -> String {
+    let secure_flag = if secure { "; Secure" } else { "" };
     format!(
-        "{}={}; Path=/; SameSite=Strict; HttpOnly",
-        CSRF_COOKIE_NAME, token
+        "{}={}; Path=/; SameSite=Strict; HttpOnly{}",
+        CSRF_COOKIE_NAME, token, secure_flag
     )
 }
 
@@ -122,7 +123,10 @@ mod tests {
 
     #[test]
     fn test_generate_csrf_cookie() {
-        let cookie = generate_csrf_cookie("test-token");
+        let cookie = generate_csrf_cookie("test-token", false);
         assert_eq!(cookie, "unoidc_csrf=test-token; Path=/; SameSite=Strict; HttpOnly");
+
+        let secure_cookie = generate_csrf_cookie("test-token", true);
+        assert_eq!(secure_cookie, "unoidc_csrf=test-token; Path=/; SameSite=Strict; HttpOnly; Secure");
     }
 }

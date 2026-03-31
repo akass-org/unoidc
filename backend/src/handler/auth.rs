@@ -9,6 +9,7 @@ use std::{net::SocketAddr, sync::Arc};
 use validator::Validate;
 
 use crate::{
+    crypto,
     error::{AppError, OidcErrorCode, Result},
     metrics,
     middleware::request_context::RequestContext,
@@ -55,16 +56,57 @@ pub struct LogoutResponse {
     pub message: String,
 }
 
-fn build_cookie_value(session_id: &str, cookie_domain: Option<&String>, secure: bool) -> String {
+/// 构建带签名的 session cookie
+///
+/// 格式: session_id.signature
+fn build_cookie_value(session_id: &str, cookie_domain: Option<&String>, secure: bool, session_secret: &str) -> String {
+    let signature = crypto::sign_session(session_id, session_secret).unwrap_or_default();
+    let cookie_content = format!("{}.{}", session_id, signature);
     let secure_flag = if secure { "; Secure" } else { "" };
     let mut cookie = format!(
         "unoidc_session={}; HttpOnly{}; SameSite=Strict; Path=/",
-        session_id, secure_flag
+        cookie_content, secure_flag
     );
     if let Some(domain) = cookie_domain {
         cookie = format!("{}; Domain={}", cookie, domain);
     }
     cookie
+}
+
+/// 从 Cookie 头中提取并验证 session
+///
+/// 验证签名，防止 session ID 被伪造
+pub fn extract_session_cookie(headers: &HeaderMap, session_secret: &str) -> Option<String> {
+    let cookie_header = headers.get("cookie")?.to_str().ok()?;
+    let cookie_value = extract_cookie_value(cookie_header, "unoidc_session")?;
+
+    // 分割 session_id 和签名
+    let (session_id, signature) = cookie_value.split_once('.')?;
+
+    // 验证签名
+    if !crypto::verify_session_signature(session_id, signature, session_secret) {
+        tracing::warn!("Invalid session cookie signature");
+        return None;
+    }
+
+    Some(session_id.to_string())
+}
+
+/// 从 cookie 字符串中提取指定 cookie 的值
+///
+/// 先 split '=' 再比较 name，避免 `session` 匹配到 `session_id`
+fn extract_cookie_value(cookie_str: &str, name: &str) -> Option<String> {
+    cookie_str
+        .split(';')
+        .find_map(|cookie| {
+            let cookie = cookie.trim();
+            let (cookie_name, value) = cookie.split_once('=')?;
+            if cookie_name.trim() == name {
+                Some(value.to_string())
+            } else {
+                None
+            }
+        })
 }
 
 /// 判断是否应该使用 Secure cookie
@@ -118,7 +160,7 @@ pub async fn login(
 
             let secure = is_secure_context(&state.config.issuer);
             let cookie_value =
-                build_cookie_value(&session.session_id, state.config.cookie_domain.as_ref(), secure);
+                build_cookie_value(&session.session_id, state.config.cookie_domain.as_ref(), secure, &state.config.session_secret);
 
             Ok((
                 [(header::SET_COOKIE, cookie_value)],
@@ -158,9 +200,9 @@ pub async fn logout(
     Extension(req_ctx): Extension<RequestContext>,
     headers: HeaderMap,
 ) -> Result<Response> {
-    let session_id = crate::middleware::auth::extract_session_cookie(&headers)
+    let session_id = extract_session_cookie(&headers, &state.config.session_secret)
         .ok_or(AppError::Unauthorized {
-            reason: Some("No session cookie".to_string()),
+            reason: Some("No valid session cookie".to_string()),
         })?;
 
     let ip_address = addr.map(|a| a.to_string());

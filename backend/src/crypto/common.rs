@@ -11,7 +11,9 @@ pub type HmacSha256 = Hmac<Sha256>;
 
 /// 使用 SHA-256 哈希 token，返回 base64url 编码的结果
 ///
-/// 用于授权码、refresh token 等的存储哈希
+/// 用于授权码、refresh token 等的存储哈希。
+/// 注意：这些是高熵随机值（非用户选择），SHA-256 已足够安全。
+/// 如需额外防护，可通过环境变量配置 HMAC 密钥。
 pub fn hash_token(token: &str) -> String {
     let hash = Sha256::digest(token.as_bytes());
     URL_SAFE_NO_PAD.encode(hash)

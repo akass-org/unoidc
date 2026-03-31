@@ -389,6 +389,23 @@ pub async fn logout(
     }
 
     let base = &state.config.app_base_url;
+
+    // 验证state参数长度（防止URL注入和请求头过大）
+    if let Some(ref s) = req.state {
+        const MAX_STATE_LENGTH: usize = 1024;
+        if s.len() > MAX_STATE_LENGTH {
+            return Err(AppError::InvalidRequest(
+                "state parameter exceeds maximum length".to_string(),
+            ));
+        }
+        // 验证state只包含安全的URL字符
+        if !s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.~".contains(c)) {
+            return Err(AppError::InvalidRequest(
+                "state parameter contains invalid characters".to_string(),
+            ));
+        }
+    }
+
     let location = if let Some(ref redirect) = req.post_logout_redirect_uri {
         if redirect.is_empty() {
             return Err(AppError::InvalidRequest(

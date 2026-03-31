@@ -112,6 +112,19 @@ impl TokenService {
             return Err(anyhow::anyhow!("Replay detected - tokens revoked"));
         }
 
+        // 族检测：递归检查整个 token 链，防止使用多代前的旧 token
+        if RefreshTokenRepo::detect_family_replay(pool, &token_hash).await? {
+            tracing::warn!(
+                "Refresh token family replay detected for user {} client {}",
+                stored_token.user_id, client.id
+            );
+            metrics::REPLAY_DETECTED_TOTAL.inc();
+            RefreshTokenRepo::revoke_user_client_tokens(
+                pool, stored_token.user_id, client.id,
+            ).await?;
+            return Err(anyhow::anyhow!("Token family replay detected - all tokens revoked"));
+        }
+
         // 标准有效性检查（过期/撤销）
         if !stored_token.is_valid() {
             return Err(anyhow::anyhow!("Refresh token invalid or expired"));

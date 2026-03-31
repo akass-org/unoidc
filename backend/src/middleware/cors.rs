@@ -27,8 +27,10 @@ pub fn create_cors_layer(config: &CorsConfig) -> CorsLayer {
         .filter_map(|o| o.parse().ok())
         .collect();
 
+    // 如果未配置任何来源，默认拒绝所有跨域请求（安全默认）
     let allow_origin = if origins.is_empty() {
-        AllowOrigin::any()
+        // 默认只允许同源请求（空列表表示不允许任何跨域来源）
+        AllowOrigin::list(Vec::new())
     } else {
         AllowOrigin::list(origins)
     };

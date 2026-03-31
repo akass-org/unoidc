@@ -197,10 +197,13 @@ impl AuditService {
         }));
 
         let log = AuditLogRepo::create(pool, create_log).await?;
-        error!(
-            "Audit log: refresh token replay detected (token: {})",
-            token_hash
-        );
+        // 只记录前8位用于调试，防止敏感信息泄露
+        let truncated = if token_hash.len() >= 8 {
+            format!("{}...", &token_hash[..8])
+        } else {
+            "***".to_string()
+        };
+        error!("Refresh token replay detected: hash_prefix={}", truncated);
         Ok(log)
     }
 
@@ -226,10 +229,13 @@ impl AuditService {
         }));
 
         let log = AuditLogRepo::create(pool, create_log).await?;
-        error!(
-            "Audit log: authorization code replay detected (code_hash: {})",
-            code_hash
-        );
+        // 只记录前8位用于调试，防止敏感信息泄露
+        let truncated = if code_hash.len() >= 8 {
+            format!("{}...", &code_hash[..8])
+        } else {
+            "***".to_string()
+        };
+        error!("Authorization code replay detected: hash_prefix={}", truncated);
         Ok(log)
     }
 

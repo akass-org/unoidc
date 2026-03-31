@@ -81,9 +81,15 @@ impl OidcService {
                 if code_exists {
                     // 重放攻击检测：code 存在但已被消费
                     metrics::AUTH_CODE_REPLAY_TOTAL.inc();
+                    // 只记录前8位用于调试，防止敏感信息泄露
+                    let truncated = if code_hash.len() >= 8 {
+                        format!("{}...", &code_hash[..8])
+                    } else {
+                        "***".to_string()
+                    };
                     error!(
-                        "Security event: authorization code replay detected (code_hash: {})",
-                        code_hash
+                        "Security event: authorization code replay detected (code_hash_prefix: {})",
+                        truncated
                     );
                     // 注：这里没有调用 AuditService，因为需要 request_context 中的 IP/UA 信息
                     // 调用方应在收到 None 且知道是重放时补充审计日志

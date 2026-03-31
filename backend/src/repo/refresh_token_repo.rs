@@ -166,6 +166,37 @@ impl RefreshTokenRepo {
         Ok(result.0 > 0)
     }
 
+    /// 递归检测 token 族重放攻击
+    ///
+    /// 检查当前 token 的任何祖先是否已被撤销或替换
+    /// 防止攻击者使用多代之前的旧 token 进行重放
+    pub async fn detect_family_replay(pool: &PgPool, token_hash: &str) -> Result<bool, sqlx::Error> {
+        // 递归 CTE 查询：追踪整个 token 族谱
+        let result: (i64,) = sqlx::query_as(
+            r#"
+            WITH RECURSIVE token_chain AS (
+                -- 起始 token
+                SELECT token_hash, parent_token_hash, replaced_by_token_hash, revoked_at
+                FROM refresh_tokens
+                WHERE token_hash = $1
+                UNION ALL
+                -- 向上追溯所有祖先
+                SELECT rt.token_hash, rt.parent_token_hash, rt.replaced_by_token_hash, rt.revoked_at
+                FROM refresh_tokens rt
+                INNER JOIN token_chain tc ON rt.token_hash = tc.parent_token_hash
+            )
+            SELECT COUNT(*)
+            FROM token_chain
+            WHERE revoked_at IS NOT NULL OR token_hash != $1
+            "#,
+        )
+        .bind(token_hash)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(result.0 > 0)
+    }
+
     /// 撤销用户的所有刷新令牌
     pub async fn revoke_all_for_user(pool: &PgPool, user_id: Uuid) -> Result<u64, sqlx::Error> {
         let now = OffsetDateTime::now_utc();

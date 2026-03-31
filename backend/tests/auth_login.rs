@@ -8,7 +8,7 @@ use backend::{
     build_app_with_state,
     model::{CreateSession, CreateUser},
     repo::{SessionRepo, UserRepo},
-    crypto::password,
+    crypto::{self, password},
     AppState,
 };
 use axum::{
@@ -246,12 +246,16 @@ async fn test_logout_destroys_session() {
 
     let app = build_app_with_state(state.clone());
 
+    // 生成带签名的 cookie
+    let signature = crypto::sign_session(&session.session_id, &state.config.session_secret).unwrap();
+    let cookie_value = format!("{}.{}", session.session_id, signature);
+
     let response = app.oneshot(
         Request::builder()
             .method("POST")
             .uri("/api/v1/auth/logout")
             .header("content-type", "application/json")
-            .header("cookie", format!("unoidc_session={}", session.session_id))
+            .header("cookie", format!("unoidc_session={}", cookie_value))
             .body(Body::from(json!({}).to_string()))
             .unwrap(),
     ).await.unwrap();

@@ -50,7 +50,8 @@ impl AuthService {
         let user = match user {
             Some(u) => u,
             None => {
-                info!("Login failed: user not found - {}", username);
+                // 使用统一的日志消息，防止用户枚举攻击
+                info!("Login failed: invalid credentials for user {}", username);
                 let _ = password::verify_password(password, DUMMY_PASSWORD_HASH).ok();
                 return Err(AppError::InvalidCredentials);
             }
