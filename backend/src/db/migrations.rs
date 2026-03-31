@@ -3,6 +3,68 @@ use anyhow::{Result, Context};
 use std::fs;
 use tracing::info;
 
+/// 自然排序比较函数
+///
+/// 比较字符串时，将数字部分按数值大小比较而非字典序
+/// 例如: "0002_foo.sql" < "0010_bar.sql" （字典序会认为 "10" < "2"）
+fn natural_sort_compare(a: &str, b: &str) -> std::cmp::Ordering {
+    let mut a_chars = a.chars().peekable();
+    let mut b_chars = b.chars().peekable();
+
+    loop {
+        match (a_chars.peek(), b_chars.peek()) {
+            (None, None) => return std::cmp::Ordering::Equal,
+            (None, Some(_)) => return std::cmp::Ordering::Less,
+            (Some(_), None) => return std::cmp::Ordering::Greater,
+            (Some(a_ch), Some(b_ch)) => {
+                let a_is_digit = a_ch.is_ascii_digit();
+                let b_is_digit = b_ch.is_ascii_digit();
+
+                match (a_is_digit, b_is_digit) {
+                    // 都是数字，按数值比较
+                    (true, true) => {
+                        let a_num = take_number(&mut a_chars);
+                        let b_num = take_number(&mut b_chars);
+                        match a_num.cmp(&b_num) {
+                            std::cmp::Ordering::Equal => continue,
+                            other => return other,
+                        }
+                    }
+                    // 都不是数字，按字符比较
+                    (false, false) => {
+                        let a_ch = a_chars.next().unwrap();
+                        let b_ch = b_chars.next().unwrap();
+                        match a_ch.cmp(&b_ch) {
+                            std::cmp::Ordering::Equal => continue,
+                            other => return other,
+                        }
+                    }
+                    // 一个是数字一个不是，数字排在前面
+                    (true, false) => return std::cmp::Ordering::Less,
+                    (false, true) => return std::cmp::Ordering::Greater,
+                }
+            }
+        }
+    }
+}
+
+/// 从迭代器中连续读取数字字符并解析为 u64
+fn take_number<I>(chars: &mut std::iter::Peekable<I>) -> u64
+where
+    I: Iterator<Item = char>,
+{
+    let mut num_str = String::new();
+    while let Some(&ch) = chars.peek() {
+        if ch.is_ascii_digit() {
+            num_str.push(ch);
+            chars.next();
+        } else {
+            break;
+        }
+    }
+    num_str.parse().unwrap_or(0)
+}
+
 pub async fn connect(database_url: &str) -> Result<PgPool> {
     sqlx::postgres::PgPoolOptions::new()
         .max_connections(30)
@@ -48,7 +110,8 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
         })
         .collect();
 
-    migrations.sort();
+    // 自然排序：正确处理数字前缀，如 0001, 0002, 0010 而非字典序 0001, 0010, 0002
+    migrations.sort_by(|a, b| natural_sort_compare(a, b));
 
     info!("Found {} migration files", migrations.len());
 

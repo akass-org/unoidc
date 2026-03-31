@@ -34,6 +34,7 @@ jsonwebtoken = "9"
 p256 = { version = "0.13", features = ["ecdsa", "pem"] }
 rand = "0.8"
 sha2 = "0.10"
+hmac = "0.12"
 hkdf = "0.12"
 base64 = "0.22"
 pkcs8 = "0.10"
@@ -43,7 +44,6 @@ aes-gcm = "0.10"
 # 工具库
 uuid = { version = "1", features = ["v4", "serde"] }
 time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
-chrono = { version = "0.4", features = ["serde"] }
 
 # 配置
 dotenvy = "0.15"

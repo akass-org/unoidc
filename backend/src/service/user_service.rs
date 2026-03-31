@@ -99,18 +99,9 @@ impl UserService {
 
         let new_hash = crypto::hash_password(new_password)?;
 
-        sqlx::query(
-            r#"
-            UPDATE users
-            SET password_hash = $2, updated_at = $3
-            WHERE id = $1
-            "#,
-        )
-        .bind(user_id)
-        .bind(&new_hash)
-        .bind(time::OffsetDateTime::now_utc())
-        .execute(pool)
-        .await?;
+        UserRepo::update_password(pool, user_id, &new_hash)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to update password: {}", e))?;
 
         Ok(())
     }

@@ -92,7 +92,8 @@ impl AuditLogRepo {
             format!("WHERE {}", conditions.join(" AND "))
         };
 
-        let limit = query.limit.unwrap_or(100);
+        const MAX_LIMIT: i32 = 1000;
+        let limit = query.limit.unwrap_or(100).min(MAX_LIMIT);
         let offset = query.offset.unwrap_or(0);
 
         let sql = format!(

@@ -55,15 +55,23 @@ pub struct LogoutResponse {
     pub message: String,
 }
 
-fn build_cookie_value(session_id: &str, cookie_domain: Option<&String>) -> String {
+fn build_cookie_value(session_id: &str, cookie_domain: Option<&String>, secure: bool) -> String {
+    let secure_flag = if secure { "; Secure" } else { "" };
     let mut cookie = format!(
-        "unoidc_session={}; HttpOnly; Secure; SameSite=Strict; Path=/",
-        session_id
+        "unoidc_session={}; HttpOnly{}; SameSite=Strict; Path=/",
+        session_id, secure_flag
     );
     if let Some(domain) = cookie_domain {
         cookie = format!("{}; Domain={}", cookie, domain);
     }
     cookie
+}
+
+/// 判断是否应该使用 Secure cookie
+///
+/// 基于 issuer URL 是否使用 HTTPS
+fn is_secure_context(issuer: &str) -> bool {
+    issuer.starts_with("https://")
 }
 
 pub async fn login(
@@ -108,8 +116,9 @@ pub async fn login(
             metrics::AUTH_LOGIN_SUCCESS_TOTAL.inc();
             metrics::SESSION_CREATED_TOTAL.inc();
 
+            let secure = is_secure_context(&state.config.issuer);
             let cookie_value =
-                build_cookie_value(&session.session_id, state.config.cookie_domain.as_ref());
+                build_cookie_value(&session.session_id, state.config.cookie_domain.as_ref(), secure);
 
             Ok((
                 [(header::SET_COOKIE, cookie_value)],
@@ -180,8 +189,12 @@ pub async fn logout(
 
     AuthService::logout(&state.db, &session_id).await?;
 
-    let mut cookie_value =
-        "unoidc_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0".to_string();
+    let secure = is_secure_context(&state.config.issuer);
+    let secure_flag = if secure { "; Secure" } else { "" };
+    let mut cookie_value = format!(
+        "unoidc_session=; HttpOnly{}; SameSite=Strict; Path=/; Max-Age=0",
+        secure_flag
+    );
     if let Some(domain) = &state.config.cookie_domain {
         cookie_value = format!("{}; Domain={}", cookie_value, domain);
     }
@@ -198,12 +211,10 @@ pub async fn logout(
 
 pub async fn register(
     State(_state): State<Arc<AppState>>,
-    Json(req): Json<RegisterRequest>,
+    Json(_req): Json<RegisterRequest>,
 ) -> Result<Json<LoginResponse>> {
-    req.validate().map_err(|e| AppError::ValidationError {
-        field: "request".to_string(),
-        message: e.to_string(),
-    })?;
+    // M-21: 跳过验证，因为注册功能尚未实现
+    // 功能实现后应添加验证：req.validate()...
 
     Err(AppError::OidcError {
         error: OidcErrorCode::TemporarilyUnavailable,

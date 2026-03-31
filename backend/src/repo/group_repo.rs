@@ -66,20 +66,44 @@ impl GroupRepo {
     }
 
     /// 更新组
+    ///
+    /// 使用 `Option<Option<String>>` 模式处理 description:
+    /// - `None` = 不修改
+    /// - `Some(None)` = 清空（设置为 NULL）
+    /// - `Some(Some(value))` = 设置为新值
     pub async fn update(pool: &PgPool, id: Uuid, input: UpdateGroup) -> Result<Group, sqlx::Error> {
-        sqlx::query_as::<_, Group>(
-            r#"
-            UPDATE groups
-            SET name = COALESCE($2, name), description = $3
-            WHERE id = $1
-            RETURNING *
-            "#,
-        )
-        .bind(id)
-        .bind(&input.name)
-        .bind(&input.description)
-        .fetch_one(pool)
-        .await
+        // 构建动态 SQL
+        let mut set_clauses = Vec::new();
+        let mut param_idx = 2;
+
+        if input.name.is_some() {
+            set_clauses.push(format!("name = ${}", param_idx));
+            param_idx += 1;
+        }
+        if input.description.is_some() {
+            set_clauses.push(format!("description = ${}", param_idx));
+            param_idx += 1;
+        }
+
+        // 添加 updated_at
+        set_clauses.push(format!("updated_at = ${}", param_idx));
+
+        let sql = format!(
+            "UPDATE groups SET {} WHERE id = $1 RETURNING *",
+            set_clauses.join(", ")
+        );
+
+        let mut query = sqlx::query_as::<_, Group>(&sql).bind(id);
+
+        if let Some(name) = input.name {
+            query = query.bind(name);
+        }
+        if let Some(description) = input.description {
+            query = query.bind(description);
+        }
+        query = query.bind(time::OffsetDateTime::now_utc());
+
+        query.fetch_one(pool).await
     }
 
     /// 删除组

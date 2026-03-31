@@ -4,7 +4,7 @@
 // 所有时间字段均为 Unix 时间戳 (NumericDate)，符合 OIDC 规范
 
 use anyhow::Result;
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 /// ID Token Claims (OIDC Core Section 2)
@@ -125,6 +125,28 @@ pub fn now_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("System time before epoch")
         .as_secs()
+}
+
+/// 从 JWT token 中提取 kid（不验证签名）
+///
+/// 使用 base64 直接解码 header，不依赖 jsonwebtoken crate 的解码
+pub fn extract_kid(token: &str) -> Result<Option<String>> {
+    use base64::Engine;
+
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 {
+        return Err(anyhow::anyhow!("Invalid JWT format: expected 3 parts"));
+    }
+
+    // 解码 header
+    let header_json = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(parts[0])
+        .map_err(|e| anyhow::anyhow!("Failed to decode header: {}", e))?;
+
+    let header: serde_json::Value = serde_json::from_slice(&header_json)
+        .map_err(|e| anyhow::anyhow!("Failed to parse header JSON: {}", e))?;
+
+    Ok(header.get("kid").and_then(|v| v.as_str()).map(String::from))
 }
 
 #[cfg(test)]

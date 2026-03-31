@@ -60,11 +60,16 @@ impl ClientRepo {
     pub async fn create(pool: &PgPool, input: CreateClient) -> Result<Client, sqlx::Error> {
         let id = Uuid::new_v4();
         let now = time::OffsetDateTime::now_utc();
-        let redirect_uris = serde_json::to_value(&input.redirect_uris).unwrap();
+        let redirect_uris = serde_json::to_value(&input.redirect_uris)
+            .map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
         let post_logout_redirect_uris = input.post_logout_redirect_uris
-            .map(|uris| serde_json::to_value(&uris).unwrap());
-        let grant_types = serde_json::to_value(&input.grant_types).unwrap();
-        let response_types = serde_json::to_value(&input.response_types).unwrap();
+            .map(|uris| serde_json::to_value(&uris)
+                .map_err(|e| sqlx::Error::Encode(Box::new(e))))
+            .transpose()?;
+        let grant_types = serde_json::to_value(&input.grant_types)
+            .map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
+        let response_types = serde_json::to_value(&input.response_types)
+            .map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
 
         sqlx::query_as::<_, Client>(
             r#"
@@ -113,10 +118,12 @@ impl ClientRepo {
             client.app_url = Some(app_url);
         }
         if let Some(redirect_uris) = input.redirect_uris {
-            client.redirect_uris = serde_json::to_value(&redirect_uris).unwrap();
+            client.redirect_uris = serde_json::to_value(&redirect_uris)
+                .map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
         }
         if let Some(post_logout_redirect_uris) = input.post_logout_redirect_uris {
-            client.post_logout_redirect_uris = Some(serde_json::to_value(&post_logout_redirect_uris).unwrap());
+            client.post_logout_redirect_uris = Some(serde_json::to_value(&post_logout_redirect_uris)
+                .map_err(|e| sqlx::Error::Encode(Box::new(e)))?);
         }
         if let Some(enabled) = input.enabled {
             client.enabled = enabled;

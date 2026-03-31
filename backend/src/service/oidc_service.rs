@@ -4,10 +4,11 @@
 
 use sqlx::PgPool;
 use time::OffsetDateTime;
-use tracing::info;
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::crypto;
+use crate::metrics;
 use crate::model::{AuthorizationCode, CreateAuthorizationCode};
 use crate::repo::AuthCodeRepo;
 use crate::service::ConsentService;
@@ -63,7 +64,8 @@ impl OidcService {
 
     /// 通过哈希查找并原子消费授权码
     ///
-    /// 使用条件 UPDATE 确保并发安全，防止授权码双花
+    /// 使用条件 UPDATE 确保并发安全，防止授权码双花。
+    /// 如果检测到重放攻击（code 存在但已被消费），记录安全事件。
     pub async fn exchange_authorization_code(
         pool: &PgPool,
         plain_code: &str,
@@ -73,7 +75,21 @@ impl OidcService {
         // 原子操作：仅在未消费时标记并返回
         let auth_code = match AuthCodeRepo::consume_and_return(pool, &code_hash).await? {
             Some(code) => code,
-            None => return Ok(None),
+            None => {
+                // 区分 "code 不存在" 和 "code 已消费（重放攻击）"
+                let code_exists = AuthCodeRepo::exists(pool, &code_hash).await?;
+                if code_exists {
+                    // 重放攻击检测：code 存在但已被消费
+                    metrics::AUTH_CODE_REPLAY_TOTAL.inc();
+                    error!(
+                        "Security event: authorization code replay detected (code_hash: {})",
+                        code_hash
+                    );
+                    // 注：这里没有调用 AuditService，因为需要 request_context 中的 IP/UA 信息
+                    // 调用方应在收到 None 且知道是重放时补充审计日志
+                }
+                return Ok(None);
+            }
         };
 
         // 检查是否过期（可能在消费窗口内过期）
@@ -82,6 +98,13 @@ impl OidcService {
         }
 
         Ok(Some(auth_code))
+    }
+
+    /// 检测授权码重放攻击
+    ///
+    /// 在 consume_and_return 返回 None 后调用，检查 code 是否存在
+    pub async fn is_auth_code_replay(pool: &PgPool, code_hash: &str) -> anyhow::Result<bool> {
+        AuthCodeRepo::exists(pool, code_hash).await.map_err(Into::into)
     }
 
     /// 验证 scope 列表合法性

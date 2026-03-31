@@ -28,7 +28,8 @@ impl AuthCodeRepo {
         let id = Uuid::new_v4();
         let now = OffsetDateTime::now_utc();
         let expires_at = now + time::Duration::minutes(10); // 授权码 10 分钟有效
-        let amr = serde_json::to_value(&input.amr).unwrap();
+        let amr = serde_json::to_value(&input.amr)
+            .map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
 
         sqlx::query_as::<_, AuthorizationCode>(
             r#"
@@ -74,6 +75,22 @@ impl AuthCodeRepo {
         .bind(now)
         .fetch_optional(pool)
         .await
+    }
+
+    /// 检查授权码是否存在（包括已消费的）
+    ///
+    /// 用于检测重放攻击：区分 "code 不存在" 和 "code 已消费"
+    pub async fn exists(pool: &PgPool, code_hash: &str) -> Result<bool, sqlx::Error> {
+        let result: Option<(bool,)> = sqlx::query_as(
+            r#"
+            SELECT true FROM authorization_codes WHERE code_hash = $1
+            "#,
+        )
+        .bind(code_hash)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(result.is_some())
     }
 
     /// 清理过期的授权码

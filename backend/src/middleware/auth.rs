@@ -55,13 +55,19 @@ pub fn extract_session_cookie(headers: &HeaderMap) -> Option<String> {
 }
 
 /// 从 cookie 字符串中提取指定 cookie 的值
+///
+/// 先 split '=' 再比较 name，避免 `session` 匹配到 `session_id`
 fn extract_cookie_value(cookie_str: &str, name: &str) -> Option<String> {
-    let prefix = format!("{}=", name);
     cookie_str
         .split(';')
         .find_map(|cookie| {
             let cookie = cookie.trim();
-            cookie.strip_prefix(&prefix).map(|v| v.to_string())
+            let (cookie_name, value) = cookie.split_once('=')?;
+            if cookie_name.trim() == name {
+                Some(value.to_string())
+            } else {
+                None
+            }
         })
 }
 

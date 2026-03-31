@@ -53,7 +53,13 @@ impl Default for Config {
 
 impl Config {
     pub fn from_env() -> Result<Self, anyhow::Error> {
-        dotenvy::dotenv().ok();
+        match dotenvy::dotenv() {
+            Ok(_) => {}
+            Err(dotenvy::Error::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+                // .env 文件不存在是正常的，忽略
+            }
+            Err(e) => return Err(anyhow::anyhow!("Failed to parse .env file: {}", e)),
+        }
 
         let config = Config {
             database_url: env::var("DATABASE_URL")

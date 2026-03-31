@@ -9,7 +9,7 @@ pub mod jwt;
 pub mod key_encryption;
 
 // 重新导出常用函数，方便使用
-pub use common::{hash_token, verify_pkce_s256};
+pub use common::{hash_token, verify_pkce_s256, sign_session, verify_session_signature};
 pub use password::{hash_password, verify_password, hash_client_secret, verify_client_secret};
 pub use random::{
     generate_secure_token, generate_authorization_code, generate_refresh_token,

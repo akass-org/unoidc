@@ -29,7 +29,7 @@ impl AuditService {
             session_id,
         )
         .with_actor(user_id)
-        .with_correlation_id(correlation_id.unwrap_or_else(|| Uuid::new_v4().to_string()))
+        .with_correlation_id(correlation_id.unwrap_or_default())
         .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
         .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
         .with_metadata(serde_json::json!({
@@ -59,7 +59,7 @@ impl AuditService {
             username,
             reason_code,
         )
-        .with_correlation_id(correlation_id.unwrap_or_else(|| Uuid::new_v4().to_string()))
+        .with_correlation_id(correlation_id.unwrap_or_default())
         .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
         .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
         .with_metadata(serde_json::json!({
@@ -89,7 +89,7 @@ impl AuditService {
             "user_session",
             session_id,
         )
-        .with_correlation_id(correlation_id.unwrap_or_else(|| Uuid::new_v4().to_string()))
+        .with_correlation_id(correlation_id.unwrap_or_default())
         .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
         .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()));
 
@@ -120,7 +120,7 @@ impl AuditService {
             token_type,
             Uuid::new_v4().to_string(),
         )
-        .with_correlation_id(correlation_id.unwrap_or_else(|| Uuid::new_v4().to_string()))
+        .with_correlation_id(correlation_id.unwrap_or_default())
         .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
         .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
         .with_metadata(serde_json::json!({
@@ -157,7 +157,7 @@ impl AuditService {
             "refresh_token",
             Uuid::new_v4().to_string(),
         )
-        .with_correlation_id(correlation_id.unwrap_or_else(|| Uuid::new_v4().to_string()))
+        .with_correlation_id(correlation_id.unwrap_or_default())
         .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
         .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
         .with_metadata(serde_json::json!({
@@ -189,7 +189,7 @@ impl AuditService {
             token_hash,
             "token_replay",
         )
-        .with_correlation_id(correlation_id.unwrap_or_else(|| Uuid::new_v4().to_string()))
+        .with_correlation_id(correlation_id.unwrap_or_default())
         .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
         .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
         .with_metadata(serde_json::json!({
@@ -200,6 +200,35 @@ impl AuditService {
         error!(
             "Audit log: refresh token replay detected (token: {})",
             token_hash
+        );
+        Ok(log)
+    }
+
+    /// 记录 Authorization Code 重放检测事件
+    pub async fn log_auth_code_replay(
+        pool: &PgPool,
+        code_hash: &str,
+        correlation_id: Option<String>,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+    ) -> Result<AuditLog, sqlx::Error> {
+        let create_log = CreateAuditLog::failure(
+            "auth_code_replay_detected",
+            "authorization_code",
+            code_hash,
+            "code_replay",
+        )
+        .with_correlation_id(correlation_id.unwrap_or_default())
+        .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
+        .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
+        .with_metadata(serde_json::json!({
+            "event": "auth_code_replay_detected"
+        }));
+
+        let log = AuditLogRepo::create(pool, create_log).await?;
+        error!(
+            "Audit log: authorization code replay detected (code_hash: {})",
+            code_hash
         );
         Ok(log)
     }
@@ -219,7 +248,7 @@ impl AuditService {
             "authorization_code",
             Uuid::new_v4().to_string(),
         )
-        .with_correlation_id(correlation_id.unwrap_or_else(|| Uuid::new_v4().to_string()))
+        .with_correlation_id(correlation_id.unwrap_or_default())
         .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
         .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
         .with_metadata(serde_json::json!({
@@ -255,7 +284,7 @@ impl AuditService {
         )
         .with_actor(user_id)
         .with_client(client_id)
-        .with_correlation_id(correlation_id.unwrap_or_else(|| Uuid::new_v4().to_string()))
+        .with_correlation_id(correlation_id.unwrap_or_default())
         .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
         .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
         .with_metadata(serde_json::json!({
@@ -288,7 +317,7 @@ impl AuditService {
         )
         .with_actor(user_id)
         .with_client(client_id)
-        .with_correlation_id(correlation_id.unwrap_or_else(|| Uuid::new_v4().to_string()))
+        .with_correlation_id(correlation_id.unwrap_or_default())
         .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
         .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
         .with_metadata(serde_json::json!({
@@ -319,7 +348,7 @@ impl AuditService {
             reason,
         )
         .with_actor(user_id)
-        .with_correlation_id(correlation_id.unwrap_or_else(|| Uuid::new_v4().to_string()))
+        .with_correlation_id(correlation_id.unwrap_or_default())
         .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
         .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
         .with_metadata(serde_json::json!({

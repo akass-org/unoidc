@@ -31,6 +31,18 @@ async fn main() -> anyhow::Result<()> {
     metrics::init();
     tracing::info!("Metrics initialized");
 
+    // 初始化活跃会话指标（M-05: 启动时统计实际会话数）
+    match backend::repo::SessionRepo::count_active(&db).await {
+        Ok(count) => {
+            metrics::SESSION_ACTIVE_TOTAL.set(count as f64);
+            tracing::info!("Initialized session_active_total to {}", count);
+        }
+        Err(e) => {
+            tracing::warn!("Failed to count active sessions on startup: {}", e);
+            // 继续使用默认值 0，不阻止启动
+        }
+    }
+
     // 构建应用（注入配置和数据库连接）
     let state = AppState::new(config, db);
     let app = build_app_with_state(state);

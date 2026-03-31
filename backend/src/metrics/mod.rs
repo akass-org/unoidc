@@ -55,6 +55,12 @@ lazy_static! {
         "Total number of replay attacks detected",
     ).unwrap();
 
+    /// Authorization Code 重放攻击检测总数
+    pub static ref AUTH_CODE_REPLAY_TOTAL: Counter = Counter::new(
+        "oidc_auth_code_replay_total",
+        "Total number of authorization code replay attacks detected",
+    ).unwrap();
+
     // ===== Session 相关指标 =====
 
     /// 活跃会话数
@@ -125,6 +131,7 @@ pub fn init() {
         let _ = REGISTRY.register(Box::new(TOKEN_ISSUED_TOTAL.clone()));
         let _ = REGISTRY.register(Box::new(TOKEN_REFRESH_TOTAL.clone()));
         let _ = REGISTRY.register(Box::new(REPLAY_DETECTED_TOTAL.clone()));
+        let _ = REGISTRY.register(Box::new(AUTH_CODE_REPLAY_TOTAL.clone()));
 
         let _ = REGISTRY.register(Box::new(SESSION_ACTIVE_TOTAL.clone()));
         let _ = REGISTRY.register(Box::new(SESSION_CREATED_TOTAL.clone()));

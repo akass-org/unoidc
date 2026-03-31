@@ -154,4 +154,22 @@ impl SessionRepo {
         .fetch_all(pool)
         .await
     }
+
+    /// 获取所有活跃会话数量
+    ///
+    /// 用于启动时初始化 SESSION_ACTIVE_TOTAL 指标
+    pub async fn count_active(pool: &PgPool) -> Result<i64, sqlx::Error> {
+        let now = OffsetDateTime::now_utc();
+
+        let count: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM user_sessions WHERE expires_at > $1
+            "#,
+        )
+        .bind(now)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(count.0)
+    }
 }

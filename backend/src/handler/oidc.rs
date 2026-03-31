@@ -11,6 +11,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use validator::Validate;
 
 use crate::crypto::jwt;
 use crate::crypto::jwt::AccessTokenClaims;
@@ -20,6 +21,7 @@ use crate::model::Jwk;
 use crate::repo::{GroupRepo, UserRepo};
 use crate::service::{KeyService, LogoutService};
 use crate::AppState;
+use std::collections::HashMap;
 
 pub async fn discovery(State(state): State<Arc<AppState>>) -> Json<Value> {
     let issuer = state.config.issuer.clone();
@@ -48,8 +50,11 @@ pub async fn discovery(State(state): State<Arc<AppState>>) -> Json<Value> {
 pub async fn jwks(State(state): State<Arc<AppState>>) -> Result<Json<Value>> {
     let keys = KeyService::get_jwks(&state.db)
         .await
-        .map_err(|e| crate::error::AppError::InternalServerError {
-            error_code: Some(format!("JWKS_ERROR: {}", e)),
+        .map_err(|e| {
+            tracing::error!("Failed to get JWKS: {}", e);
+            crate::error::AppError::InternalServerError {
+                error_code: Some("KEYS_UNAVAILABLE".to_string()),
+            }
         })?;
 
     let jwk_list: Vec<Value> = keys.iter().map(|k| k.public_key_jwk.clone()).collect();
@@ -61,24 +66,72 @@ pub async fn jwks(State(state): State<Arc<AppState>>) -> Result<Json<Value>> {
 // ============================================================
 
 /// GET /authorize 查询参数
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct AuthorizeRequest {
+    #[validate(length(max = 50, message = "response_type too long"))]
     pub response_type: String,
+    #[validate(length(max = 255, message = "client_id too long"))]
     pub client_id: String,
+    #[validate(length(max = 2048, message = "redirect_uri too long"))]
     pub redirect_uri: String,
+    #[validate(length(max = 500, message = "scope too long"))]
     pub scope: String,
+    #[validate(length(max = 1024, message = "state too long"))]
     pub state: String,
+    #[validate(length(max = 500, message = "nonce too long"))]
     pub nonce: Option<String>,
+    #[validate(length(max = 500, message = "code_challenge too long"))]
     pub code_challenge: String,
+    #[validate(length(max = 10, message = "code_challenge_method too long"))]
     pub code_challenge_method: String,
+}
+
+impl AuthorizeRequest {
+    /// 验证请求参数
+    pub fn validate_request(&self) -> Result<()> {
+        use validator::Validate;
+
+        // 基础长度验证
+        self.validate().map_err(|e| AppError::ValidationError {
+            field: "request".to_string(),
+            message: e.to_string(),
+        })?;
+
+        // 验证 response_type 必须是 "code"
+        if self.response_type != "code" {
+            return Err(AppError::OidcError {
+                error: OidcErrorCode::UnsupportedResponseType,
+                error_description: Some(format!(
+                    "response_type '{}' is not supported, only 'code' is supported",
+                    self.response_type
+                )),
+            });
+        }
+
+        // 验证 code_challenge_method 必须是 S256
+        if self.code_challenge_method != "S256" {
+            return Err(AppError::OidcError {
+                error: OidcErrorCode::InvalidRequest,
+                error_description: Some(format!(
+                    "code_challenge_method '{}' is not supported, only 'S256' is supported",
+                    self.code_challenge_method
+                )),
+            });
+        }
+
+        Ok(())
+    }
 }
 
 /// GET /authorize — Authorization endpoint
 pub async fn authorize_get(
     State(_state): State<Arc<AppState>>,
     _headers: HeaderMap,
-    Query(_req): Query<AuthorizeRequest>,
+    Query(req): Query<AuthorizeRequest>,
 ) -> Result<&'static str> {
+    // 验证请求参数（包括长度限制和合规性检查）
+    req.validate_request()?;
+
     metrics::AUTH_REQUESTS_TOTAL.inc();
     Err(AppError::OidcError {
         error: OidcErrorCode::TemporarilyUnavailable,
@@ -216,36 +269,79 @@ fn extract_bearer_token(headers: &HeaderMap) -> Result<String> {
 }
 
 /// 验证 access token 并返回 claims
+///
+/// 使用 HashMap 通过 kid 进行 O(1) 查找，替代线性搜索
 fn verify_access_token(
     token: &str,
     jwks: &[Jwk],
     expected_issuer: &str,
 ) -> Result<AccessTokenClaims> {
-    // 尝试用每个公钥验证（jsonwebtoken 会自动匹配 kid）
-    for jwk in jwks {
-        // 从 JWK JSON 转换为 PEM 格式的公钥
-        let public_key_pem = match KeyService::jwk_to_public_key_pem(&jwk.public_key_jwk) {
-            Ok(pem) => pem,
-            Err(_) => continue, // 跳过无效的 JWK
-        };
-
-        if let Ok(token_data) = jwt::verify_jwt::<AccessTokenClaims>(
-            token,
-            &public_key_pem,
-            Some(expected_issuer),
-            None, // audience 由客户端控制，不在此验证
-        ) {
-            // 检查 token 类型
-            if token_data.claims.token_type != "oauth-access-token" {
-                continue;
-            }
-            return Ok(token_data.claims);
+    // 从 token 中提取 kid
+    let kid = match jwt::extract_kid(token) {
+        Ok(Some(k)) => k,
+        Ok(None) => {
+            tracing::warn!("Token missing kid header");
+            return Err(AppError::InvalidToken {
+                reason: Some("Token missing kid header".to_string()),
+            });
         }
+        Err(e) => {
+            tracing::warn!("Failed to extract kid from token: {}", e);
+            return Err(AppError::InvalidToken {
+                reason: Some("Invalid token format".to_string()),
+            });
+        }
+    };
+
+    // 构建 kid -> JWK 的 HashMap 用于 O(1) 查找
+    let jwk_map: HashMap<&str, &Jwk> = jwks
+        .iter()
+        .map(|jwk| (jwk.kid.as_str(), jwk))
+        .collect();
+
+    // 通过 kid 查找对应的 JWK
+    let jwk = match jwk_map.get(kid.as_str()) {
+        Some(jwk) => jwk,
+        None => {
+            return Err(AppError::InvalidToken {
+                reason: Some("Unknown key ID".to_string()),
+            });
+        }
+    };
+
+    // 从 JWK JSON 转换为 PEM 格式的公钥
+    let public_key_pem = match KeyService::jwk_to_public_key_pem(&jwk.public_key_jwk) {
+        Ok(pem) => pem,
+        Err(_) => {
+            return Err(AppError::InvalidToken {
+                reason: Some("Invalid key format".to_string()),
+            });
+        }
+    };
+
+    // 验证 token
+    let token_data = match jwt::verify_jwt::<AccessTokenClaims>(
+        token,
+        &public_key_pem,
+        Some(expected_issuer),
+        None, // audience 由客户端控制，不在此验证
+    ) {
+        Ok(data) => data,
+        Err(_) => {
+            return Err(AppError::InvalidToken {
+                reason: Some("Invalid or expired access token".to_string()),
+            });
+        }
+    };
+
+    // 检查 token 类型
+    if token_data.claims.token_type != "oauth-access-token" {
+        return Err(AppError::InvalidToken {
+            reason: Some("Invalid token type".to_string()),
+        });
     }
 
-    Err(AppError::InvalidToken {
-        reason: Some("Invalid or expired access token".to_string()),
-    })
+    Ok(token_data.claims)
 }
 
 // ============================================================

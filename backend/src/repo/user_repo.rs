@@ -220,6 +220,28 @@ impl UserRepo {
         Ok(())
     }
 
+    /// 更新用户密码
+    ///
+    /// 同时更新 updated_at 时间戳
+    pub async fn update_password(pool: &PgPool, id: Uuid, password_hash: &str) -> Result<(), sqlx::Error> {
+        let now = time::OffsetDateTime::now_utc();
+
+        sqlx::query(
+            r#"
+            UPDATE users
+            SET password_hash = $2, updated_at = $3
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .bind(password_hash)
+        .bind(now)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// 统计用户总数
     pub async fn count(pool: &PgPool) -> Result<i64, sqlx::Error> {
         let result: (i64,) = sqlx::query_as(

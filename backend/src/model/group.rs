@@ -35,8 +35,13 @@ pub struct CreateGroup {
 }
 
 /// 更新组时的参数
+///
+/// 使用 `Option<Option<String>>` 模式来区分 "不修改" 和 "清空":
+/// - `None` = 不修改该字段
+/// - `Some(None)` = 清空（设置为 NULL）
+/// - `Some(Some(value))` = 设置为新值
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateGroup {
     pub name: Option<String>,
-    pub description: Option<String>,
+    pub description: Option<Option<String>>,
 }
