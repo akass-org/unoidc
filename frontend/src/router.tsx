@@ -1,10 +1,12 @@
 import type { RouteObject } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { LoginPage } from './pages/Login'
 import { RegisterPage } from './pages/Register'
 import { ForgotPasswordPage } from './pages/ForgotPassword'
 import { AuthorizePage } from './pages/Authorize'
 import { ProfilePage } from './pages/Profile'
 import { MyAppsPage } from './pages/MyApps'
+import { UserLayout } from './components/UserLayout'
 import { AdminLayout } from './pages/admin/Layout'
 import { AdminUsers } from './pages/admin/Users'
 import { AdminGroups } from './pages/admin/Groups'
@@ -13,6 +15,9 @@ import { AdminAuditLogs } from './pages/admin/AuditLogs'
 import { AdminSettings } from './pages/admin/Settings'
 
 export const routes: RouteObject[] = [
+  // 默认重定向
+  { path: '/', element: <Navigate to="/login" replace /> },
+
   // 公开页面
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
@@ -22,8 +27,13 @@ export const routes: RouteObject[] = [
   { path: '/authorize', element: <AuthorizePage /> },
 
   // 用户自助
-  { path: '/profile', element: <ProfilePage /> },
-  { path: '/my-apps', element: <MyAppsPage /> },
+  {
+    element: <UserLayout />,
+    children: [
+      { path: '/profile', element: <ProfilePage /> },
+      { path: '/my-apps', element: <MyAppsPage /> },
+    ],
+  },
 
   // 管理后台
   {
