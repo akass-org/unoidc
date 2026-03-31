@@ -26,6 +26,7 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         state.config.rate_limit_login_window_secs,
         state.config.rate_limit_token_max_requests,
         state.config.rate_limit_token_window_secs,
+        state.config.trusted_proxy_ips.clone(),
     );
 
     let cors_config = CorsConfig {

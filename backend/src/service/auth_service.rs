@@ -15,10 +15,11 @@ use crate::{
     repo::{SessionRepo, UserRepo},
 };
 
-/// 登录配置常量
-pub const MAX_FAILED_ATTEMPTS: i32 = 5;          // 最大失败次数
-pub const LOCKOUT_DURATION_SECONDS: i64 = 1800;  // 锁定时长（30分钟）
-pub const DEFAULT_SESSION_DURATION: i64 = 86400; // 默认会话时长（24小时）
+const DUMMY_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$dummySaltForTimingAttackPrevention$dummyHashForTimingAttackPrevention";
+
+pub const MAX_FAILED_ATTEMPTS: i32 = 5;
+pub const LOCKOUT_DURATION_SECONDS: i64 = 1800;
+pub const DEFAULT_SESSION_DURATION: i64 = 86400;
 
 /// 认证服务
 pub struct AuthService;
@@ -36,19 +37,25 @@ impl AuthService {
         ip_address: Option<String>,
         user_agent: Option<String>,
     ) -> Result<(User, Session)> {
-        // 1. 查找用户
-        let user = UserRepo::find_by_username(pool, username)
-            .await
-            .map_err(|e| {
+        let user = match UserRepo::find_by_username(pool, username).await {
+            Ok(Some(u)) => Some(u),
+            Ok(None) => None,
+            Err(e) => {
                 warn!("Database error while finding user: {}", e);
-                AppError::InternalServerError { error_code: None }
-            })?
-            .ok_or_else(|| {
-                info!("Login failed: user not found - {}", username);
-                AppError::InvalidCredentials
-            })?;
+                let _ = password::verify_password(password, DUMMY_PASSWORD_HASH).ok();
+                return Err(AppError::InternalServerError { error_code: None });
+            }
+        };
 
-        // 2. 检查账户是否被锁定
+        let user = match user {
+            Some(u) => u,
+            None => {
+                info!("Login failed: user not found - {}", username);
+                let _ = password::verify_password(password, DUMMY_PASSWORD_HASH).ok();
+                return Err(AppError::InvalidCredentials);
+            }
+        };
+
         if user.is_locked() {
             warn!("Login attempt on locked account: {}", username);
             return Err(AppError::Forbidden {
@@ -56,7 +63,6 @@ impl AuthService {
             });
         }
 
-        // 3. 检查账户是否启用
         if !user.enabled {
             warn!("Login attempt on disabled account: {}", username);
             return Err(AppError::Forbidden {
@@ -64,7 +70,6 @@ impl AuthService {
             });
         }
 
-        // 4. 验证密码
         let password_valid = password::verify_password(password, &user.password_hash)
             .map_err(|e| {
                 warn!("Password verification error: {}", e);
@@ -72,7 +77,6 @@ impl AuthService {
             })?;
 
         if !password_valid {
-            // 密码错误，增加失败计数
             let failed_attempts = UserRepo::increment_failed_login(pool, user.id)
                 .await
                 .map_err(|e| {
@@ -85,7 +89,6 @@ impl AuthService {
                 username, failed_attempts, MAX_FAILED_ATTEMPTS
             );
 
-            // 检查是否需要锁定账户
             if failed_attempts >= MAX_FAILED_ATTEMPTS {
                 let lockout_until = OffsetDateTime::now_utc()
                     + time::Duration::seconds(LOCKOUT_DURATION_SECONDS);
@@ -102,7 +105,6 @@ impl AuthService {
                     username, lockout_until
                 );
 
-                // 更新账户锁定指标
                 metrics::AUTH_ACCOUNT_LOCKED_TOTAL.inc();
 
                 return Err(AppError::Forbidden {
@@ -116,7 +118,6 @@ impl AuthService {
             return Err(AppError::InvalidCredentials);
         }
 
-        // 5. 登录成功！重置失败计数并更新最后登录时间
         UserRepo::reset_failed_login(pool, user.id)
             .await
             .map_err(|e| {
@@ -133,7 +134,6 @@ impl AuthService {
 
         info!("User logged in successfully: {}", username);
 
-        // 6. 创建会话
         let session_input = CreateSession::new(user.id, ip_address, user_agent);
         let session = SessionRepo::create(pool, session_input)
             .await

@@ -3,10 +3,12 @@
 // 处理 RP-Initiated Logout 和会话撤销逻辑
 
 use sqlx::PgPool;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{error::AppError, model::Client};
 use crate::repo::{ClientRepo, RefreshTokenRepo, SessionRepo};
+use crate::service::KeyService;
+use crate::crypto::jwt;
 
 pub struct LogoutService;
 
@@ -78,7 +80,7 @@ impl LogoutService {
     /// 解析 JWT 并验证签名（如果可能），返回其中的 sub claim
     /// 如果 token 格式无效或验证失败，返回错误
     pub async fn validate_id_token_hint<T: serde::de::DeserializeOwned>(
-        _pool: &PgPool,
+        pool: &PgPool,
         id_token_hint: &str,
     ) -> Result<T, AppError> {
         if id_token_hint.is_empty() {
@@ -87,7 +89,6 @@ impl LogoutService {
             ));
         }
 
-        // JWT 格式：header.payload.signature
         let parts: Vec<&str> = id_token_hint.split('.').collect();
         if parts.len() != 3 {
             return Err(AppError::InvalidToken {
@@ -95,21 +96,42 @@ impl LogoutService {
             });
         }
 
-        // 解码 payload（base64url）
-        use base64::Engine;
-        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .decode(parts[1])
-            .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(parts[1]))
-            .or_else(|_| base64::engine::general_purpose::STANDARD.decode(parts[1]))
-            .map_err(|e| AppError::InvalidToken {
-                reason: Some(format!("Failed to decode JWT payload: {}", e)),
+        let jwks = KeyService::get_jwks(pool)
+            .await
+            .map_err(|e| {
+                warn!("Failed to get JWKS for id_token_hint validation: {}", e);
+                AppError::InternalServerError {
+                    error_code: Some("JWKS_ERROR".to_string()),
+                }
             })?;
 
-        // 反序列化为目标类型
-        serde_json::from_slice(&payload)
-            .map_err(|e| AppError::InvalidToken {
-                reason: Some(format!("Failed to parse JWT payload: {}", e)),
-            })
+        if jwks.is_empty() {
+            return Err(AppError::InternalServerError {
+                error_code: Some("No signing keys available".to_string()),
+            });
+        }
+
+        for jwk in &jwks {
+            let public_key_pem = match KeyService::jwk_to_public_key_pem(&jwk.public_key_jwk) {
+                Ok(pem) => pem,
+                Err(_) => continue,
+            };
+
+            match jwt::verify_jwt_no_validate::<T>(id_token_hint, &public_key_pem) {
+                Ok(token_data) => {
+                    info!("id_token_hint signature verified with kid={}", jwk.kid);
+                    return Ok(token_data.claims);
+                }
+                Err(e) => {
+                    warn!("id_token_hint verification attempt failed with kid={}: {}", jwk.kid, e);
+                    continue;
+                }
+            }
+        }
+
+        Err(AppError::InvalidToken {
+            reason: Some("id_token_hint signature verification failed".to_string()),
+        })
     }
 
     /// 生成 Front-Channel Logout URL

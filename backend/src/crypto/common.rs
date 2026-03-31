@@ -18,8 +18,21 @@ pub fn hash_token(token: &str) -> String {
 /// 验证: BASE64URL(SHA256(code_verifier)) == code_challenge
 pub fn verify_pkce_s256(code_verifier: &str, code_challenge: &str) -> bool {
     let hash = Sha256::digest(code_verifier.as_bytes());
-    let computed = URL_SAFE_NO_PAD.encode(hash);
-    computed == code_challenge
+    let computed_bytes = URL_SAFE_NO_PAD.encode(hash);
+
+    let a = computed_bytes.as_bytes();
+    let b = code_challenge.as_bytes();
+
+    if a.len() != b.len() {
+        let _ = Sha256::digest(b);
+        return false;
+    }
+
+    let mut result: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        result |= x ^ y;
+    }
+    result == 0
 }
 
 #[cfg(test)]

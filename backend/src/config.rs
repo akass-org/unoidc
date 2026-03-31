@@ -20,6 +20,7 @@ pub struct Config {
     pub rate_limit_token_max_requests: u32,
     pub rate_limit_token_window_secs: u64,
     pub cors_allowed_origins: Vec<String>,
+    pub trusted_proxy_ips: Vec<String>,
 }
 
 impl Default for Config {
@@ -45,6 +46,7 @@ impl Default for Config {
                 "http://localhost:5173".to_string(),
                 "http://localhost:3000".to_string(),
             ],
+            trusted_proxy_ips: vec![],
         }
     }
 }
@@ -94,6 +96,12 @@ impl Config {
                 .parse()?,
             cors_allowed_origins: env::var("CORS_ALLOWED_ORIGINS")
                 .unwrap_or_else(|_| "http://localhost:5173,http://localhost:3000".to_string())
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            trusted_proxy_ips: env::var("TRUSTED_PROXY_IPS")
+                .unwrap_or_default()
                 .split(',')
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())

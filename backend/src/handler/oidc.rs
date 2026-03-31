@@ -283,7 +283,6 @@ pub async fn logout(
 ) -> Result<impl IntoResponse> {
     use axum::http::StatusCode;
 
-    // 如果提供了 id_token_hint，验证并提取用户信息
     if let Some(ref hint) = req.id_token_hint {
         if !hint.is_empty() {
             let hint_result = LogoutService::validate_id_token_hint::<serde_json::Value>(&state.db, hint).await;
@@ -296,7 +295,6 @@ pub async fn logout(
         }
     }
 
-    // 构建重定向 URL
     let base = &state.config.app_base_url;
     let location = if let Some(ref redirect) = req.post_logout_redirect_uri {
         if redirect.is_empty() {
@@ -304,12 +302,32 @@ pub async fn logout(
                 "post_logout_redirect_uri cannot be empty".to_string(),
             ));
         }
+
+        let mut validated = false;
+
+        if let Some(ref hint) = req.id_token_hint {
+            if !hint.is_empty() {
+                if let Ok(claims) = LogoutService::validate_id_token_hint::<serde_json::Value>(&state.db, hint).await {
+                    if let Some(aud) = claims.get("aud").and_then(|v| v.as_str()) {
+                        if let Ok(client_id) = uuid::Uuid::parse_str(aud) {
+                            validated = LogoutService::validate_post_logout_redirect(&state.db, &client_id, redirect).await.is_ok();
+                        }
+                    }
+                }
+            }
+        }
+
+        if !validated {
+            return Err(AppError::InvalidRequest(
+                "post_logout_redirect_uri must be validated via id_token_hint with a registered client".to_string(),
+            ));
+        }
+
         redirect.clone()
     } else {
         base.clone()
     };
 
-    // 构建带 state 参数的完整重定向 URL
     let final_location = if let Some(ref s) = req.state {
         if location.contains('?') {
             format!("{}&state={}", location, s)
@@ -320,7 +338,6 @@ pub async fn logout(
         location
     };
 
-    // 返回 302 重定向
     Ok::<_, AppError>((
         StatusCode::FOUND,
         [(axum::http::header::LOCATION, final_location)],
