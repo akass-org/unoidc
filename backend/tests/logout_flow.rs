@@ -46,11 +46,11 @@ async fn test_rp_initiated_logout_with_id_token_hint(pool: PgPool) -> anyhow::Re
     }).await?;
 
     // 无效的 id_token_hint 格式
-    let result = LogoutService::validate_id_token_hint::<()>(&pool, "invalid-token-hint").await;
+    let result = LogoutService::validate_id_token_hint::<()>(&pool, "invalid-token-hint", None::<&str>).await;
     assert!(result.is_err());
 
     // 空的 id_token_hint 应该也可以（可选参数）
-    let result = LogoutService::validate_id_token_hint::<()>(&pool, "").await;
+    let result = LogoutService::validate_id_token_hint::<()>(&pool, "", None::<&str>).await;
     assert!(result.is_err());
 
     Ok(())

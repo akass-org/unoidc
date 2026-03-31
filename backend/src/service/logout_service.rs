@@ -82,6 +82,7 @@ impl LogoutService {
     pub async fn validate_id_token_hint<T: serde::de::DeserializeOwned>(
         pool: &PgPool,
         id_token_hint: &str,
+        issuer: Option<&str>,
     ) -> Result<T, AppError> {
         if id_token_hint.is_empty() {
             return Err(AppError::InvalidRequest(
@@ -117,7 +118,7 @@ impl LogoutService {
                 Err(_) => continue,
             };
 
-            match jwt::verify_jwt_no_validate::<T>(id_token_hint, &public_key_pem) {
+            match jwt::verify_jwt::<T>(id_token_hint, &public_key_pem, issuer, None) {
                 Ok(token_data) => {
                     info!("id_token_hint signature verified with kid={}", jwk.kid);
                     return Ok(token_data.claims);

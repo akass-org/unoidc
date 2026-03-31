@@ -69,10 +69,3 @@ pub struct UpdateUser {
     pub email_verified: Option<bool>,
     pub enabled: Option<bool>,
 }
-
-/// 用户登录结果
-#[derive(Debug, Clone)]
-pub struct LoginResult {
-    pub user: User,
-    pub groups: Vec<String>,
-}

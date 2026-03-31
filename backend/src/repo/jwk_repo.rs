@@ -60,7 +60,7 @@ impl JwkRepo {
         .await
     }
 
-    /// 创建新密钥
+    /// 创建新密钥（默认不激活）
     pub async fn create(pool: &PgPool, input: CreateJwk) -> Result<Jwk, sqlx::Error> {
         let id = Uuid::new_v4();
         let now = OffsetDateTime::now_utc();
@@ -78,7 +78,7 @@ impl JwkRepo {
         .bind(&input.kty)
         .bind(&input.private_key_pem)
         .bind(&input.public_key_jwk)
-        .bind(true) // 默认激活
+        .bind(input.active)
         .bind(now)
         .fetch_one(pool)
         .await

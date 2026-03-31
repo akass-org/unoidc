@@ -38,7 +38,7 @@ impl KeyService {
             .to_string();
 
         // 构造公钥 JWK
-        let public_key_jwk = Self::build_public_jwk(&signing_key, &kid);
+        let public_key_jwk = Self::build_public_jwk(&signing_key, &kid)?;
 
         // 加密私钥后存储
         let encrypted_pem = key_encryption::encrypt_private_key(&private_key_pem, encryption_key)?;
@@ -49,6 +49,7 @@ impl KeyService {
             kty: "EC".to_string(),
             private_key_pem: encrypted_pem,
             public_key_jwk,
+            active: false,
         };
 
         let jwk = JwkRepo::create(pool, input)
@@ -150,14 +151,18 @@ impl KeyService {
     }
 
     /// 构造公钥 JWK JSON
-    fn build_public_jwk(signing_key: &SigningKey, kid: &str) -> serde_json::Value {
+    fn build_public_jwk(signing_key: &SigningKey, kid: &str) -> Result<serde_json::Value> {
         let verifying_key = signing_key.verifying_key();
         let point = verifying_key.to_encoded_point(false);
 
-        let x_bytes = point.x().expect("x coordinate");
-        let y_bytes = point.y().expect("y coordinate");
+        let x_bytes = point
+            .x()
+            .ok_or_else(|| anyhow::anyhow!("Missing x coordinate in public key"))?;
+        let y_bytes = point
+            .y()
+            .ok_or_else(|| anyhow::anyhow!("Missing y coordinate in public key"))?;
 
-        json!({
+        Ok(json!({
             "kty": "EC",
             "use": "sig",
             "alg": "ES256",
@@ -165,7 +170,7 @@ impl KeyService {
             "crv": "P-256",
             "x": URL_SAFE_NO_PAD.encode(x_bytes),
             "y": URL_SAFE_NO_PAD.encode(y_bytes),
-        })
+        }))
     }
 }
 
@@ -201,7 +206,7 @@ mod tests {
     #[test]
     fn test_build_public_jwk_structure() {
         let signing_key = SigningKey::random(&mut OsRng);
-        let jwk = KeyService::build_public_jwk(&signing_key, "test-kid");
+        let jwk = KeyService::build_public_jwk(&signing_key, "test-kid").unwrap();
 
         assert_eq!(jwk["kty"], "EC");
         assert_eq!(jwk["use"], "sig");

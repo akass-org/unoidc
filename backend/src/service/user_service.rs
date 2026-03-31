@@ -6,8 +6,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::crypto;
-use crate::model::{CreateUser, LoginResult, UpdateUser, User};
-use crate::repo::{GroupRepo, UserRepo};
+use crate::model::{CreateUser, UpdateUser, User};
+use crate::repo::UserRepo;
 
 pub struct UserService;
 
@@ -19,7 +19,6 @@ impl UserService {
         email: String,
         password: String,
     ) -> Result<User, anyhow::Error> {
-        // 验证用户名和邮箱格式
         if username.is_empty() || username.len() > 64 {
             return Err(anyhow::anyhow!("Username must be 1-64 characters"));
         }
@@ -30,20 +29,16 @@ impl UserService {
             return Err(anyhow::anyhow!("Password must be at least 8 characters"));
         }
 
-        // 检查用户名是否已存在
         if UserRepo::find_by_username(pool, &username).await?.is_some() {
             return Err(anyhow::anyhow!("Username already exists"));
         }
 
-        // 检查邮箱是否已存在
         if UserRepo::find_by_email(pool, &email).await?.is_some() {
             return Err(anyhow::anyhow!("Email already exists"));
         }
 
-        // 哈希密码
         let password_hash = crypto::hash_password(&password)?;
 
-        // 创建用户
         let user = UserRepo::create(
             pool,
             CreateUser {
@@ -58,55 +53,6 @@ impl UserService {
         .await?;
 
         Ok(user)
-    }
-
-    /// 用户登录
-    pub async fn login(
-        pool: &PgPool,
-        username: &str,
-        password: &str,
-    ) -> Result<LoginResult, anyhow::Error> {
-        // 查找用户
-        let user = UserRepo::find_by_username(pool, username)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Invalid username or password"))?;
-
-        // 检查账户是否可以登录
-        if !user.can_login() {
-            return Err(anyhow::anyhow!("Account is disabled or locked"));
-        }
-
-        // 验证密码
-        let password_valid = crypto::verify_password(password, &user.password_hash)?;
-
-        if !password_valid {
-            // 增加失败次数
-            let failed_attempts = UserRepo::increment_failed_login(pool, user.id).await?;
-
-            // 如果失败次数超过 5 次，锁定账户 30 分钟
-            if failed_attempts >= 5 {
-                let lock_until = time::OffsetDateTime::now_utc() + time::Duration::minutes(30);
-                UserRepo::lock_account(pool, user.id, lock_until).await?;
-                return Err(anyhow::anyhow!(
-                    "Account locked due to too many failed attempts"
-                ));
-            }
-
-            return Err(anyhow::anyhow!("Invalid username or password"));
-        }
-
-        // 登录成功，重置失败次数并更新登录时间
-        UserRepo::reset_failed_login(pool, user.id).await?;
-        UserRepo::update_last_login(pool, user.id).await?;
-
-        // 获取用户所属的组
-        let groups = GroupRepo::find_user_groups(pool, user.id).await?;
-        let group_names: Vec<String> = groups.into_iter().map(|g| g.name).collect();
-
-        Ok(LoginResult {
-            user,
-            groups: group_names,
-        })
     }
 
     /// 根据 ID 获取用户
@@ -141,25 +87,18 @@ impl UserService {
         old_password: &str,
         new_password: &str,
     ) -> Result<(), anyhow::Error> {
-        // 获取用户
         let user = Self::get_user(pool, user_id).await?;
 
-        // 验证旧密码
         if !crypto::verify_password(old_password, &user.password_hash)? {
             return Err(anyhow::anyhow!("Invalid old password"));
         }
 
-        // 验证新密码
         if new_password.len() < 8 {
             return Err(anyhow::anyhow!("Password must be at least 8 characters"));
         }
 
-        // 哈希新密码
         let new_hash = crypto::hash_password(new_password)?;
 
-        // 更新密码（通过更新用户的 password_hash 字段）
-        // 注意：这里需要在 UserRepo 中添加 update_password 方法
-        // 暂时使用直接 SQL
         sqlx::query(
             r#"
             UPDATE users

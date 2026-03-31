@@ -118,19 +118,41 @@ impl Config {
     ///
     /// 检查是否使用了不安全的默认值
     pub fn validate_production(&self) -> Result<(), anyhow::Error> {
-        // 检测是否为生产环境（通过 issuer 判断）
+        if self.private_key_encryption_key.len() < 16 {
+            return Err(anyhow::anyhow!(
+                "PRIVATE_KEY_ENCRYPTION_KEY must be at least 16 characters (got {})",
+                self.private_key_encryption_key.len()
+            ));
+        }
+
+        if self.private_key_encryption_key.len() < 32 {
+            tracing::warn!(
+                "PRIVATE_KEY_ENCRYPTION_KEY is shorter than recommended 32 characters (got {})",
+                self.private_key_encryption_key.len()
+            );
+        }
+
+        if self.session_secret == "dev-secret-key-change-in-production" {
+            tracing::warn!("SESSION_SECRET is using default value - MUST change in production");
+        }
+
+        if self.session_secret.len() < 32 {
+            tracing::warn!(
+                "SESSION_SECRET is shorter than recommended 32 characters (got {})",
+                self.session_secret.len()
+            );
+        }
+
         let is_production = !self.issuer.contains("localhost")
             && !self.issuer.contains("127.0.0.1")
             && !self.issuer.starts_with("http://");
 
         if !is_production {
-            // 开发环境跳过验证
             return Ok(());
         }
 
         let mut warnings = Vec::new();
 
-        // 检查 session_secret
         if self.session_secret == "dev-secret-key-change-in-production" {
             warnings.push("SESSION_SECRET is using default value - MUST change in production");
         }
@@ -139,23 +161,16 @@ impl Config {
             warnings.push("SESSION_SECRET should be at least 32 characters");
         }
 
-        // 检查 private_key_encryption_key
         if self.private_key_encryption_key == "dev-encryption-key-32-chars-change!!" {
             warnings.push(
                 "PRIVATE_KEY_ENCRYPTION_KEY is using default value - MUST change in production",
             );
         }
 
-        if self.private_key_encryption_key.len() < 32 {
-            warnings.push("PRIVATE_KEY_ENCRYPTION_KEY should be at least 32 characters");
-        }
-
-        // 检查 issuer 是否使用 HTTPS
         if self.issuer.starts_with("http://") {
             warnings.push("ISSUER should use HTTPS in production");
         }
 
-        // 检查 app_base_url 是否使用 HTTPS
         if self.app_base_url.starts_with("http://") {
             warnings.push("APP_BASE_URL should use HTTPS in production");
         }

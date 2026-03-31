@@ -64,11 +64,7 @@ pub struct AccessTokenClaims {
 }
 
 /// 使用 ES256 签发 JWT
-pub fn sign_jwt<T: Serialize>(
-    claims: &T,
-    kid: &str,
-    private_key_pem: &str,
-) -> Result<String> {
+pub fn sign_jwt<T: Serialize>(claims: &T, kid: &str, private_key_pem: &str) -> Result<String> {
     let mut header = Header::new(Algorithm::ES256);
     header.kid = Some(kid.to_string());
     header.typ = Some("JWT".to_string());
@@ -102,7 +98,10 @@ pub fn verify_jwt<T: DeserializeOwned>(
     Ok(data)
 }
 
-/// 仅验证签名并解码，不校验 issuer/audience
+#[deprecated(
+    since = "0.1.0",
+    note = "verify_jwt_no_validate bypasses audience/issuer validation. Use verify_jwt for full validation. Only to be used for internal token verification where the caller performs its own claim validation."
+)]
 pub fn verify_jwt_no_validate<T: DeserializeOwned>(
     token: &str,
     public_key_pem: &str,
@@ -110,7 +109,7 @@ pub fn verify_jwt_no_validate<T: DeserializeOwned>(
     let key = DecodingKey::from_ec_pem(public_key_pem.as_bytes())?;
     let mut validation = Validation::new(Algorithm::ES256);
     validation.validate_aud = false;
-    validation.set_required_spec_claims(&["exp".to_string()]); // 只要求 exp
+    validation.set_required_spec_claims(&["exp".to_string()]);
     let data = decode::<T>(token, &key, &validation)?;
     Ok(data)
 }

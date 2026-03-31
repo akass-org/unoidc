@@ -160,13 +160,6 @@ async fn test_user_service() {
     assert_eq!(user.username, username);
     assert_eq!(user.email, email);
 
-    // 登录
-    let login_result = service::UserService::login(&pool, &username, &password)
-        .await
-        .expect("Failed to login");
-
-    assert_eq!(login_result.user.id, user.id);
-
     // 清理
     repo::UserRepo::delete(&pool, user.id)
         .await

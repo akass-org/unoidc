@@ -31,15 +31,16 @@ pub struct RequestContext {
 impl RequestContext {
     /// 从 HTTP 请求中提取或创建请求上下文
     pub fn from_request(req: &axum::http::Request<Body>) -> Self {
-        // 尝试从 header 中获取请求 ID，否则生成新的
         let request_id = req
             .headers()
             .get(REQUEST_ID_HEADER)
             .and_then(|h| h.to_str().ok())
+            .filter(|s| {
+                s.parse::<uuid::Uuid>().is_ok() || s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+            })
             .map(|s| s.to_string())
             .unwrap_or_else(|| Uuid::new_v4().to_string());
 
-        // 尝试从 header 中获取关联 ID
         let correlation_id = req
             .headers()
             .get(CORRELATION_ID_HEADER)

@@ -3,12 +3,14 @@
 // 对应数据库表: jwks
 // JSON Web Key 签名密钥
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Clone, Serialize, Deserialize, FromRow)]
 pub struct Jwk {
     pub id: Uuid,
     pub kid: String,
@@ -20,6 +22,22 @@ pub struct Jwk {
     pub active: bool,
     pub created_at: OffsetDateTime,
     pub rotated_at: Option<OffsetDateTime>,
+}
+
+impl fmt::Debug for Jwk {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Jwk")
+            .field("id", &self.id)
+            .field("kid", &self.kid)
+            .field("alg", &self.alg)
+            .field("kty", &self.kty)
+            .field("private_key_pem", &"[REDACTED]")
+            .field("public_key_jwk", &self.public_key_jwk)
+            .field("active", &self.active)
+            .field("created_at", &self.created_at)
+            .field("rotated_at", &self.rotated_at)
+            .finish()
+    }
 }
 
 impl Jwk {
@@ -42,4 +60,5 @@ pub struct CreateJwk {
     pub kty: String,
     pub private_key_pem: String,
     pub public_key_jwk: serde_json::Value,
+    pub active: bool,
 }

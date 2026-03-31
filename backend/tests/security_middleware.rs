@@ -25,6 +25,56 @@ fn test_app(config: Config) -> axum::Router {
     build_app_with_state(state)
 }
 
+fn test_app_with_remote_addr(config: Config, remote_addr: Option<String>) -> axum::Router {
+    use axum::Extension;
+    let pool = test_pool(&config);
+    let state = AppState::new(config.clone(), pool);
+    let rate_limiter = backend::middleware::create_rate_limiter(
+        config.rate_limit_max_requests,
+        config.rate_limit_window_secs,
+        config.rate_limit_login_max_requests,
+        config.rate_limit_login_window_secs,
+        config.rate_limit_token_max_requests,
+        config.rate_limit_token_window_secs,
+        config.trusted_proxy_ips.clone(),
+    );
+
+    // 重新构建 router，插入自定义的 remote_addr
+    use axum::routing::{get, post};
+    use backend::middleware::{
+        request_context_middleware, rate_limit_middleware,
+        create_cors_layer, CorsConfig, csrf_middleware,
+    };
+
+    let cors_config = CorsConfig {
+        allowed_origins: config.cors_allowed_origins.clone(),
+    };
+    let cors_layer = create_cors_layer(&cors_config);
+
+    axum::Router::new()
+        .route("/health/live", get(backend::handler::health::liveness))
+        .route("/health/ready", get(backend::handler::health::readiness))
+        .route("/api/v1/auth/login", post(backend::handler::auth::login))
+        .route("/api/v1/auth/logout", post(backend::handler::auth::logout))
+        .route("/api/v1/auth/register", post(backend::handler::auth::register))
+        .route("/api/v1/auth/forgot-password", post(backend::handler::auth::forgot_password))
+        .route("/.well-known/openid-configuration", get(backend::handler::oidc::discovery))
+        .route("/jwks.json", get(backend::handler::oidc::jwks))
+        .route("/authorize", get(backend::handler::oidc::authorize_get))
+        .route("/authorize/consent", post(backend::handler::oidc::authorize_consent))
+        .route("/token", post(backend::handler::oidc::token))
+        .route("/userinfo", get(backend::handler::oidc::userinfo))
+        .route("/logout", get(backend::handler::oidc::logout))
+        .layer(axum::middleware::from_fn(csrf_middleware))
+        .layer(axum::middleware::from_fn(rate_limit_middleware))
+        .layer(Extension(rate_limiter))
+        .layer(Extension(remote_addr))
+        .layer(axum::Extension::<Option<std::net::SocketAddr>>(None))
+        .layer(axum::middleware::from_fn(request_context_middleware))
+        .layer(cors_layer)
+        .with_state(state)
+}
+
 #[tokio::test]
 async fn test_cors_allows_configured_origin() {
     let config = test_config();
@@ -318,7 +368,9 @@ async fn test_ip_from_x_forwarded_for() {
     let mut config = test_config();
     config.rate_limit_max_requests = 2;
     config.rate_limit_window_secs = 60;
-    let app = test_app(config);
+    // 配置可信代理以允许 X-Forwarded-For 头被信任
+    config.trusted_proxy_ips = vec!["127.0.0.1".to_string()];
+    let app = test_app_with_remote_addr(config, Some("127.0.0.1:12345".to_string()));
 
     for _ in 0..2 {
         let _ = app.clone().oneshot(

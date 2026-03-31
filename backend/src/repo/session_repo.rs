@@ -89,7 +89,7 @@ impl SessionRepo {
 
     /// 删除会话（登出）
     pub async fn delete(pool: &PgPool, session_id: &str) -> Result<(), sqlx::Error> {
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             DELETE FROM user_sessions WHERE session_id = $1
             "#,
@@ -98,7 +98,9 @@ impl SessionRepo {
         .execute(pool)
         .await?;
 
-        metrics::SESSION_ACTIVE_TOTAL.dec();
+        if result.rows_affected() > 0 {
+            metrics::SESSION_ACTIVE_TOTAL.dec();
+        }
         Ok(())
     }
 
@@ -113,7 +115,11 @@ impl SessionRepo {
         .execute(pool)
         .await?;
 
-        Ok(result.rows_affected())
+        let count = result.rows_affected();
+        if count > 0 {
+            metrics::SESSION_ACTIVE_TOTAL.sub(count as f64);
+        }
+        Ok(count)
     }
 
     /// 清理过期会话

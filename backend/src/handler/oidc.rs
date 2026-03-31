@@ -4,7 +4,7 @@
 
 use axum::{
     extract::{Query, State},
-    http,
+    http::HeaderMap,
     response::IntoResponse,
     Json,
 };
@@ -12,39 +12,32 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+use crate::crypto::jwt;
+use crate::crypto::jwt::AccessTokenClaims;
 use crate::error::{AppError, OidcErrorCode, Result};
 use crate::metrics;
-use crate::service::{KeyService, LogoutService};
-use crate::crypto::jwt::{self, AccessTokenClaims};
-use crate::repo::{UserRepo, GroupRepo};
-use crate::AppState;
 use crate::model::Jwk;
+use crate::repo::{GroupRepo, UserRepo};
+use crate::service::{KeyService, LogoutService};
+use crate::AppState;
 
-type HeaderMap = http::HeaderMap;
-
-// ============================================================
-// Discovery
-// ============================================================
-
-/// GET /.well-known/openid-configuration
-pub async fn discovery(State(state): State<Arc<AppState>>) -> Result<Json<Value>> {
-    let base = &state.config.app_base_url;
-    Ok(Json(json!({
-        "issuer": state.config.issuer,
-        "authorization_endpoint": format!("{}/authorize", base),
-        "token_endpoint": format!("{}/token", base),
-        "userinfo_endpoint": format!("{}/userinfo", base),
-        "jwks_uri": format!("{}/jwks.json", base),
-        "end_session_endpoint": format!("{}/logout", base),
+pub async fn discovery(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let issuer = state.config.issuer.clone();
+    let base_url = state.config.app_base_url.clone();
+    Json(json!({
+        "issuer": issuer,
+        "authorization_endpoint": format!("{}/authorize", base_url),
+        "token_endpoint": format!("{}/token", base_url),
+        "userinfo_endpoint": format!("{}/userinfo", base_url),
+        "jwks_uri": format!("{}/jwks.json", base_url),
+        "end_session_endpoint": format!("{}/logout", base_url),
         "response_types_supported": ["code"],
-        "grant_types_supported": ["authorization_code", "refresh_token"],
-        "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["ES256"],
         "code_challenge_methods_supported": ["S256"],
         "scopes_supported": ["openid", "profile", "email", "groups", "offline_access"],
-        "id_token_signing_alg_values_supported": ["ES256"],
-        "subject_types_supported": ["public"],
-        "claims_supported": ["sub", "iss", "aud", "exp", "iat", "auth_time", "nonce", "acr", "amr", "name", "given_name", "family_name", "preferred_username", "email", "email_verified", "groups"],
-    })))
+        "claims_supported": ["sub", "aud", "exp", "iat", "jti", "auth_time", "amr", "nonce", "name", "given_name", "family_name", "preferred_username", "display_name", "picture", "email", "email_verified", "groups"],
+    }))
 }
 
 // ============================================================
@@ -70,15 +63,14 @@ pub async fn jwks(State(state): State<Arc<AppState>>) -> Result<Json<Value>> {
 /// GET /authorize 查询参数
 #[derive(Debug, Deserialize)]
 pub struct AuthorizeRequest {
+    pub response_type: String,
     pub client_id: String,
     pub redirect_uri: String,
-    pub response_type: String,
     pub scope: String,
-    pub state: Option<String>,
+    pub state: String,
     pub nonce: Option<String>,
     pub code_challenge: String,
     pub code_challenge_method: String,
-    pub prompt: Option<String>,
 }
 
 /// GET /authorize — Authorization endpoint
@@ -220,7 +212,7 @@ fn extract_bearer_token(headers: &HeaderMap) -> Result<String> {
         });
     }
 
-    Ok(auth_header[7..].to_string())
+    Ok(auth_header[7..].trim().to_string())
 }
 
 /// 验证 access token 并返回 claims
@@ -285,7 +277,12 @@ pub async fn logout(
 
     if let Some(ref hint) = req.id_token_hint {
         if !hint.is_empty() {
-            let hint_result = LogoutService::validate_id_token_hint::<serde_json::Value>(&state.db, hint).await;
+            let hint_result = LogoutService::validate_id_token_hint::<serde_json::Value>(
+                &state.db,
+                hint,
+                Some(&state.config.issuer),
+            )
+            .await;
 
             if hint_result.is_err() {
                 return Err(AppError::InvalidToken {
@@ -307,7 +304,12 @@ pub async fn logout(
 
         if let Some(ref hint) = req.id_token_hint {
             if !hint.is_empty() {
-                if let Ok(claims) = LogoutService::validate_id_token_hint::<serde_json::Value>(&state.db, hint).await {
+                if let Ok(claims) = LogoutService::validate_id_token_hint::<serde_json::Value>(
+                    &state.db,
+                    hint,
+                    Some(&state.config.issuer),
+                )
+                .await {
                     if let Some(aud) = claims.get("aud").and_then(|v| v.as_str()) {
                         if let Ok(client_id) = uuid::Uuid::parse_str(aud) {
                             validated = LogoutService::validate_post_logout_redirect(&state.db, &client_id, redirect).await.is_ok();

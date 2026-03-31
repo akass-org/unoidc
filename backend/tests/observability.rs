@@ -265,7 +265,7 @@ async fn test_auth_request_metrics_incremented() {
     let _response = app.oneshot(
         Request::builder()
             .method("GET")
-            .uri("/authorize?client_id=test&redirect_uri=http://localhost/callback&response_type=code&scope=openid&code_challenge=test&code_challenge_method=S256")
+            .uri("/authorize?client_id=test&redirect_uri=http://localhost/callback&response_type=code&scope=openid&state=test-state&code_challenge=test&code_challenge_method=S256")
             .body(Body::empty())
             .unwrap(),
     ).await.unwrap();

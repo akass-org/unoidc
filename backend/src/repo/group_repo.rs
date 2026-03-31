@@ -67,23 +67,17 @@ impl GroupRepo {
 
     /// 更新组
     pub async fn update(pool: &PgPool, id: Uuid, input: UpdateGroup) -> Result<Group, sqlx::Error> {
-        // 动态构建 UPDATE 语句
-        let group = Self::find_by_id(pool, id).await?.ok_or(sqlx::Error::RowNotFound)?;
-
-        let name = input.name.unwrap_or(group.name);
-        let description = input.description.or(group.description);
-
         sqlx::query_as::<_, Group>(
             r#"
             UPDATE groups
-            SET name = $2, description = $3
+            SET name = COALESCE($2, name), description = $3
             WHERE id = $1
             RETURNING *
             "#,
         )
         .bind(id)
-        .bind(name)
-        .bind(description)
+        .bind(&input.name)
+        .bind(&input.description)
         .fetch_one(pool)
         .await
     }

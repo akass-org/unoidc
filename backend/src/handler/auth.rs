@@ -1,7 +1,3 @@
-// 认证 HTTP 处理器
-//
-// 处理登录、登出等认证相关的 HTTP 请求
-
 use axum::{
     extract::State,
     http::{header, HeaderMap},
@@ -20,7 +16,6 @@ use crate::{
     AppState,
 };
 
-/// 登录请求
 #[derive(Debug, Deserialize, Validate)]
 pub struct LoginRequest {
     #[validate(length(min = 1, max = 100, message = "username must be 1-100 characters"))]
@@ -30,7 +25,6 @@ pub struct LoginRequest {
     pub password: String,
 }
 
-/// 注册请求
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
     #[validate(length(min = 3, max = 100, message = "username must be 3-100 characters"))]
@@ -49,40 +43,47 @@ pub struct RegisterRequest {
     pub family_name: Option<String>,
 }
 
-/// 登录响应
 #[derive(Debug, Serialize)]
 pub struct LoginResponse {
     pub success: bool,
     pub message: String,
 }
 
-/// 登出响应
 #[derive(Debug, Serialize)]
 pub struct LogoutResponse {
     pub success: bool,
     pub message: String,
 }
 
-/// 用户登录
-///
-/// POST /api/v1/auth/login
+fn build_cookie_value(session_id: &str, cookie_domain: Option<&String>) -> String {
+    let mut cookie = format!(
+        "unoidc_session={}; HttpOnly; Secure; SameSite=Strict; Path=/",
+        session_id
+    );
+    if let Some(domain) = cookie_domain {
+        cookie = format!("{}; Domain={}", cookie, domain);
+    }
+    cookie
+}
+
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Extension(addr): Extension<Option<SocketAddr>>,
     Extension(req_ctx): Extension<RequestContext>,
+    headers: HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> Result<Response> {
-    // Input validation
     req.validate().map_err(|e| AppError::ValidationError {
         field: "request".to_string(),
         message: e.to_string(),
     })?;
 
-    // Get client info
     let ip_address = addr.map(|a| a.to_string());
-    let user_agent = None; // TODO: Extract from request header
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
-    // Call auth service
     let result = AuthService::login(
         &state.db,
         &req.username,
@@ -94,7 +95,6 @@ pub async fn login(
 
     match result {
         Ok((user, session)) => {
-            // Audit log
             let _ = AuditService::log_login_success(
                 &state.db,
                 user.id,
@@ -102,17 +102,14 @@ pub async fn login(
                 req_ctx.correlation_id.clone(),
                 ip_address,
                 user_agent,
-            ).await;
+            )
+            .await;
 
-            // Metrics
             metrics::AUTH_LOGIN_SUCCESS_TOTAL.inc();
             metrics::SESSION_CREATED_TOTAL.inc();
 
-            // Cookie
-            let cookie_value = format!(
-                "unoidc_session={}; HttpOnly; Secure; SameSite=Strict; Path=/",
-                session.session_id
-            );
+            let cookie_value =
+                build_cookie_value(&session.session_id, state.config.cookie_domain.as_ref());
 
             Ok((
                 [(header::SET_COOKIE, cookie_value)],
@@ -124,7 +121,6 @@ pub async fn login(
                 .into_response())
         }
         Err(e) => {
-            // Audit log
             let reason_code = match &e {
                 AppError::InvalidCredentials => "invalid_credentials",
                 AppError::Forbidden { .. } => "account_locked_or_disabled",
@@ -137,9 +133,9 @@ pub async fn login(
                 req_ctx.correlation_id.clone(),
                 ip_address,
                 user_agent,
-            ).await;
+            )
+            .await;
 
-            // Metrics
             metrics::AUTH_LOGIN_FAILURE_TOTAL.inc();
 
             Err(e)
@@ -147,9 +143,6 @@ pub async fn login(
     }
 }
 
-/// 用户登出
-///
-/// POST /api/v1/auth/logout
 pub async fn logout(
     State(state): State<Arc<AppState>>,
     Extension(addr): Extension<Option<SocketAddr>>,
@@ -162,16 +155,17 @@ pub async fn logout(
         })?;
 
     let ip_address = addr.map(|a| a.to_string());
-    let user_agent = None;
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
-    // 查找 session 获取 user_id
     let user_id = crate::repo::SessionRepo::find_by_session_id(&state.db, &session_id)
         .await
         .ok()
         .and_then(|s| s)
         .map(|s| s.user_id);
 
-    // 记录登出审计日志
     let _ = AuditService::log_logout(
         &state.db,
         user_id,
@@ -179,15 +173,18 @@ pub async fn logout(
         req_ctx.correlation_id.clone(),
         ip_address,
         user_agent,
-    ).await;
+    )
+    .await;
 
-    // 更新指标
     metrics::SESSION_DESTROYED_TOTAL.inc();
 
     AuthService::logout(&state.db, &session_id).await?;
 
-    // 清除 Cookie（设置过期时间为过去）
-    let cookie_value = "unoidc_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0";
+    let mut cookie_value =
+        "unoidc_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0".to_string();
+    if let Some(domain) = &state.config.cookie_domain {
+        cookie_value = format!("{}; Domain={}", cookie_value, domain);
+    }
 
     Ok((
         [(header::SET_COOKIE, cookie_value)],
@@ -199,9 +196,6 @@ pub async fn logout(
         .into_response())
 }
 
-/// 用户注册
-///
-/// POST /api/v1/auth/register
 pub async fn register(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<RegisterRequest>,
@@ -217,9 +211,6 @@ pub async fn register(
     })
 }
 
-/// 忘记密码
-///
-/// POST /api/v1/auth/forgot-password
 pub async fn forgot_password() -> Result<Json<LoginResponse>> {
     Err(AppError::OidcError {
         error: OidcErrorCode::TemporarilyUnavailable,
