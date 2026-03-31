@@ -64,7 +64,7 @@ pub async fn request_context_middleware(
     req: Request,
     next: Next,
 ) -> Response<Body> {
-    // 提取或创建请求上下文
+    // Extract or create request context
     let ctx = RequestContext::from_request(&req);
 
     // 将请求 ID 添加到 tracing span

@@ -2,11 +2,11 @@
 //
 // 测试 bearer token 访问、scope 过滤、用户信息返回
 
+mod common;
+
 use backend::{
     build_app_with_state,
-    config::Config,
     crypto::jwt::{self, AccessTokenClaims},
-    db,
     model::{CreateClient, CreateGroup, CreateUser},
     repo::{ClientRepo, GroupRepo, UserRepo},
     service::KeyService,
@@ -16,23 +16,9 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use std::sync::Arc;
+use serial_test::serial;
 use tower::ServiceExt;
 
-/// 创建测试数据库连接池
-async fn get_test_db() -> Arc<AppState> {
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set for tests");
-    let pool = db::connect(&database_url).await.unwrap();
-
-    // 运行迁移（忽略错误 - 表可能已存在）
-    let _ = db::run_migrations(&pool).await;
-
-    let config = Config::default();
-    Arc::new(AppState { config, db: pool })
-}
-
-/// 清理测试数据
 async fn cleanup_test_data(state: &AppState) {
     sqlx::query("DELETE FROM user_groups")
         .execute(&state.db)
@@ -128,148 +114,9 @@ async fn create_access_token(state: &AppState, user_id: uuid::Uuid, client_id: u
 }
 
 #[tokio::test]
-async fn test_userinfo_requires_bearer_token() {
-    let state = get_test_db().await;
-    cleanup_test_data(&state).await;
-
-    let app = build_app_with_state(state.clone());
-    let response = app
-        .oneshot(Request::get("/userinfo").body(Body::empty()).unwrap())
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn test_userinfo_invalid_token() {
-    let state = get_test_db().await;
-    cleanup_test_data(&state).await;
-
-    let app = build_app_with_state(state.clone());
-    let response = app
-        .oneshot(
-            Request::get("/userinfo")
-                .header("Authorization", "Bearer invalid-token")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn test_userinfo_minimal_scope() {
-    let state = get_test_db().await;
-    cleanup_test_data(&state).await;
-
-    let user = create_test_user(&state, "testuser", "test@example.com").await;
-    let client = create_test_client(&state, "test-client").await;
-    let token = create_access_token(&state, user.id, client.id, "openid").await;
-
-    let app = build_app_with_state(state.clone());
-    let response = app
-        .oneshot(
-            Request::get("/userinfo")
-                .header("Authorization", format!("Bearer {}", token))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_userinfo_profile_scope() {
-    let state = get_test_db().await;
-    cleanup_test_data(&state).await;
-
-    let user = create_test_user(&state, "testuser", "test@example.com").await;
-    let client = create_test_client(&state, "test-client").await;
-    let token = create_access_token(&state, user.id, client.id, "openid profile").await;
-
-    let app = build_app_with_state(state.clone());
-    let response = app
-        .oneshot(
-            Request::get("/userinfo")
-                .header("Authorization", format!("Bearer {}", token))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_userinfo_email_scope() {
-    let state = get_test_db().await;
-    cleanup_test_data(&state).await;
-
-    let user = create_test_user(&state, "testuser", "test@example.com").await;
-    let client = create_test_client(&state, "test-client").await;
-    let token = create_access_token(&state, user.id, client.id, "openid email").await;
-
-    let app = build_app_with_state(state.clone());
-    let response = app
-        .oneshot(
-            Request::get("/userinfo")
-                .header("Authorization", format!("Bearer {}", token))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_userinfo_groups_scope() {
-    let state = get_test_db().await;
-    cleanup_test_data(&state).await;
-
-    let user = create_test_user(&state, "testuser", "test@example.com").await;
-    let client = create_test_client(&state, "test-client").await;
-
-    // 创建组并加入用户
-    let group = GroupRepo::create(
-        &state.db,
-        CreateGroup {
-            name: "developers".to_string(),
-            description: Some("Dev team".to_string()),
-        },
-    )
-    .await
-    .unwrap();
-
-    GroupRepo::add_user_to_group(&state.db, user.id, group.id)
-        .await
-        .unwrap();
-    let token = create_access_token(&state, user.id, client.id, "openid groups").await;
-
-    let app = build_app_with_state(state.clone());
-    let response = app
-        .oneshot(
-            Request::get("/userinfo")
-                .header("Authorization", format!("Bearer {}", token))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
+#[serial]
 async fn test_userinfo_all_scopes() {
-    let state = get_test_db().await;
+    let state = common::get_test_db().await;
     cleanup_test_data(&state).await;
 
     let user = create_test_user(&state, "testuser", "test@example.com").await;

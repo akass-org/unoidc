@@ -6,6 +6,7 @@ use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use crate::metrics;
 use crate::model::{CreateSession, Session};
 
 pub struct SessionRepo;
@@ -43,7 +44,7 @@ impl SessionRepo {
         let now = OffsetDateTime::now_utc();
         let expires_at = now + time::Duration::seconds(input.duration_seconds);
 
-        sqlx::query_as::<_, Session>(
+        let session = sqlx::query_as::<_, Session>(
             r#"
             INSERT INTO user_sessions (
                 id, session_id, user_id, expires_at, created_at, last_seen_at, ip_address, user_agent
@@ -61,7 +62,10 @@ impl SessionRepo {
         .bind(&input.ip_address)
         .bind(&input.user_agent)
         .fetch_one(pool)
-        .await
+        .await?;
+
+        metrics::SESSION_ACTIVE_TOTAL.inc();
+        Ok(session)
     }
 
     /// 更新会话最后访问时间
@@ -94,6 +98,7 @@ impl SessionRepo {
         .execute(pool)
         .await?;
 
+        metrics::SESSION_ACTIVE_TOTAL.dec();
         Ok(())
     }
 

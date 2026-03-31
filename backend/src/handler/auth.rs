@@ -14,7 +14,9 @@ use validator::Validate;
 
 use crate::{
     error::{AppError, OidcErrorCode, Result},
-    service::AuthService,
+    metrics,
+    middleware::request_context::RequestContext,
+    service::{AuditService, AuthService},
     AppState,
 };
 
@@ -67,51 +69,82 @@ pub struct LogoutResponse {
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Extension(addr): Extension<Option<SocketAddr>>,
+    Extension(req_ctx): Extension<RequestContext>,
     Json(req): Json<LoginRequest>,
 ) -> Result<Response> {
-    // 输入验证
+    // Input validation
     req.validate().map_err(|e| AppError::ValidationError {
         field: "request".to_string(),
         message: e.to_string(),
     })?;
 
-    // 获取客户端信息
+    // Get client info
     let ip_address = addr.map(|a| a.to_string());
-    let user_agent = None; // TODO: 从请求头中提取 User-Agent
+    let user_agent = None; // TODO: Extract from request header
 
-    // 调用认证服务进行登录
-    let (_user, session) = AuthService::login(
+    // Call auth service
+    let result = AuthService::login(
         &state.db,
         &req.username,
         &req.password,
-        ip_address,
-        user_agent,
+        ip_address.clone(),
+        user_agent.clone(),
     )
-    .await
-    .map_err(|e| {
-        // 登录失败，返回相应的错误
-        match e {
-            AppError::InvalidCredentials => AppError::InvalidCredentials,
-            AppError::Forbidden { reason } => AppError::Forbidden { reason },
-            _ => AppError::InternalServerError { error_code: None },
+    .await;
+
+    match result {
+        Ok((user, session)) => {
+            // Audit log
+            let _ = AuditService::log_login_success(
+                &state.db,
+                user.id,
+                &session.session_id,
+                req_ctx.correlation_id.clone(),
+                ip_address,
+                user_agent,
+            ).await;
+
+            // Metrics
+            metrics::AUTH_LOGIN_SUCCESS_TOTAL.inc();
+            metrics::SESSION_CREATED_TOTAL.inc();
+
+            // Cookie
+            let cookie_value = format!(
+                "unoidc_session={}; HttpOnly; Secure; SameSite=Strict; Path=/",
+                session.session_id
+            );
+
+            Ok((
+                [(header::SET_COOKIE, cookie_value)],
+                Json(LoginResponse {
+                    success: true,
+                    message: "Login successful".to_string(),
+                }),
+            )
+                .into_response())
         }
-    })?;
+        Err(e) => {
+            // Audit log
+            let reason_code = match &e {
+                AppError::InvalidCredentials => "invalid_credentials",
+                AppError::Forbidden { .. } => "account_locked_or_disabled",
+                _ => "unknown_error",
+            };
+            let _ = AuditService::log_login_failure(
+                &state.db,
+                &req.username,
+                reason_code,
+                req_ctx.correlation_id.clone(),
+                ip_address,
+                user_agent,
+            ).await;
 
-    // 构造安全的 Cookie
-    let cookie_value = format!(
-        "unoidc_session={}; HttpOnly; Secure; SameSite=Strict; Path=/",
-        session.session_id
-    );
+            // Metrics
+            metrics::AUTH_LOGIN_FAILURE_TOTAL.inc();
 
-    // 返回响应（带 Set-Cookie 头）
-    Ok((
-        [(header::SET_COOKIE, cookie_value)],
-        Json(LoginResponse {
-            success: true,
-            message: "Login successful".to_string(),
-        }),
-    )
-        .into_response())
+            Err(e)
+        }
+    }
 }
 
 /// 用户登出
@@ -119,12 +152,37 @@ pub async fn login(
 /// POST /api/v1/auth/logout
 pub async fn logout(
     State(state): State<Arc<AppState>>,
+    Extension(addr): Extension<Option<SocketAddr>>,
+    Extension(req_ctx): Extension<RequestContext>,
     headers: HeaderMap,
 ) -> Result<Response> {
     let session_id = crate::middleware::auth::extract_session_cookie(&headers)
         .ok_or(AppError::Unauthorized {
             reason: Some("No session cookie".to_string()),
         })?;
+
+    let ip_address = addr.map(|a| a.to_string());
+    let user_agent = None;
+
+    // 查找 session 获取 user_id
+    let user_id = crate::repo::SessionRepo::find_by_session_id(&state.db, &session_id)
+        .await
+        .ok()
+        .and_then(|s| s)
+        .map(|s| s.user_id);
+
+    // 记录登出审计日志
+    let _ = AuditService::log_logout(
+        &state.db,
+        user_id,
+        &session_id,
+        req_ctx.correlation_id.clone(),
+        ip_address,
+        user_agent,
+    ).await;
+
+    // 更新指标
+    metrics::SESSION_DESTROYED_TOTAL.inc();
 
     AuthService::logout(&state.db, &session_id).await?;
 

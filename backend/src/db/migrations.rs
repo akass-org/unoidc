@@ -10,8 +10,9 @@ use tracing::{info, error};
 /// 连接到数据库
 pub async fn connect(database_url: &str) -> Result<PgPool> {
     sqlx::postgres::PgPoolOptions::new()
-        .max_connections(50)
-        .acquire_timeout(std::time::Duration::from_secs(30))
+        .max_connections(30)
+        .acquire_timeout(std::time::Duration::from_secs(120))
+        .idle_timeout(std::time::Duration::from_secs(300))
         .connect(database_url)
         .await
         .context("Failed to connect to database")

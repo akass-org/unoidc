@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     crypto::password,
     error::{AppError, Result},
+    metrics,
     model::{CreateSession, Session, User},
     repo::{SessionRepo, UserRepo},
 };
@@ -100,6 +101,9 @@ impl AuthService {
                     "Account locked for user {} until {:?}",
                     username, lockout_until
                 );
+
+                // 更新账户锁定指标
+                metrics::AUTH_ACCOUNT_LOCKED_TOTAL.inc();
 
                 return Err(AppError::Forbidden {
                     reason: Some(format!(

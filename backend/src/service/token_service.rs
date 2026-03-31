@@ -8,6 +8,7 @@ use time::OffsetDateTime;
 
 use crate::config::Config;
 use crate::crypto::{self, jwt};
+use crate::metrics;
 use crate::model::{AuthorizationCode, Client, CreateRefreshToken, RefreshToken, User};
 use crate::repo::{GroupRepo, RefreshTokenRepo, UserRepo};
 use crate::service::KeyService;
@@ -62,6 +63,12 @@ impl TokenService {
             None
         };
 
+        // 更新 token 发放指标
+        metrics::TOKEN_ISSUED_TOTAL.inc();
+        if refresh_token.is_some() {
+            metrics::SESSION_CREATED_TOTAL.inc();
+        }
+
         Ok(TokenResponse {
             access_token,
             token_type: "Bearer".to_string(),
@@ -97,6 +104,8 @@ impl TokenService {
                 "Refresh token replay detected for user {} client {}",
                 stored_token.user_id, client.id
             );
+            // 更新重放检测指标
+            metrics::REPLAY_DETECTED_TOTAL.inc();
             RefreshTokenRepo::revoke_user_client_tokens(
                 pool, stored_token.user_id, client.id,
             ).await?;
@@ -137,6 +146,9 @@ impl TokenService {
 
         // 轮换 refresh token
         let new_refresh_token = Self::rotate_refresh_token(pool, config, &stored_token).await?;
+
+        // 更新 token 刷新指标
+        metrics::TOKEN_REFRESH_TOTAL.inc();
 
         Ok(TokenResponse {
             access_token,

@@ -34,8 +34,8 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
     let cors_layer = create_cors_layer(&cors_config);
 
     Router::new()
-        .route("/health/live", get(|| async { "OK" }))
-        .route("/health/ready", get(|| async { "OK" }))
+        .route("/health/live", get(handler::health::liveness))
+        .route("/health/ready", get(handler::health::readiness))
 
         .route("/api/v1/auth/login", post(handler::auth::login))
         .route("/api/v1/auth/logout", post(handler::auth::logout))
@@ -56,6 +56,7 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .layer(axum::middleware::from_fn(rate_limit_middleware))
         .layer(axum::Extension(rate_limiter))
         .layer(axum::Extension::<Option<String>>(None))
+        .layer(axum::Extension::<Option<std::net::SocketAddr>>(None))
         .layer(axum::middleware::from_fn(request_context_middleware))
         .layer(cors_layer)
 

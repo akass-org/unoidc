@@ -2,9 +2,11 @@
 //
 // 测试登录成功、失败计数和账户锁定功能
 
+mod common;
+
 use backend::{
-    build_app_with_state, config::Config,
-    db, model::{CreateSession, CreateUser},
+    build_app_with_state,
+    model::{CreateSession, CreateUser},
     repo::{SessionRepo, UserRepo},
     crypto::password,
     AppState,
@@ -16,34 +18,13 @@ use axum::{
 use http_body_util::BodyExt;
 use serde_json::json;
 use serial_test::serial;
-use std::sync::Arc;
-use tokio::sync::OnceCell;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-static TEST_DB: OnceCell<Arc<AppState>> = OnceCell::const_new();
-
-/// 获取或创建测试数据库连接池（全局单例）
-async fn get_test_db() -> Arc<AppState> {
-    TEST_DB
-        .get_or_init(|| async {
-            let database_url = std::env::var("DATABASE_URL")
-                .expect("DATABASE_URL must be set for tests");
-            let pool = db::connect(&database_url).await.unwrap();
-            db::run_migrations(&pool).await.unwrap();
-            let config = Config::default();
-            Arc::new(AppState { config, db: pool })
-        })
-        .await
-        .clone()
-}
-
-/// 生成唯一的测试用户名
 fn unique_username() -> String {
     format!("testuser_{}", Uuid::new_v4().as_simple())
 }
 
-/// 清理指定用户的测试数据
 async fn cleanup_user(state: &AppState, username: &str) {
     if let Some(user) = UserRepo::find_by_username(&state.db, username).await.unwrap() {
         sqlx::query("DELETE FROM user_sessions WHERE user_id = $1")
@@ -62,7 +43,7 @@ async fn cleanup_user(state: &AppState, username: &str) {
 #[tokio::test]
 #[serial]
 async fn test_successful_login() {
-    let state = get_test_db().await;
+    let state = common::get_test_db().await;
     let username = unique_username();
 
     let password = "test_password_123";
@@ -107,7 +88,7 @@ async fn test_successful_login() {
 #[tokio::test]
 #[serial]
 async fn test_failed_login_increments_counter() {
-    let state = get_test_db().await;
+    let state = common::get_test_db().await;
     let username = unique_username();
 
     let password = "correct_password";
@@ -146,7 +127,7 @@ async fn test_failed_login_increments_counter() {
 #[tokio::test]
 #[serial]
 async fn test_account_lockout_after_repeated_failures() {
-    let state = get_test_db().await;
+    let state = common::get_test_db().await;
     let username = unique_username();
 
     let password = "correct_password";
@@ -160,7 +141,6 @@ async fn test_account_lockout_after_repeated_failures() {
         family_name: None,
     }).await.unwrap();
 
-    // 连续失败5次登录（锁定阈值是5）
     for _ in 0..5 {
         let app = build_app_with_state(state.clone());
         let _response = app.oneshot(
@@ -176,11 +156,9 @@ async fn test_account_lockout_after_repeated_failures() {
         ).await.unwrap();
     }
 
-    // 验证账户被锁定
     let locked_user = UserRepo::find_by_id(&state.db, user.id).await.unwrap().unwrap();
     assert!(locked_user.is_locked());
 
-    // 即使使用正确密码也应该登录失败
     let app = build_app_with_state(state.clone());
     let response = app.oneshot(
         Request::builder()
@@ -202,7 +180,7 @@ async fn test_account_lockout_after_repeated_failures() {
 #[tokio::test]
 #[serial]
 async fn test_login_creates_session() {
-    let state = get_test_db().await;
+    let state = common::get_test_db().await;
     let username = unique_username();
 
     let password = "test_password";
@@ -237,7 +215,6 @@ async fn test_login_creates_session() {
     }
     assert_eq!(status, StatusCode::OK);
 
-    // 验证会话被创建
     let sessions = SessionRepo::find_user_sessions(&state.db, user.id).await.unwrap();
     assert_eq!(sessions.len(), 1);
 
@@ -247,7 +224,7 @@ async fn test_login_creates_session() {
 #[tokio::test]
 #[serial]
 async fn test_logout_destroys_session() {
-    let state = get_test_db().await;
+    let state = common::get_test_db().await;
     let username = unique_username();
 
     let password = "test_password";
@@ -269,7 +246,6 @@ async fn test_logout_destroys_session() {
 
     let app = build_app_with_state(state.clone());
 
-    // 使用 Cookie 传递 session_id（与 C3 安全修复一致）
     let response = app.oneshot(
         Request::builder()
             .method("POST")

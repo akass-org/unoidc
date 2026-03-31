@@ -15,6 +15,7 @@ pub mod rate_limit_service;
 pub mod logout_service;
 
 // 重新导出常用类型
+pub use audit_service::AuditService;
 pub use user_service::UserService;
 pub use group_service::GroupService;
 pub use client_service::ClientService;

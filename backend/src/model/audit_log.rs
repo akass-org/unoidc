@@ -130,7 +130,7 @@ impl CreateAuditLog {
 }
 
 /// 审计日志查询参数
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuditLogQuery {
     pub actor_user_id: Option<Uuid>,
     pub client_id: Option<Uuid>,

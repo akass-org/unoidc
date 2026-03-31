@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::error::{AppError, OidcErrorCode, Result};
+use crate::metrics;
 use crate::service::{KeyService, LogoutService};
 use crate::crypto::jwt::{self, AccessTokenClaims};
 use crate::repo::{UserRepo, GroupRepo};
@@ -80,12 +81,13 @@ pub struct AuthorizeRequest {
     pub prompt: Option<String>,
 }
 
-/// GET /authorize — 尚未实现
+/// GET /authorize — Authorization endpoint
 pub async fn authorize_get(
     State(_state): State<Arc<AppState>>,
     _headers: HeaderMap,
     Query(_req): Query<AuthorizeRequest>,
 ) -> Result<&'static str> {
+    metrics::AUTH_REQUESTS_TOTAL.inc();
     Err(AppError::OidcError {
         error: OidcErrorCode::TemporarilyUnavailable,
         error_description: Some("Authorization endpoint not yet implemented".to_string()),
