@@ -19,7 +19,7 @@ use crate::{
     middleware::auth::{require_auth_user, AuthUser},
     model::{CreateClient, CreateGroup, UpdateClient, UpdateGroup, UpdateUser},
     service::{AuditService, ClientService, GroupService, KeyService, UserService},
-    repo::AuditLogRepo,
+    repo::{AuditLogRepo, SettingsRepo},
     AppState,
 };
 
@@ -681,16 +681,28 @@ pub async fn get_settings(
     headers: HeaderMap,
 ) -> Result<Json<SettingsResponse>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
-
-    // 返回默认设置（后续可以从数据库或配置文件读取）
+    
+    // 从数据库读取设置
+    let settings = SettingsRepo::get_all(&state.db).await
+        .map_err(|e| AppError::InternalServerError {
+            error_code: Some(format!("DB_ERROR: {}", e)),
+        })?;
+    
+    // 转换为 map 方便查找
+    let settings_map: std::collections::HashMap<String, String> = 
+        settings.into_iter().collect();
+    
+    let get_value = |key: &str, default: &str| -> String {
+        settings_map.get(key).cloned().unwrap_or_else(|| default.to_string())
+    };
+    
     Ok(Json(SettingsResponse {
-        brand_name: "UNOIDC".to_string(),
-        logo_url: String::new(),
-        login_background_url: String::new(),
-        login_layout: "split-left".to_string(),
-        session_timeout: 24,
-        max_login_attempts: 5,
+        brand_name: get_value("brand_name", "UNOIDC"),
+        logo_url: get_value("logo_url", ""),
+        login_background_url: get_value("login_background_url", ""),
+        login_layout: get_value("login_layout", "split-left"),
+        session_timeout: get_value("session_timeout", "24").parse().unwrap_or(24),
+        max_login_attempts: get_value("max_login_attempts", "5").parse().unwrap_or(5),
     }))
 }
 
@@ -698,13 +710,40 @@ pub async fn get_settings(
 pub async fn update_settings(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(_req): Json<UpdateSettingsRequest>,
+    Json(req): Json<UpdateSettingsRequest>,
 ) -> Result<Json<SettingsResponse>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
-
-    // TODO: 保存设置到数据库或配置文件
-
+    
+    // 构建要更新的设置列表
+    let mut updates: Vec<(String, String)> = Vec::new();
+    
+    if let Some(brand_name) = req.brand_name {
+        updates.push(("brand_name".to_string(), brand_name));
+    }
+    if let Some(logo_url) = req.logo_url {
+        updates.push(("logo_url".to_string(), logo_url));
+    }
+    if let Some(login_background_url) = req.login_background_url {
+        updates.push(("login_background_url".to_string(), login_background_url));
+    }
+    if let Some(login_layout) = req.login_layout {
+        updates.push(("login_layout".to_string(), login_layout));
+    }
+    if let Some(session_timeout) = req.session_timeout {
+        updates.push(("session_timeout".to_string(), session_timeout.to_string()));
+    }
+    if let Some(max_login_attempts) = req.max_login_attempts {
+        updates.push(("max_login_attempts".to_string(), max_login_attempts.to_string()));
+    }
+    
+    // 批量更新到数据库
+    if !updates.is_empty() {
+        SettingsRepo::set_many(&state.db, &updates).await
+            .map_err(|e| AppError::InternalServerError {
+                error_code: Some(format!("DB_ERROR: {}", e)),
+            })?;
+    }
+    
     // 返回更新后的设置
     get_settings(State(state), headers).await
 }

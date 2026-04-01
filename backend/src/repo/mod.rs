@@ -11,6 +11,7 @@ pub mod auth_code_repo;
 pub mod refresh_token_repo;
 pub mod jwk_repo;
 pub mod audit_log_repo;
+pub mod settings_repo;
 
 // 重新导出常用类型
 pub use user_repo::UserRepo;
@@ -22,3 +23,4 @@ pub use auth_code_repo::AuthCodeRepo;
 pub use refresh_token_repo::RefreshTokenRepo;
 pub use jwk_repo::JwkRepo;
 pub use audit_log_repo::AuditLogRepo;
+pub use settings_repo::SettingsRepo;

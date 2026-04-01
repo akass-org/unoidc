@@ -13,6 +13,7 @@ use crate::{
     error::{AppError, OidcErrorCode, Result},
     metrics,
     middleware::{csrf::generate_csrf_cookie, request_context::RequestContext},
+    repo::SettingsRepo,
     service::{AuditService, AuthService, UserService},
     AppState,
 };
@@ -420,4 +421,39 @@ async fn check_user_admin(pool: &sqlx::PgPool, user_id: uuid::Uuid) -> anyhow::R
     // 检查用户是否在 admin 组
     let user_groups = crate::repo::GroupRepo::find_user_groups(pool, user_id).await?;
     Ok(user_groups.iter().any(|g| g.id == admin_group.id))
+}
+
+/// 公共配置响应（用于登录页）
+#[derive(Debug, Serialize)]
+pub struct PublicConfigResponse {
+    pub brand_name: String,
+    pub logo_url: String,
+    pub login_background_url: String,
+    pub login_layout: String,
+}
+
+/// 获取公共配置（无需登录，用于登录页）
+pub async fn get_public_config(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<PublicConfigResponse>> {
+    // 从数据库读取设置
+    let settings = SettingsRepo::get_all(&state.db).await
+        .map_err(|e| AppError::InternalServerError {
+            error_code: Some(format!("DB_ERROR: {}", e)),
+        })?;
+    
+    // 转换为 map 方便查找
+    let settings_map: std::collections::HashMap<String, String> = 
+        settings.into_iter().collect();
+    
+    let get_value = |key: &str, default: &str| -> String {
+        settings_map.get(key).cloned().unwrap_or_else(|| default.to_string())
+    };
+    
+    Ok(Json(PublicConfigResponse {
+        brand_name: get_value("brand_name", "UNOIDC"),
+        logo_url: get_value("logo_url", ""),
+        login_background_url: get_value("login_background_url", ""),
+        login_layout: get_value("login_layout", "split-left"),
+    }))
 }

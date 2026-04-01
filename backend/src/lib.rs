@@ -74,6 +74,9 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .route("/api/v1/admin/settings", patch(handler::admin::update_settings))
         .route("/api/v1/admin/keys/rotate", post(handler::admin::rotate_key))
 
+        // Public config (for login page branding)
+        .route("/api/v1/public/config", get(handler::auth::get_public_config))
+
         // OIDC
         .route("/.well-known/openid-configuration", get(handler::oidc::discovery))
         .route("/jwks.json", get(handler::oidc::jwks))
