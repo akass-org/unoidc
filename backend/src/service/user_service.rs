@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::crypto;
 use crate::model::{CreateUser, UpdateUser, User};
-use crate::repo::UserRepo;
+use crate::repo::{GroupRepo, UserRepo};
 
 pub struct UserService;
 
@@ -51,6 +51,27 @@ impl UserService {
             },
         )
         .await?;
+
+        // 检查是否是第一个用户，如果是则设为管理员
+        let user_count = UserRepo::count(pool).await?;
+        if user_count == 1 {
+            // 确保 admin 组存在
+            let admin_group = match GroupRepo::find_by_name(pool, "admin").await? {
+                Some(g) => g,
+                None => {
+                    GroupRepo::create(
+                        pool,
+                        crate::model::CreateGroup {
+                            name: "admin".to_string(),
+                            description: Some("System administrators".to_string()),
+                        },
+                    )
+                    .await?
+                }
+            };
+            // 将用户添加到 admin 组
+            GroupRepo::add_user_to_group(pool, user.id, admin_group.id).await?;
+        }
 
         Ok(user)
     }
