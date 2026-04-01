@@ -377,4 +377,67 @@ impl AuditService {
     ) -> Result<Vec<AuditLog>, sqlx::Error> {
         AuditLogRepo::query(pool, query).await
     }
+
+    /// 记录用户创建事件
+    pub async fn log_user_created(
+        pool: &PgPool,
+        user_id: Uuid,
+        username: &str,
+        correlation_id: Option<String>,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+    ) -> Result<AuditLog, sqlx::Error> {
+        let create_log = CreateAuditLog::success(
+            "user_created",
+            "user_account",
+            user_id.to_string(),
+        )
+        .with_actor(user_id)
+        .with_correlation_id(correlation_id.unwrap_or_default())
+        .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
+        .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
+        .with_metadata(serde_json::json!({
+            "event": "user_created",
+            "username": username
+        }));
+
+        let log = AuditLogRepo::create(pool, create_log).await?;
+        info!(
+            "Audit log: user created {} (id: {})",
+            username, user_id
+        );
+        Ok(log)
+    }
+
+    /// 记录注册失败事件
+    pub async fn log_registration_failure(
+        pool: &PgPool,
+        username: &str,
+        reason: &str,
+        correlation_id: Option<String>,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+    ) -> Result<AuditLog, sqlx::Error> {
+        let create_log = CreateAuditLog::failure(
+            "registration_failure",
+            "user_account",
+            username,
+            reason,
+        )
+        .with_correlation_id(correlation_id.unwrap_or_default())
+        .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
+        .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
+        .with_metadata(serde_json::json!({
+            "event": "registration_failure",
+            "username": username,
+            "reason": reason
+        }));
+
+        let log = AuditLogRepo::create(pool, create_log).await?;
+        info!(
+            "Audit log: registration failed for {} (reason: {})",
+            username, reason
+        );
+        Ok(log)
+    }
 }

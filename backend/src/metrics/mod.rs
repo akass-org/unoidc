@@ -29,6 +29,18 @@ lazy_static! {
         "Total number of failed login attempts"
     ).unwrap();
 
+    /// 注册成功总数
+    pub static ref AUTH_REGISTRATION_SUCCESS_TOTAL: Counter = Counter::new(
+        "oidc_auth_registration_success_total",
+        "Total number of successful registrations"
+    ).unwrap();
+
+    /// 注册失败总数
+    pub static ref AUTH_REGISTRATION_FAILURE_TOTAL: Counter = Counter::new(
+        "oidc_auth_registration_failure_total",
+        "Total number of failed registrations"
+    ).unwrap();
+
     /// 账户锁定总数
     pub static ref AUTH_ACCOUNT_LOCKED_TOTAL: Counter = Counter::new(
         "oidc_auth_account_locked_total",
@@ -127,6 +139,8 @@ pub fn init() {
         let _ = REGISTRY.register(Box::new(AUTH_LOGIN_SUCCESS_TOTAL.clone()));
         let _ = REGISTRY.register(Box::new(AUTH_LOGIN_FAILURE_TOTAL.clone()));
         let _ = REGISTRY.register(Box::new(AUTH_ACCOUNT_LOCKED_TOTAL.clone()));
+        let _ = REGISTRY.register(Box::new(AUTH_REGISTRATION_SUCCESS_TOTAL.clone()));
+        let _ = REGISTRY.register(Box::new(AUTH_REGISTRATION_FAILURE_TOTAL.clone()));
 
         let _ = REGISTRY.register(Box::new(TOKEN_ISSUED_TOTAL.clone()));
         let _ = REGISTRY.register(Box::new(TOKEN_REFRESH_TOTAL.clone()));

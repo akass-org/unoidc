@@ -13,7 +13,7 @@ use crate::{
     error::{AppError, OidcErrorCode, Result},
     metrics,
     middleware::request_context::RequestContext,
-    service::{AuditService, AuthService},
+    service::{AuditService, AuthService, UserService},
     AppState,
 };
 
@@ -252,16 +252,66 @@ pub async fn logout(
 }
 
 pub async fn register(
-    State(_state): State<Arc<AppState>>,
-    Json(_req): Json<RegisterRequest>,
-) -> Result<Json<LoginResponse>> {
-    // M-21: 跳过验证，因为注册功能尚未实现
-    // 功能实现后应添加验证：req.validate()...
+    State(state): State<Arc<AppState>>,
+    Extension(addr): Extension<Option<SocketAddr>>,
+    Extension(req_ctx): Extension<RequestContext>,
+    headers: HeaderMap,
+    Json(req): Json<RegisterRequest>,
+) -> Result<Response> {
+    req.validate().map_err(|e| AppError::ValidationError {
+        field: "request".to_string(),
+        message: e.to_string(),
+    })?;
 
-    Err(AppError::OidcError {
-        error: OidcErrorCode::TemporarilyUnavailable,
-        error_description: Some("Registration not yet implemented".to_string()),
-    })
+    let ip_address = addr.map(|a| a.to_string());
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let username = req.username.clone();
+
+    match UserService::register(&state.db, req.username, req.email, req.password).await {
+        Ok(user) => {
+            let _ = AuditService::log_user_created(
+                &state.db,
+                user.id,
+                &user.username,
+                req_ctx.correlation_id.clone(),
+                ip_address,
+                user_agent,
+            )
+            .await;
+
+            metrics::AUTH_REGISTRATION_SUCCESS_TOTAL.inc();
+
+            Ok((
+                Json(LoginResponse {
+                    success: true,
+                    message: "Registration successful".to_string(),
+                }),
+            )
+                .into_response())
+        }
+        Err(e) => {
+            let _ = AuditService::log_registration_failure(
+                &state.db,
+                &username,
+                &e.to_string(),
+                req_ctx.correlation_id.clone(),
+                ip_address,
+                user_agent,
+            )
+            .await;
+
+            metrics::AUTH_REGISTRATION_FAILURE_TOTAL.inc();
+
+            Err(AppError::BusinessError {
+                code: "REGISTRATION_FAILED".to_string(),
+                message: e.to_string(),
+            })
+        }
+    }
 }
 
 pub async fn forgot_password() -> Result<Json<LoginResponse>> {

@@ -15,7 +15,11 @@ fn is_state_changing_method(method: &Method) -> bool {
 fn is_exempt_path(path: &str) -> bool {
     matches!(
         path,
-        "/token" | "/api/v1/auth/login" | "/api/v1/auth/logout"
+        "/token"
+            | "/api/v1/auth/login"
+            | "/api/v1/auth/logout"
+            | "/api/v1/auth/register"
+            | "/api/v1/auth/forgot-password"
     )
 }
 
