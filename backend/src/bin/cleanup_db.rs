@@ -6,8 +6,11 @@ use sqlx::PgPool;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // 加载 .env 文件
+    dotenvy::dotenv().ok();
+    
     let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+        .expect("DATABASE_URL must be set (in .env or environment)");
 
     println!("Connecting to database...");
     let pool = PgPool::connect(&database_url).await?;

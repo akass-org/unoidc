@@ -12,7 +12,7 @@ use crate::{
     crypto,
     error::{AppError, OidcErrorCode, Result},
     metrics,
-    middleware::request_context::RequestContext,
+    middleware::{csrf::generate_csrf_cookie, request_context::RequestContext},
     service::{AuditService, AuthService, UserService},
     AppState,
 };
@@ -161,11 +161,18 @@ pub async fn login(
             metrics::SESSION_CREATED_TOTAL.inc();
 
             let secure = is_secure_context(&state.config.issuer);
-            let cookie_value =
+            let session_cookie =
                 build_cookie_value(&session.session_id, state.config.cookie_domain.as_ref(), secure, &state.config.session_secret);
+            
+            // 生成 CSRF token
+            let csrf_token = crypto::generate_csrf_token()?;
+            let csrf_cookie = generate_csrf_cookie(&csrf_token, secure);
 
             Ok((
-                [(header::SET_COOKIE, cookie_value)],
+                [
+                    (header::SET_COOKIE, session_cookie),
+                    (header::SET_COOKIE, csrf_cookie),
+                ],
                 Json(LoginResponse {
                     success: true,
                     message: "Login successful".to_string(),
@@ -374,6 +381,9 @@ pub async fn get_session(
             reason: Some("User not found".to_string()),
         })?;
 
+    // 检查用户是否在 admin 组
+    let is_admin = check_user_admin(&state.db, user.id).await.unwrap_or(false);
+
     Ok(Json(SessionResponse {
         user: UserInfo {
             id: user.id.to_string(),
@@ -381,7 +391,20 @@ pub async fn get_session(
             email: user.email,
             display_name: user.display_name.unwrap_or_default(),
             picture: user.picture,
-            is_admin: false, // TODO: Check admin group membership
+            is_admin,
         },
     }))
+}
+
+/// 检查用户是否为管理员
+async fn check_user_admin(pool: &sqlx::PgPool, user_id: uuid::Uuid) -> anyhow::Result<bool> {
+    // 获取 admin 组
+    let admin_group = match crate::repo::GroupRepo::find_by_name(pool, "admin").await? {
+        Some(g) => g,
+        None => return Ok(false),
+    };
+
+    // 检查用户是否在 admin 组
+    let user_groups = crate::repo::GroupRepo::find_user_groups(pool, user_id).await?;
+    Ok(user_groups.iter().any(|g| g.id == admin_group.id))
 }

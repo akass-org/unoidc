@@ -13,16 +13,19 @@ pub struct Group {
     pub name: String,
     pub description: Option<String>,
     pub created_at: OffsetDateTime,
+    pub updated_at: Option<OffsetDateTime>,
 }
 
 impl Group {
     /// 创建新组
     pub fn new(name: String, description: Option<String>) -> Self {
+        let now = OffsetDateTime::now_utc();
         Self {
             id: Uuid::new_v4(),
             name,
             description,
-            created_at: OffsetDateTime::now_utc(),
+            created_at: now,
+            updated_at: Some(now),
         }
     }
 }

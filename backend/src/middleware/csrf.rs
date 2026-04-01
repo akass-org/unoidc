@@ -74,9 +74,12 @@ pub async fn csrf_middleware(request: Request, next: Next) -> Response {
 
 pub fn generate_csrf_cookie(token: &str, secure: bool) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
+    // 开发环境使用 Lax 允许跨端口，生产环境使用 Strict
+    let same_site = if secure { "Strict" } else { "Lax" };
+    // CSRF cookie 不能设置 HttpOnly，因为前端 JS 需要读取它
     format!(
-        "{}={}; Path=/; SameSite=Strict; HttpOnly{}",
-        CSRF_COOKIE_NAME, token, secure_flag
+        "{}={}; Path=/; SameSite={}{}",
+        CSRF_COOKIE_NAME, token, same_site, secure_flag
     )
 }
 
@@ -128,9 +131,9 @@ mod tests {
     #[test]
     fn test_generate_csrf_cookie() {
         let cookie = generate_csrf_cookie("test-token", false);
-        assert_eq!(cookie, "unoidc_csrf=test-token; Path=/; SameSite=Strict; HttpOnly");
+        assert_eq!(cookie, "unoidc_csrf=test-token; Path=/; SameSite=Lax");
 
         let secure_cookie = generate_csrf_cookie("test-token", true);
-        assert_eq!(secure_cookie, "unoidc_csrf=test-token; Path=/; SameSite=Strict; HttpOnly; Secure");
+        assert_eq!(secure_cookie, "unoidc_csrf=test-token; Path=/; SameSite=Strict; Secure");
     }
 }

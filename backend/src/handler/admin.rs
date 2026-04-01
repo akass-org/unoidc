@@ -16,12 +16,44 @@ use validator::Validate;
 use crate::{
     crypto,
     error::{AppError, Result},
-    middleware::auth::require_auth_user,
+    middleware::auth::{require_auth_user, AuthUser},
     model::{CreateClient, CreateGroup, UpdateClient, UpdateGroup, UpdateUser},
     service::{AuditService, ClientService, GroupService, KeyService, UserService},
     repo::AuditLogRepo,
     AppState,
 };
+
+/// 检查用户是否为管理员
+async fn require_admin(
+    pool: &sqlx::PgPool,
+    headers: &HeaderMap,
+) -> Result<AuthUser> {
+    let auth_user = require_auth_user(pool, headers).await?;
+    
+    // 获取 admin 组
+    let admin_group = crate::repo::GroupRepo::find_by_name(pool, "admin")
+        .await
+        .map_err(|e| AppError::InternalServerError {
+            error_code: Some(format!("DB_ERROR: {}", e)),
+        })?;
+    
+    if let Some(group) = admin_group {
+        // 检查用户是否在 admin 组
+        let user_groups = crate::repo::GroupRepo::find_user_groups(pool, auth_user.user.id)
+            .await
+            .map_err(|e| AppError::InternalServerError {
+                error_code: Some(format!("DB_ERROR: {}", e)),
+            })?;
+        
+        if user_groups.iter().any(|g| g.id == group.id) {
+            return Ok(auth_user);
+        }
+    }
+    
+    Err(AppError::Forbidden {
+        reason: Some("Admin access required".to_string()),
+    })
+}
 
 // ============================================================================
 // 用户管理
@@ -77,7 +109,7 @@ pub async fn get_users(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<UserResponse>>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     let users = UserService::list_users(&state.db, 1000, 0).await.map_err(|e| {
@@ -95,7 +127,7 @@ pub async fn create_user(
     headers: HeaderMap,
     Json(req): Json<CreateUserRequest>,
 ) -> Result<Json<UserResponse>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     req.validate().map_err(|e| AppError::ValidationError {
@@ -130,7 +162,7 @@ pub async fn update_user(
     headers: HeaderMap,
     Json(req): Json<UpdateUserRequest>,
 ) -> Result<Json<UserResponse>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     let update = UpdateUser {
@@ -165,7 +197,7 @@ pub async fn reset_user_password(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<Json<ResetPasswordResponse>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     let new_password = crypto::generate_secure_token(16).map_err(|e| AppError::InternalServerError {
@@ -220,7 +252,7 @@ pub async fn get_groups(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<GroupResponse>>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     let groups = GroupService::list_groups(&state.db).await.map_err(|e| {
@@ -256,7 +288,7 @@ pub async fn create_group(
     headers: HeaderMap,
     Json(req): Json<CreateGroupRequest>,
 ) -> Result<Json<GroupResponse>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     req.validate().map_err(|e| AppError::ValidationError {
@@ -292,7 +324,7 @@ pub async fn update_group(
     headers: HeaderMap,
     Json(req): Json<UpdateGroupRequest>,
 ) -> Result<Json<GroupResponse>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     let update = UpdateGroup {
@@ -329,7 +361,7 @@ pub async fn delete_group(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     GroupService::delete_group(&state.db, id)
@@ -402,7 +434,7 @@ pub async fn get_clients(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<ClientResponse>>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     let clients = ClientService::list_clients(&state.db).await.map_err(|e| {
@@ -420,7 +452,7 @@ pub async fn create_client(
     headers: HeaderMap,
     Json(req): Json<CreateClientRequest>,
 ) -> Result<Json<CreateClientResponse>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     let input = CreateClient {
@@ -457,7 +489,7 @@ pub async fn update_client(
     headers: HeaderMap,
     Json(req): Json<UpdateClientRequest>,
 ) -> Result<Json<ClientResponse>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     let update = UpdateClient {
@@ -485,7 +517,7 @@ pub async fn delete_client(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     ClientService::delete_client(&state.db, id)
@@ -510,7 +542,7 @@ pub async fn reset_client_secret(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<Json<ResetSecretResponse>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     let secret = ClientService::regenerate_secret(&state.db, id)
@@ -556,7 +588,7 @@ pub async fn get_audit_logs(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<AuditLogResponse>>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     let query = crate::model::AuditLogQuery {
@@ -636,7 +668,7 @@ pub async fn get_settings(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<SettingsResponse>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     // 返回默认设置（后续可以从数据库或配置文件读取）
@@ -656,7 +688,7 @@ pub async fn update_settings(
     headers: HeaderMap,
     Json(_req): Json<UpdateSettingsRequest>,
 ) -> Result<Json<SettingsResponse>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     // TODO: 保存设置到数据库或配置文件
@@ -676,7 +708,7 @@ pub async fn rotate_key(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<RotateKeyResponse>> {
-    let _auth_user = require_auth_user(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
     let _new_key = KeyService::rotate_key(&state.db, &state.config.private_key_encryption_key)
