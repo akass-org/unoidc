@@ -1,7 +1,7 @@
 use axum::{
     extract::State,
     http::{header, HeaderMap},
-    response::{IntoResponse, Response},
+    response::{AppendHeaders, IntoResponse, Response},
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
@@ -171,19 +171,24 @@ pub async fn login(
             let csrf_token = crypto::generate_csrf_token()?;
             let csrf_cookie = generate_csrf_cookie(&csrf_token, secure);
 
-            // 使用 HeaderMap 设置多个 Set-Cookie header
-            let mut headers = axum::http::HeaderMap::new();
-            headers.insert(header::SET_COOKIE, session_cookie.parse().unwrap());
-            headers.insert(header::SET_COOKIE, csrf_cookie.parse().unwrap());
-
-            Ok((
-                headers,
-                Json(LoginResponse {
-                    success: true,
-                    message: "Login successful".to_string(),
-                }),
-            )
-                .into_response())
+            // 构建响应，手动添加多个 Set-Cookie header
+            let body = serde_json::to_string(&LoginResponse {
+                success: true,
+                message: "Login successful".to_string(),
+            }).map_err(|e| AppError::InternalServerError {
+                error_code: Some(format!("JSON_ERROR: {}", e)),
+            })?;
+            
+            let response = Response::builder()
+                .header(header::SET_COOKIE, session_cookie)
+                .header(header::SET_COOKIE, csrf_cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(axum::body::Body::from(body))
+                .map_err(|e| AppError::InternalServerError {
+                    error_code: Some(format!("RESPONSE_BUILD_ERROR: {}", e)),
+                })?;
+            
+            Ok(response)
         }
         Err(e) => {
             let reason_code = match &e {
