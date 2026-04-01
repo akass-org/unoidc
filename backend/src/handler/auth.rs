@@ -69,8 +69,11 @@ fn build_cookie_value(session_id: &str, cookie_domain: Option<&String>, secure: 
         "unoidc_session={}; HttpOnly{}; SameSite={}; Path=/",
         cookie_content, secure_flag, same_site
     );
-    if let Some(domain) = cookie_domain {
-        cookie = format!("{}; Domain={}", cookie, domain);
+    // 只在 HTTPS 环境设置 Domain，localhost 设置 Domain 会导致 cookie 不工作
+    if secure {
+        if let Some(domain) = cookie_domain {
+            cookie = format!("{}; Domain={}", cookie, domain);
+        }
     }
     cookie
 }
@@ -247,8 +250,11 @@ pub async fn logout(
         "unoidc_session=; HttpOnly{}; SameSite={}; Path=/; Max-Age=0",
         secure_flag, same_site
     );
-    if let Some(domain) = &state.config.cookie_domain {
-        cookie_value = format!("{}; Domain={}", cookie_value, domain);
+    // 只在 HTTPS 环境设置 Domain
+    if secure {
+        if let Some(domain) = &state.config.cookie_domain {
+            cookie_value = format!("{}; Domain={}", cookie_value, domain);
+        }
     }
 
     Ok((
