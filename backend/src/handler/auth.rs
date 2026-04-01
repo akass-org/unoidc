@@ -171,11 +171,13 @@ pub async fn login(
             let csrf_token = crypto::generate_csrf_token()?;
             let csrf_cookie = generate_csrf_cookie(&csrf_token, secure);
 
+            // 使用 HeaderMap 设置多个 Set-Cookie header
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert(header::SET_COOKIE, session_cookie.parse().unwrap());
+            headers.insert(header::SET_COOKIE, csrf_cookie.parse().unwrap());
+
             Ok((
-                [
-                    (header::SET_COOKIE, session_cookie),
-                    (header::SET_COOKIE, csrf_cookie),
-                ],
+                headers,
                 Json(LoginResponse {
                     success: true,
                     message: "Login successful".to_string(),
