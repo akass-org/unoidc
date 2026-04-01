@@ -8,10 +8,10 @@ interface LoginLayoutSelectorProps {
 }
 
 const layoutOptions: { value: LoginLayout; label: string; description: string }[] = [
-  { value: 'split-left', label: '左侧图片', description: '品牌展示在左' },
-  { value: 'split-right', label: '右侧图片', description: '品牌展示在右' },
+  { value: 'split-left', label: '左侧品牌', description: '品牌展示在左' },
+  { value: 'split-right', label: '右侧品牌', description: '品牌展示在右' },
   { value: 'centered', label: '居中', description: '简洁居中布局' },
-  { value: 'fullscreen', label: '全屏', description: '沉浸式背景' },
+  { value: 'fullscreen', label: '全屏', description: '沉浸式深色背景' },
 ]
 
 export function LoginLayoutSelector({ value, onChange }: LoginLayoutSelectorProps) {
@@ -23,17 +23,17 @@ export function LoginLayoutSelector({ value, onChange }: LoginLayoutSelectorProp
           type="button"
           onClick={() => onChange(option.value)}
           className={`
-            flex flex-col gap-1 p-3 rounded-lg border text-left transition-all duration-150
+            flex flex-col gap-1 p-3 rounded-lg border text-left transition-all duration-200
             ${value === option.value
-              ? 'border-primary-500 bg-primary-50/50 dark:bg-primary-900/10'
-              : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+              ? 'border-white/20 bg-white/[0.04]'
+              : 'border-white/[0.06] hover:border-white/[0.12] hover:bg-white/[0.02]'
             }
           `}
         >
-          <span className={`text-sm font-medium ${value === option.value ? 'text-primary-700 dark:text-primary-400' : 'text-slate-700 dark:text-slate-300'}`}>
+          <span className={`text-sm font-medium ${value === option.value ? 'text-white' : 'text-gray-300'}`}>
             {option.label}
           </span>
-          <span className="text-xs text-slate-500 dark:text-slate-400">
+          <span className="text-xs text-gray-600">
             {option.description}
           </span>
         </button>
@@ -45,26 +45,24 @@ export function LoginLayoutSelector({ value, onChange }: LoginLayoutSelectorProp
 // Abstract geometric pattern for split layouts
 function GeometricPattern() {
   return (
-    <div className="absolute inset-0 overflow-hidden opacity-30">
+    <div className="absolute inset-0 overflow-hidden opacity-[0.08]">
       <svg className="absolute w-full h-full" viewBox="0 0 400 400" fill="none">
         <defs>
           <linearGradient id="geo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="currentColor" stopOpacity="0.1" />
+            <stop offset="0%" stopColor="white" stopOpacity="0.5" />
+            <stop offset="100%" stopColor="white" stopOpacity="0.2" />
           </linearGradient>
         </defs>
-        {/* Hexagons */}
-        <path d="M50 100 L75 57 L125 57 L150 100 L125 143 L75 143 Z" stroke="url(#geo-grad)" strokeWidth="1" fill="none" />
-        <path d="M150 100 L175 57 L225 57 L250 100 L225 143 L175 143 Z" stroke="url(#geo-grad)" strokeWidth="1" fill="none" />
-        <path d="M100 186 L125 143 L175 143 L200 186 L175 229 L125 229 Z" stroke="url(#geo-grad)" strokeWidth="1" fill="none" />
-        <path d="M200 186 L225 143 L275 143 L300 186 L275 229 L225 229 Z" stroke="url(#geo-grad)" strokeWidth="1" fill="none" />
-        {/* Circles */}
-        <circle cx="320" cy="80" r="40" stroke="url(#geo-grad)" strokeWidth="1" fill="none" />
-        <circle cx="320" cy="80" r="60" stroke="url(#geo-grad)" strokeWidth="0.5" fill="none" />
-        {/* Lines */}
+        {/* Grid lines */}
+        <line x1="0" y1="100" x2="400" y2="100" stroke="url(#geo-grad)" strokeWidth="0.5" />
+        <line x1="0" y1="200" x2="400" y2="200" stroke="url(#geo-grad)" strokeWidth="0.5" />
         <line x1="0" y1="300" x2="400" y2="300" stroke="url(#geo-grad)" strokeWidth="0.5" />
-        <line x1="0" y1="320" x2="400" y2="320" stroke="url(#geo-grad)" strokeWidth="0.5" />
-        <line x1="0" y1="340" x2="400" y2="340" stroke="url(#geo-grad)" strokeWidth="0.5" />
+        <line x1="100" y1="0" x2="100" y2="400" stroke="url(#geo-grad)" strokeWidth="0.5" />
+        <line x1="200" y1="0" x2="200" y2="400" stroke="url(#geo-grad)" strokeWidth="0.5" />
+        <line x1="300" y1="0" x2="300" y2="400" stroke="url(#geo-grad)" strokeWidth="0.5" />
+        {/* Circles */}
+        <circle cx="200" cy="200" r="100" stroke="url(#geo-grad)" strokeWidth="0.5" fill="none" />
+        <circle cx="200" cy="200" r="150" stroke="url(#geo-grad)" strokeWidth="0.5" fill="none" />
       </svg>
     </div>
   )
@@ -75,23 +73,23 @@ function BrandContent({ brandName }: { brandName: string }) {
   return (
     <div className="relative z-10 flex flex-col justify-center h-full p-12 text-white">
       <div className="mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 mb-6 rounded-2xl bg-white/10 backdrop-blur-sm ring-1 ring-white/20">
-          <Shield className="w-8 h-8 text-white" />
+        <div className="inline-flex items-center justify-center w-14 h-14 mb-6 rounded-xl bg-white/[0.06] backdrop-blur-sm ring-1 ring-white/[0.08]">
+          <Shield className="w-7 h-7 text-white" />
         </div>
-        <h1 className="text-3xl font-bold tracking-tight mb-3">{brandName}</h1>
-        <p className="text-lg text-white/70 max-w-sm leading-relaxed">
+        <h1 className="text-3xl font-semibold tracking-tight mb-3">{brandName}</h1>
+        <p className="text-base text-white/50 max-w-sm leading-relaxed">
           安全、可靠的统一身份认证解决方案
         </p>
       </div>
 
-      <div className="space-y-4 mt-8">
+      <div className="space-y-3 mt-8">
         {[
           { icon: Fingerprint, text: '多因素身份验证' },
           { icon: Lock, text: '企业级安全防护' },
           { icon: KeyRound, text: 'OIDC 标准协议' },
         ].map(({ icon: Icon, text }, i) => (
-          <div key={i} className="flex items-center gap-3 text-white/60">
-            <Icon className="w-5 h-5" />
+          <div key={i} className="flex items-center gap-3 text-white/40">
+            <Icon className="w-4 h-4" />
             <span className="text-sm">{text}</span>
           </div>
         ))}
@@ -108,7 +106,7 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
   const { loginLayout, loginBackgroundUrl, brandName } = useUIConfigStore()
 
   const formSection = (
-    <div className="flex-1 flex items-center justify-center p-6 lg:p-12 bg-slate-50 dark:bg-slate-950">
+    <div className="flex-1 flex items-center justify-center p-6 lg:p-12 bg-gray-50 dark:bg-black">
       <div className="w-full max-w-sm">
         {children}
       </div>
@@ -116,16 +114,16 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
   )
 
   const imageSection = (
-    <div className="relative hidden lg:flex lg:w-[60%] bg-gradient-to-br from-primary-600 via-primary-700 to-slate-900 overflow-hidden">
+    <div className="relative hidden lg:flex lg:w-[55%] bg-gray-900 dark:bg-neutral-950 overflow-hidden">
       <GeometricPattern />
       {loginBackgroundUrl ? (
         <>
           <img
             src={loginBackgroundUrl}
             alt=""
-            className="absolute inset-0 w-full h-full object-cover opacity-40 mix-blend-overlay"
+            className="absolute inset-0 w-full h-full object-cover opacity-30"
           />
-          <div className="absolute inset-0 bg-gradient-to-br from-primary-600/80 to-primary-900/90" />
+          <div className="absolute inset-0 bg-gradient-to-br from-black/60 to-neutral-950/90" />
         </>
       ) : null}
       <BrandContent brandName={brandName} />
@@ -151,9 +149,9 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
 
     case 'centered':
       return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950 p-4">
-          <div className="w-full max-w-[420px]">
-            <div className="card p-8">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black p-4">
+          <div className="w-full max-w-[380px]">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] rounded-xl p-8 shadow-sm dark:shadow-none">
               {children}
             </div>
           </div>
@@ -162,18 +160,18 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
 
     case 'fullscreen':
       return (
-        <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden">
-          {/* Animated gradient background */}
-          <div className="absolute inset-0 bg-slate-950">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary-900/40 via-slate-950 to-slate-950" />
-            <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary-600/20 rounded-full blur-3xl" />
-            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-violet-600/20 rounded-full blur-3xl" />
-            <GeometricPattern />
+        <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gray-50 dark:bg-black">
+          {/* Subtle grid background */}
+          <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.03] opacity-0">
+            <div className="absolute inset-0" style={{
+              backgroundImage: `linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)`,
+              backgroundSize: '60px 60px'
+            }} />
           </div>
 
-          {/* Glass card */}
-          <div className="relative w-full max-w-[420px]">
-            <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-2xl shadow-elevated border border-white/20 dark:border-slate-800 p-8">
+          {/* Card */}
+          <div className="relative w-full max-w-[380px]">
+            <div className="bg-white dark:bg-white/[0.02] backdrop-blur-xl rounded-xl border border-gray-200 dark:border-white/[0.06] p-8 shadow-lg dark:shadow-none">
               {children}
             </div>
           </div>

@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { ArrowRight, Shield, User, Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { Shield, Eye, EyeOff } from 'lucide-react'
 import { getErrorMessage } from '#src/api/client'
 import { authApi } from '#src/api/auth'
 import { LoginPageWrapper } from '#src/components/LoginLayout'
 import { ThemeToggle } from '#src/components/ThemeToggle'
 import { useUIConfigStore } from '#src/stores/theme'
 import { useSessionStore } from '#src/stores/session'
+import { Input } from '#src/components/ui'
 
 export function RegisterPage() {
   const navigate = useNavigate()
@@ -35,7 +36,7 @@ export function RegisterPage() {
 
     setLoading(true)
     try {
-      // 注册
+      // Register
       await authApi.register({
         username: formData.username,
         email: formData.email,
@@ -43,11 +44,12 @@ export function RegisterPage() {
         password: formData.password,
       })
 
-      // 自动登录
-      const result = await authApi.login(formData.username, formData.password) as { user: unknown }
-      setUser(result.user as { id: string; username: string; email: string; display_name: string; picture?: string; is_admin: boolean })
+      // Auto login
+      await authApi.login(formData.username, formData.password)
+      const session = await authApi.getSession() as { user: { id: string; username: string; email: string; display_name: string; picture?: string; is_admin: boolean } }
+      setUser(session.user)
 
-      // 跳转到个人资料页
+      // Redirect to profile
       navigate('/profile')
     } catch (err: unknown) {
       setError(getErrorMessage(err))
@@ -59,12 +61,12 @@ export function RegisterPage() {
   return (
     <LoginPageWrapper>
       {/* Header */}
-      <div className="flex items-center justify-between mb-10">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary-600 text-white">
-            <Shield className="w-5 h-5" />
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-black dark:bg-white">
+            <Shield className="w-4 h-4 text-white dark:text-black" />
           </div>
-          <span className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
+          <span className="text-sm font-medium text-gray-900 dark:text-white">
             {brandName}
           </span>
         </div>
@@ -72,127 +74,88 @@ export function RegisterPage() {
       </div>
 
       {/* Title */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight mb-2 text-slate-900 dark:text-white">
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">
           创建账户
         </h1>
-        <p className="text-slate-500 dark:text-slate-400">
+        <p className="text-sm text-gray-500 dark:text-gray-500">
           填写以下信息完成账户注册
         </p>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="mb-6 p-3 rounded-lg bg-error-50 dark:bg-error-900/10 border border-error-100 dark:border-error-900/20">
-          <p className="text-sm text-error-600 dark:text-error-400">{error}</p>
+        <div className="mb-5 p-3 rounded-lg bg-red-500/[0.08] border border-red-500/[0.16]">
+          <p className="text-sm text-red-400">{error}</p>
         </div>
       )}
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              用户名
-            </label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                required
-                autoFocus
-                className="input-field pl-9"
-                placeholder="用户名"
-              />
-            </div>
-          </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <Input
+            label="用户名"
+            value={formData.username}
+            onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+            placeholder="用户名"
+            required
+            autoFocus
+          />
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              显示名称
-            </label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                value={formData.displayName}
-                onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                required
-                className="input-field pl-9"
-                placeholder="显示名称"
-              />
-            </div>
-          </div>
+          <Input
+            label="显示名称"
+            value={formData.displayName}
+            onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+            placeholder="显示名称"
+            required
+          />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-            邮箱
-          </label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              required
-              className="input-field pl-9"
-              placeholder="your@email.com"
-            />
-          </div>
+        <Input
+          label="邮箱"
+          type="email"
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          placeholder="your@email.com"
+          required
+        />
+
+        <div className="relative">
+          <Input
+            label="密码"
+            type={showPassword ? 'text' : 'password'}
+            value={formData.password}
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            placeholder="至少8位字符"
+            required
+            minLength={8}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-[34px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+          >
+            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-            密码
-          </label>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              required
-              minLength={8}
-              className="input-field pl-9 pr-10"
-              placeholder="至少8位字符"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-            确认密码
-          </label>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={formData.confirmPassword}
-              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              required
-              className="input-field pl-9"
-              placeholder="再次输入密码"
-            />
-          </div>
-        </div>
+        <Input
+          label="确认密码"
+          type={showPassword ? 'text' : 'password'}
+          value={formData.confirmPassword}
+          onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+          placeholder="再次输入密码"
+          required
+        />
 
         <button
           type="submit"
           disabled={loading}
-          className="btn-primary w-full group"
+          style={{ backgroundColor: '#ffffff', color: '#000000' }}
+          className="w-full py-3 px-4 font-medium text-sm rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-white"
         >
           {loading ? (
-            <span className="flex items-center gap-2">
+            <span className="flex items-center justify-center gap-2">
               <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -200,21 +163,18 @@ export function RegisterPage() {
               注册中...
             </span>
           ) : (
-            <span className="flex items-center gap-2">
-              创建账户
-              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-            </span>
+            '创建账户'
           )}
         </button>
       </form>
 
       {/* Footer */}
-      <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700/50 text-center">
-        <p className="text-sm text-slate-500 dark:text-slate-400">
+      <div className="mt-6 pt-6 border-t border-gray-200 dark:border-white/[0.06] text-center">
+        <p className="text-sm text-gray-500">
           已有账户？
           <Link
             to="/login"
-            className="ml-1 text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 font-medium transition-colors"
+            className="ml-1 text-gray-900 hover:underline dark:text-white transition-colors"
           >
             立即登录
           </Link>

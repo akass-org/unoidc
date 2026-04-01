@@ -1,136 +1,231 @@
 import { useState, useEffect } from 'react'
+import { Camera } from 'lucide-react'
 import { useSessionStore } from '#src/stores/session'
+import { meApi } from '#src/api/me'
+import { useApi } from '#src/hooks'
+import { 
+  Card, 
+  CardHeader, 
+  Input, 
+  Button, 
+  Avatar,
+  useToast 
+} from '#src/components/ui'
+import { getErrorMessage } from '#src/api/client'
 
 export function ProfilePage() {
-  const { user } = useSessionStore()
+  const { user, setUser } = useSessionStore()
+  const { addToast } = useToast()
+  
+  // Profile form state
+  const [displayName, setDisplayName] = useState('')
+  const [email, setEmail] = useState('')
+  
+  // Password form state
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  
+  // Update profile API
+  const { loading: updatingProfile, execute: updateProfile } = useApi(
+    meApi.updateProfile,
+    {
+      successMessage: '个人资料已更新',
+      onSuccess: (data) => {
+        setUser(data as { id: string; username: string; email: string; display_name: string; picture?: string; is_admin: boolean })
+      }
+    }
+  )
+  
+  // Change password API
+  const { loading: changingPassword, execute: changePassword } = useApi(
+    meApi.changePassword,
+    {
+      successMessage: '密码已修改',
+      onSuccess: () => {
+        setCurrentPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+      }
+    }
+  )
 
-  const [formData, setFormData] = useState({
-    displayName: '',
-    email: '',
-  })
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState('')
-
+  // Load user data
   useEffect(() => {
     if (user) {
-      setFormData({
-        displayName: user.display_name || '',
-        email: user.email || '',
-      })
+      setDisplayName(user.display_name || '')
+      setEmail(user.email || '')
     }
   }, [user])
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    setMessage('')
+    await updateProfile({ display_name: displayName, email })
+  }
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (newPassword !== confirmPassword) {
+      addToast({
+        type: 'error',
+        title: '两次输入的密码不一致',
+      })
+      return
+    }
+    
+    if (newPassword.length < 8) {
+      addToast({
+        type: 'error',
+        title: '新密码至少需要8个字符',
+      })
+      return
+    }
+    
+    await changePassword({ current_password: currentPassword, new_password: newPassword })
+  }
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
     try {
-      // TODO: 实现更新接口
-      setMessage('资料已更新')
-    } catch {
-      setMessage('更新失败')
-    } finally {
-      setLoading(false)
+      const result = await meApi.uploadAvatar(file)
+      setUser(result as { id: string; username: string; email: string; display_name: string; picture?: string; is_admin: boolean })
+      addToast({
+        type: 'success',
+        title: '头像已更新',
+      })
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: '头像上传失败',
+        message: getErrorMessage(err),
+      })
     }
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">个人资料</h1>
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-lg font-medium text-gray-900 dark:text-white">个人资料</h1>
+        <p className="text-sm text-gray-500 mt-0.5">管理您的账户信息和安全设置</p>
+      </div>
 
-      {message && (
-        <div className="mb-6 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm">
-          {message}
-        </div>
-      )}
-
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
-        {/* Avatar Section */}
-        <div className="p-8 text-center border-b border-gray-100 dark:border-gray-800">
-          <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white text-3xl font-bold">
-            {user?.display_name?.charAt(0) || user?.username?.charAt(0) || '?'}
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{user?.display_name}</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">@{user?.username}</p>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-8 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                用户名
-              </label>
+      {/* Avatar Section */}
+      <Card>
+        <div className="flex flex-col sm:flex-row items-center gap-5">
+          <div className="relative">
+            <Avatar 
+              name={user?.display_name || user?.username || '?'} 
+              src={user?.picture}
+              size="xl" 
+            />
+            <label className="absolute -bottom-1 -right-1 w-7 h-7 bg-white hover:bg-gray-200 rounded-full flex items-center justify-center cursor-pointer transition-colors shadow-lg">
+              <Camera className="w-3.5 h-3.5 text-black" />
               <input
-                type="text"
-                value={user?.username || ''}
-                disabled
-                className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-sm"
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                className="hidden"
               />
-              <p className="mt-1 text-xs text-gray-500">用户名不可修改</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                显示名称
-              </label>
-              <input
-                type="text"
-                value={formData.displayName}
-                onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              邮箱
             </label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          </div>
+          <div className="text-center sm:text-left">
+            <h2 className="text-base font-medium text-gray-900 dark:text-white">
+              {user?.display_name || user?.username}
+            </h2>
+            <p className="text-sm text-gray-500">@{user?.username}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-600 mt-1">
+              {user?.is_admin ? '管理员' : '普通用户'}
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Profile Form */}
+      <Card>
+        <CardHeader 
+          title="基本信息" 
+          subtitle="更新您的显示名称和邮箱地址"
+        />
+        <form onSubmit={handleProfileSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="用户名"
+              value={user?.username || ''}
+              disabled
+              helper="用户名不可修改"
+            />
+            <Input
+              label="显示名称"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="您的显示名称"
             />
           </div>
-
-          <div className="pt-4 flex justify-end">
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+          <Input
+            label="邮箱地址"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="your@email.com"
+          />
+          <div className="flex justify-end pt-1">
+            <Button 
+              type="submit" 
+              loading={updatingProfile}
+              size="sm"
             >
-              {loading ? '保存中...' : '保存更改'}
-            </button>
+              保存更改
+            </Button>
           </div>
         </form>
-      </div>
+      </Card>
 
-      {/* Password Section */}
-      <div className="mt-8 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-8">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">修改密码</h3>
-        <div className="space-y-4 max-w-md">
-          <input
+      {/* Password Form */}
+      <Card>
+        <CardHeader 
+          title="修改密码" 
+          subtitle="定期更改密码可以提高账户安全性"
+        />
+        <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-md">
+          <Input
+            label="当前密码"
             type="password"
-            placeholder="当前密码"
-            className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="输入当前密码"
+            required
           />
-          <input
+          <Input
+            label="新密码"
             type="password"
-            placeholder="新密码"
-            className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="至少8位字符"
+            required
           />
-          <input
+          <Input
+            label="确认新密码"
             type="password"
-            placeholder="确认新密码"
-            className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="再次输入新密码"
+            required
           />
-          <button className="px-6 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors">
-            更新密码
-          </button>
-        </div>
-      </div>
+          <div className="flex justify-end pt-1">
+            <Button 
+              type="submit" 
+              loading={changingPassword}
+              variant="secondary"
+              size="sm"
+            >
+              更新密码
+            </Button>
+          </div>
+        </form>
+      </Card>
     </div>
   )
 }

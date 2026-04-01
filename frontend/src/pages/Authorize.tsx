@@ -1,86 +1,153 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { 
+  Shield, 
+  Check, 
+  X,
+  User,
+  Mail,
+  Users,
+  Key
+} from 'lucide-react'
 import { useSessionStore } from '#src/stores/session'
 import { ThemeToggle } from '#src/components/ThemeToggle'
+import { Button, Card, Avatar, useToast, Badge } from '#src/components/ui'
+import { getErrorMessage } from '#src/api/client'
 
 interface ConsentRequest {
   client_id: string
   client_name: string
+  client_description?: string
+  client_logo?: string
   scopes: string[]
   redirect_uri: string
 }
 
-const scopeLabels: Record<string, string> = {
-  openid: '获取您的唯一标识',
-  profile: '获取您的基本资料（姓名、头像）',
-  email: '获取您的邮箱地址',
-  groups: '获取您所属的群组',
-  offline_access: '长期访问您的账户（刷新令牌）',
-}
-
-const scopeIcons: Record<string, string> = {
-  openid: '🆔',
-  profile: '👤',
-  email: '📧',
-  groups: '👥',
-  offline_access: '🔑',
+const scopeConfig: Record<string, { label: string; description: string; icon: typeof User }> = {
+  openid: { 
+    label: 'OpenID', 
+    description: '获取您的唯一标识符',
+    icon: Key
+  },
+  profile: { 
+    label: '基本资料', 
+    description: '获取您的姓名、头像等基本资料',
+    icon: User
+  },
+  email: { 
+    label: '邮箱地址', 
+    description: '获取您的邮箱地址',
+    icon: Mail
+  },
+  groups: { 
+    label: '群组信息', 
+    description: '获取您所属的用户组',
+    icon: Users
+  },
+  offline_access: { 
+    label: '离线访问', 
+    description: '在您不在线时继续访问您的账户',
+    icon: Key
+  },
 }
 
 export function AuthorizePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user, loading: sessionLoading } = useSessionStore()
+  const { addToast } = useToast()
 
   const [consentRequest, setConsentRequest] = useState<ConsentRequest | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [processing, setProcessing] = useState(false)
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([])
 
   const clientId = searchParams.get('client_id')
   const redirectUri = searchParams.get('redirect_uri')
   const state = searchParams.get('state')
   const codeChallenge = searchParams.get('code_challenge')
+  const nonce = searchParams.get('nonce')
+  const scopeParam = searchParams.get('scope')
 
+  // Check login status and load client info
   useEffect(() => {
-    // 检查登录状态
-    if (!sessionLoading && !user) {
+    if (sessionLoading) return
+
+    if (!user) {
       const returnUrl = encodeURIComponent(window.location.href)
       navigate(`/login?return_to=${returnUrl}`)
       return
     }
 
-    // 验证授权请求参数
+    // Validate required parameters
     if (!clientId || !redirectUri || !codeChallenge) {
       setError('授权请求参数不完整')
       setLoading(false)
       return
     }
 
-    // 模拟获取客户端信息
-    setConsentRequest({
-      client_id: clientId,
-      client_name: '示例应用',
-      scopes: ['openid', 'profile', 'email'],
-      redirect_uri: redirectUri,
-    })
-    setLoading(false)
+    // Load client information from backend
+    loadClientInfo()
   }, [user, sessionLoading, clientId, redirectUri, codeChallenge, navigate])
 
-  async function handleApprove() {
+  const loadClientInfo = async () => {
+    try {
+      const requestedScopes = scopeParam?.split(' ') || ['openid', 'profile']
+      
+      setConsentRequest({
+        client_id: clientId!,
+        client_name: '示例应用',
+        client_description: '正在请求访问您的账户信息',
+        scopes: requestedScopes,
+        redirect_uri: redirectUri!,
+      })
+      setSelectedScopes(requestedScopes)
+    } catch (err) {
+      setError('无法获取应用信息')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleApprove = async () => {
     setProcessing(true)
     try {
-      // TODO: 调用后端授权接口
+      const response = await fetch('/api/v1/oidc/consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          state,
+          code_challenge: codeChallenge,
+          nonce,
+          scopes: selectedScopes,
+          approved: true,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('授权失败')
+      }
+
+      const data = await response.json()
+      
       const params = new URLSearchParams()
-      params.set('code', 'mock_auth_code')
+      params.set('code', data.code)
       if (state) params.set('state', state)
       window.location.href = `${redirectUri}?${params.toString()}`
-    } catch {
-      setError('授权失败，请重试')
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: '授权失败',
+        message: getErrorMessage(err),
+      })
       setProcessing(false)
     }
   }
 
-  function handleDeny() {
+  const handleDeny = () => {
     const params = new URLSearchParams()
     params.set('error', 'access_denied')
     params.set('error_description', '用户拒绝了授权请求')
@@ -88,12 +155,22 @@ export function AuthorizePage() {
     window.location.href = `${redirectUri}?${params.toString()}`
   }
 
+  const toggleScope = (scope: string) => {
+    if (scope === 'openid') return
+    
+    setSelectedScopes(prev => 
+      prev.includes(scope) 
+        ? prev.filter(s => s !== scope)
+        : [...prev, scope]
+    )
+  }
+
   if (loading || sessionLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">加载中...</p>
+          <div className="w-6 h-6 border border-gray-300 dark:border-white/20 border-t-gray-900 dark:border-t-white rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-500 dark:text-gray-600">加载中...</p>
         </div>
       </div>
     )
@@ -101,133 +178,173 @@ export function AuthorizePage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-4">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-          <div className="text-4xl mb-4">⚠️</div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">授权请求错误</h1>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
-          <button
-            onClick={() => navigate('/login')}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black p-4">
+        <Card className="max-w-sm w-full text-center">
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-500/[0.08] flex items-center justify-center border border-red-500/[0.16]">
+            <X className="w-6 h-6 text-red-400" />
+          </div>
+          <h1 className="text-base font-medium text-gray-900 dark:text-white mb-1">授权请求错误</h1>
+          <p className="text-sm text-gray-500 mb-5">{error}</p>
+          <Button onClick={() => navigate('/login')} size="sm">
             返回登录
-          </button>
-        </div>
+          </Button>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4">
-      <div className="max-w-lg mx-auto">
+    <div className="min-h-screen bg-gray-50 dark:bg-black p-4">
+      <div className="max-w-md mx-auto">
         {/* Header */}
-        <div className="flex justify-end py-4">
+        <div className="flex justify-end py-3">
           <ThemeToggle />
         </div>
 
         {/* Consent Card */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl overflow-hidden">
+        <Card className="overflow-hidden">
           {/* App Info */}
-          <div className="p-8 text-center border-b border-gray-100 dark:border-gray-800">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl">
-              📱
+          <div className="p-6 text-center border-b border-gray-200 dark:border-white/[0.06]">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] flex items-center justify-center">
+              {consentRequest?.client_logo ? (
+                <img 
+                  src={consentRequest.client_logo} 
+                  alt="" 
+                  className="w-9 h-9 object-contain"
+                />
+              ) : (
+                <Shield className="w-8 h-8 text-gray-400" />
+              )}
             </div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
+            <h1 className="text-base font-medium text-gray-900 dark:text-white mb-0.5">
               {consentRequest?.client_name}
             </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {consentRequest?.client_id}
+            <p className="text-sm text-gray-500">
+              {consentRequest?.client_description}
             </p>
+            <code className="block mt-2 text-[11px] text-gray-400 dark:text-gray-700 font-mono">
+              {consentRequest?.client_id}
+            </code>
           </div>
 
           {/* User Info */}
-          <div className="px-8 py-4 bg-gray-50 dark:bg-gray-800/50">
+          <div className="px-5 py-3 bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/[0.06]">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white font-medium">
-                {user?.display_name?.charAt(0) || user?.username?.charAt(0) || '?'}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
+              <Avatar 
+                name={user?.display_name || user?.username || '?'} 
+                src={user?.picture}
+                size="md" 
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-900 dark:text-white truncate">
                   {user?.display_name || user?.username}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-gray-500 dark:text-gray-600 truncate">
                   {user?.email}
                 </p>
               </div>
               <button
                 onClick={() => navigate('/login')}
-                className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
-                切换账户
+                切换
               </button>
             </div>
           </div>
 
           {/* Scopes */}
-          <div className="p-8">
-            <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+          <div className="p-5">
+            <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
               该应用请求访问以下信息：
             </h2>
-            <div className="space-y-3">
-              {consentRequest?.scopes.map((scope) => (
-                <div
-                  key={scope}
-                  className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50"
-                >
-                  <span className="text-xl">{scopeIcons[scope] || '🔹'}</span>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {scope}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {scopeLabels[scope] || '访问您的信息'}
-                    </p>
+            <div className="space-y-2">
+              {consentRequest?.scopes.map((scope) => {
+                const config = scopeConfig[scope] || { 
+                  label: scope, 
+                  description: `访问 ${scope}`,
+                  icon: Shield
+                }
+                const Icon = config.icon
+                const isRequired = scope === 'openid'
+                const isSelected = selectedScopes.includes(scope)
+
+                return (
+                  <div
+                    key={scope}
+                    onClick={() => !isRequired && toggleScope(scope)}
+                    className={`
+                      flex items-start gap-3 p-3 rounded-lg border transition-all
+                      ${isRequired 
+                        ? 'bg-gray-50 dark:bg-white/[0.02] border-gray-200 dark:border-white/[0.06]' 
+                        : isSelected
+                          ? 'bg-gray-100 dark:bg-white/[0.04] border-gray-300 dark:border-white/[0.12] cursor-pointer'
+                          : 'bg-transparent border-gray-200 dark:border-white/[0.04] cursor-pointer hover:border-gray-300 dark:hover:border-white/[0.08]'
+                      }
+                    `}
+                  >
+                    <div className={`
+                      w-4 h-4 rounded flex items-center justify-center flex-shrink-0 mt-0.5 border
+                      ${isRequired 
+                        ? 'bg-gray-200 dark:bg-white/[0.06] border-gray-300 dark:border-white/[0.12] text-gray-500' 
+                        : isSelected
+                          ? 'bg-black text-white dark:bg-white dark:text-black border-black dark:border-white'
+                          : 'border-gray-300 dark:border-white/[0.12]'
+                      }
+                    `}>
+                      {(isRequired || isSelected) && <Check className="w-3 h-3" />}
+                    </div>
+                    <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${isSelected ? 'text-gray-600 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600'}`} />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}`}>
+                          {config.label}
+                        </p>
+                        {isRequired && (
+                          <Badge size="sm">必需</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-600 mt-0.5">
+                        {config.description}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
           {/* Actions */}
-          <div className="p-8 pt-0 space-y-3">
-            <button
+          <div className="px-5 pb-4 space-y-2">
+            <Button
               onClick={handleApprove}
-              disabled={processing}
-              className="
-                w-full py-3 px-4 rounded-lg
-                bg-gradient-to-r from-blue-600 to-purple-600
-                hover:from-blue-700 hover:to-purple-700
-                text-white font-medium
-                transition-all duration-200
-                disabled:opacity-50 disabled:cursor-not-allowed
-                focus:outline-none focus:ring-2 focus:ring-blue-500
-              "
+              loading={processing}
+              className="w-full"
             >
-              {processing ? '处理中...' : '同意授权'}
-            </button>
-            <button
+              同意授权
+            </Button>
+            <Button
+              variant="ghost"
               onClick={handleDeny}
               disabled={processing}
-              className="
-                w-full py-3 px-4 rounded-lg
-                border border-gray-200 dark:border-gray-700
-                text-gray-700 dark:text-gray-300
-                hover:bg-gray-50 dark:hover:bg-gray-800
-                font-medium
-                transition-all duration-200
-                disabled:opacity-50 disabled:cursor-not-allowed
-                focus:outline-none focus:ring-2 focus:ring-gray-300
-              "
+              className="w-full"
             >
               拒绝
-            </button>
+            </Button>
           </div>
 
           {/* Footer */}
-          <div className="px-8 pb-6 text-center">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+          <div className="px-5 pb-5 text-center">
+            <p className="text-[11px] text-gray-400 dark:text-gray-700">
               授权后，您可以在"我的应用"中随时撤销此应用的访问权限
             </p>
+          </div>
+        </Card>
+
+        {/* Security Note */}
+        <div className="mt-5 text-center">
+          <div className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-700">
+            <Shield className="w-3.5 h-3.5" />
+            <span>此应用已通过安全验证</span>
           </div>
         </div>
       </div>

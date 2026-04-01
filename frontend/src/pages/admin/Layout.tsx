@@ -1,74 +1,112 @@
-import { Outlet, NavLink, Link } from 'react-router-dom'
+import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom'
+import { 
+  Users, 
+  Tags, 
+  Shield, 
+  ClipboardList, 
+  Settings,
+  LogOut,
+  LayoutDashboard
+} from 'lucide-react'
 import { useSessionStore } from '#src/stores/session'
-import { ThemeToggle } from '#src/components/ThemeToggle'
 import { useUIConfigStore } from '#src/stores/theme'
+import { ThemeToggle } from '#src/components/ThemeToggle'
+import { Avatar } from '#src/components/ui'
 
 const navItems = [
-  { to: '/admin/users', label: '用户管理', icon: '👥' },
-  { to: '/admin/groups', label: '用户组', icon: '🏷️' },
-  { to: '/admin/clients', label: 'Client 管理', icon: '🔐' },
-  { to: '/admin/audit-logs', label: '审计日志', icon: '📋' },
-  { to: '/admin/settings', label: '系统设置', icon: '⚙️' },
+  { to: '/admin/users', label: '用户管理', icon: Users },
+  { to: '/admin/groups', label: '用户组', icon: Tags },
+  { to: '/admin/clients', label: '应用管理', icon: Shield },
+  { to: '/admin/audit-logs', label: '审计日志', icon: ClipboardList },
+  { to: '/admin/settings', label: '系统设置', icon: Settings },
 ]
 
 export function AdminLayout() {
-  const { user } = useSessionStore()
+  const { user, logout } = useSessionStore()
   const { brandName } = useUIConfigStore()
+  const navigate = useNavigate()
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login')
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+    <div className="min-h-screen bg-gray-50 dark:bg-black">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-8">
-              <Link to="/admin/users" className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                  <span className="text-white text-sm font-bold">🔐</span>
+      <header className="sticky top-0 z-40 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-gray-200 dark:border-white/[0.06]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between h-14">
+            <div className="flex items-center gap-6">
+              <Link to="/admin/users" className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-md bg-black dark:bg-white flex items-center justify-center">
+                  <LayoutDashboard className="w-4 h-4 text-white dark:text-black" />
                 </div>
-                <span className="font-bold text-gray-900 dark:text-white">{brandName}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm text-gray-900 dark:text-white">{brandName}</span>
+                  <span className="text-[10px] text-gray-500 dark:text-gray-600 px-1.5 py-0.5 bg-gray-100 dark:bg-white/[0.04] rounded">管理</span>
+                </div>
               </Link>
-              <span className="text-sm text-gray-500 dark:text-gray-400">管理后台</span>
             </div>
-            <div className="flex items-center gap-4">
+            
+            <div className="flex items-center gap-1">
               <ThemeToggle />
-              <div className="flex items-center gap-3 pl-4 border-l border-gray-200 dark:border-gray-700">
+              
+              <div className="flex items-center gap-2 pl-3 ml-2 border-l border-gray-200 dark:border-white/[0.06]">
                 <Link
                   to="/profile"
-                  className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                  className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
                 >
-                  返回前台
+                  前台
                 </Link>
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white text-sm font-medium">
-                  {user?.display_name?.charAt(0) || user?.username?.charAt(0) || '?'}
+                
+                <div className="flex items-center gap-2">
+                  <Avatar 
+                    name={user?.display_name || user?.username || '?'} 
+                    size="sm" 
+                  />
+                  <span className="hidden sm:block text-xs text-gray-500 dark:text-gray-400">
+                    {user?.display_name || user?.username}
+                  </span>
                 </div>
+                
+                <button
+                  onClick={handleLogout}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-md transition-colors"
+                  title="退出登录"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Sidebar */}
-          <aside className="lg:w-64 flex-shrink-0">
-            <nav className="space-y-1">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-                    }`
-                  }
-                >
-                  <span>{item.icon}</span>
-                  {item.label}
-                </NavLink>
-              ))}
+          <aside className="lg:w-48 flex-shrink-0">
+            <nav className="space-y-0.5 sticky top-20">
+              {navItems.map((item) => {
+                const Icon = item.icon
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={({ isActive }) =>
+                      `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all ${
+                        isActive
+                          ? 'bg-black text-white dark:bg-white dark:text-black font-medium'
+                          : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04]'
+                      }`
+                    }
+                  >
+                    <Icon className="w-4 h-4" />
+                    {item.label}
+                  </NavLink>
+                )
+              })}
             </nav>
           </aside>
 

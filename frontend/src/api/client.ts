@@ -2,36 +2,61 @@ import ky from 'ky'
 
 // 统一的 API 错误类型
 export class ApiError extends Error {
+  statusCode?: number
+  responseData?: unknown
+  
   constructor(
     message: string,
-    public statusCode?: number,
-    public responseData?: unknown
+    statusCode?: number,
+    responseData?: unknown
   ) {
     super(message)
     this.name = 'ApiError'
+    this.statusCode = statusCode
+    this.responseData = responseData
   }
 }
 
 // 获取用户友好的错误信息
-export function getErrorMessage(err: unknown): string {
-  // 如果是我们的 ApiError，根据状态码返回不同消息
+// 注意：任何情况下都不把原始错误 message 暴露给用户
+export function getErrorMessage(err: unknown, context?: 'login' | 'default'): string {
+  const ctx = context || 'default'
+  
+  // 如果是我们的 ApiError，根据状态码返回通用友好消息
   if (err instanceof ApiError) {
-    // 5xx 服务器错误 - 不暴露技术细节
+    // 5xx 服务器错误
     if (err.statusCode && err.statusCode >= 500) {
       return '服务器繁忙，请稍后再试'
     }
-    // 4xx 客户端错误 - 使用后端返回的错误信息
-    if (err.statusCode && err.statusCode >= 400) {
-      // 如果有后端返回的具体错误信息，使用它
-      if (err.responseData && typeof err.responseData === 'object') {
-        const data = err.responseData as Record<string, string>
-        if (data.error_description) return data.error_description
-        if (data.error) return data.error
-        if (data.message) return data.message
+    // 401 未授权
+    if (err.statusCode === 401) {
+      // 登录场景下，401 表示用户名/密码错误
+      if (ctx === 'login') {
+        return '用户名或密码错误'
       }
-      return err.message || '请求失败，请检查输入信息'
+      return '登录已过期，请重新登录'
     }
-    return err.message
+    // 403 禁止访问
+    if (err.statusCode === 403) {
+      return '您没有权限执行此操作'
+    }
+    // 404 未找到
+    if (err.statusCode === 404) {
+      return '请求的资源不存在'
+    }
+    // 409 冲突（如用户名已存在）
+    if (err.statusCode === 409) {
+      return '该用户名或邮箱已被使用'
+    }
+    // 422 验证错误
+    if (err.statusCode === 422) {
+      return '输入信息有误，请检查后重试'
+    }
+    // 其他 4xx 客户端错误
+    if (err.statusCode && err.statusCode >= 400) {
+      return '请求失败，请检查输入信息后重试'
+    }
+    return '操作失败，请稍后重试'
   }
 
   // 原生 Error

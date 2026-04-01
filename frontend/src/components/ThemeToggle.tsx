@@ -16,12 +16,12 @@ export function ThemeToggle({ showLabel = false }: { showLabel?: boolean }) {
       onClick={() => setMode(mode === 'light' ? 'dark' : mode === 'dark' ? 'auto' : 'light')}
       className="
         group inline-flex items-center gap-2
-        px-3 py-2 rounded-lg
-        text-slate-600 dark:text-slate-400
-        hover:text-slate-900 dark:hover:text-slate-200
-        hover:bg-slate-100 dark:hover:bg-slate-800
-        transition-all duration-150
-        focus:outline-none focus:ring-2 focus:ring-slate-500/20
+        px-2.5 py-2 rounded-lg
+        text-gray-500
+        hover:text-gray-300
+        hover:bg-white/[0.04]
+        transition-all duration-200
+        focus:outline-none focus:ring-1 focus:ring-white/10
       "
       title={`当前: ${themeConfig[mode].label} (${resolvedMode === 'dark' ? '深色' : '浅色'}模式)`}
     >
@@ -41,7 +41,7 @@ export function ThemeSelector() {
   const options: ThemeMode[] = ['light', 'dark', 'auto']
 
   return (
-    <div className="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+    <div className="inline-flex p-1 bg-white/[0.04] rounded-lg border border-white/[0.08]">
       {options.map((option) => (
         <button
           key={option}
@@ -49,10 +49,10 @@ export function ThemeSelector() {
           onClick={() => setMode(option)}
           className={`
             flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium
-            transition-all duration-150
+            transition-all duration-200
             ${mode === option
-              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              ? 'bg-white/[0.08] text-white'
+              : 'text-gray-500 hover:text-gray-300'
             }
           `}
         >

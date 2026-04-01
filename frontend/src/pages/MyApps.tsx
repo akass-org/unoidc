@@ -1,22 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { AppWindow, Trash2, Clock, Shield } from 'lucide-react'
+import { meApi } from '#src/api/me'
+import { 
+  Card, 
+  Button, 
+  EmptyState,
+  ConfirmModal,
+  useToast
+} from '#src/components/ui'
+import { getErrorMessage } from '#src/api/client'
 
 interface App {
-  id: string
-  name: string
-  description: string
-  grantedAt: string
+  client_id: string
+  client_name: string
+  description?: string
+  granted_at: string
   scopes: string[]
 }
-
-const mockApps: App[] = [
-  {
-    id: 'app-1',
-    name: '示例应用',
-    description: '这是一个示例应用',
-    grantedAt: '2025-03-15',
-    scopes: ['openid', 'profile', 'email'],
-  },
-]
 
 const scopeLabels: Record<string, string> = {
   openid: '唯一标识',
@@ -26,98 +26,190 @@ const scopeLabels: Record<string, string> = {
   offline_access: '长期访问',
 }
 
-export function MyAppsPage() {
-  const [apps, setApps] = useState<App[]>(mockApps)
-  const [revoking, setRevoking] = useState<string | null>(null)
+const scopeDescriptions: Record<string, string> = {
+  openid: '访问您的 OpenID 标识',
+  profile: '访问您的姓名、头像等基本资料',
+  email: '访问您的邮箱地址',
+  groups: '访问您所属的用户组',
+  offline_access: '在离线时继续访问您的账户',
+}
 
-  async function handleRevoke(appId: string) {
-    setRevoking(appId)
+export function MyAppsPage() {
+  const [apps, setApps] = useState<App[]>([])
+  const [loading, setLoading] = useState(true)
+  const [revokingId, setRevokingId] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const { addToast } = useToast()
+
+  // Fetch authorized apps
+  useEffect(() => {
+    loadApps()
+  }, [])
+
+  const loadApps = async () => {
     try {
-      // TODO: 调用撤销接口
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      setApps(apps.filter((a) => a.id !== appId))
+      setLoading(true)
+      const data = await meApi.getApps() as App[]
+      setApps(data)
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: '加载失败',
+        message: getErrorMessage(err),
+      })
     } finally {
-      setRevoking(null)
+      setLoading(false)
     }
   }
 
+  const handleRevoke = async (clientId: string) => {
+    try {
+      setRevokingId(clientId)
+      await meApi.revokeConsent(clientId)
+      setApps(apps.filter(a => a.client_id !== clientId))
+      addToast({
+        type: 'success',
+        title: '授权已撤销',
+      })
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: '撤销失败',
+        message: getErrorMessage(err),
+      })
+    } finally {
+      setRevokingId(null)
+      setConfirmDelete(null)
+    }
+  }
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-48">
+        <div className="w-6 h-6 border border-gray-300 dark:border-white/20 border-t-gray-900 dark:border-t-white rounded-full animate-spin" />
+      </div>
+    )
+  }
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">我的应用</h1>
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-lg font-medium text-gray-900 dark:text-white">我的应用</h1>
+        <p className="text-sm text-gray-500 mt-0.5">管理已授权访问您账户的第三方应用</p>
+      </div>
 
       {apps.length === 0 ? (
-        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-12 text-center">
-          <div className="text-6xl mb-4">📱</div>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-            暂无授权的应用
-          </h3>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
-            您还没有授权任何第三方应用访问您的账户
-          </p>
-        </div>
+        <Card padding="lg">
+          <EmptyState
+            icon={<AppWindow className="w-6 h-6" />}
+            title="暂无授权的应用"
+            description="您还没有授权任何第三方应用访问您的账户信息"
+          />
+        </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {apps.map((app) => (
-            <div
-              key={app.id}
-              className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6"
-            >
-              <div className="flex items-start justify-between">
+            <Card key={app.client_id} hover>
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div className="flex items-start gap-4">
-                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-2xl">
-                    📱
+                  <div className="w-11 h-11 rounded-lg bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06] flex items-center justify-center flex-shrink-0">
+                    <AppWindow className="w-5 h-5 text-gray-400" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {app.name}
+                    <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+                      {app.client_name}
                     </h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      {app.description}
+                    <p className="text-xs text-gray-500 dark:text-gray-600 font-mono mt-0.5">
+                      {app.client_id}
                     </p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-                      授权时间: {app.grantedAt}
-                    </p>
+                    {app.description && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        {app.description}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-600">
+                      <Clock className="w-3.5 h-3.5" />
+                      授权于 {formatDate(app.granted_at)}
+                    </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleRevoke(app.id)}
-                  disabled={revoking === app.id}
-                  className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmDelete(app.client_id)}
+                  loading={revokingId === app.client_id}
+                  className="text-red-400 hover:text-red-300 hover:bg-red-500/[0.08]"
                 >
-                  {revoking === app.id ? '撤销中...' : '撤销访问'}
-                </button>
+                  <Trash2 className="w-4 h-4" />
+                  撤销
+                </Button>
               </div>
 
               {/* Scopes */}
-              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">已授权权限:</p>
-                <div className="flex flex-wrap gap-2">
+              <div className="mt-5 pt-4 border-t border-gray-200 dark:border-white/[0.04]">
+                <p className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wider mb-2">
+                  已授权权限
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {app.scopes.map((scope) => (
-                    <span
+                    <div 
                       key={scope}
-                      className="px-2 py-1 text-xs rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                      className="flex items-start gap-2.5 p-2.5 rounded-md bg-gray-50 dark:bg-white/[0.02]"
                     >
-                      {scopeLabels[scope] || scope}
-                    </span>
+                      <Shield className="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm text-gray-700 dark:text-gray-300">
+                          {scopeLabels[scope] || scope}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-600 mt-0.5">
+                          {scopeDescriptions[scope] || `访问 ${scope}`}
+                        </p>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
 
       {/* Info Card */}
-      <div className="mt-8 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
-        <h4 className="text-sm font-medium text-blue-900 dark:text-blue-300 mb-2">
-          关于应用授权
-        </h4>
-        <ul className="text-xs text-blue-700 dark:text-blue-400 space-y-1 list-disc list-inside">
-          <li>您可以随时撤销对任何应用的授权</li>
-          <li>撤销授权后，该应用将无法再访问您的账户信息</li>
-          <li>相关刷新令牌将被立即作废</li>
-        </ul>
-      </div>
+      <Card className="bg-blue-50 dark:bg-blue-500/[0.02] border-blue-200 dark:border-blue-500/[0.08]">
+        <div className="flex items-start gap-3">
+          <Shield className="w-4 h-4 text-blue-500 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <h4 className="text-sm font-medium text-blue-600 dark:text-blue-400">关于应用授权</h4>
+            <ul className="text-sm text-blue-600/70 dark:text-blue-400/70 mt-2 space-y-1 list-disc list-inside">
+              <li>您可以随时撤销对任何应用的授权</li>
+              <li>撤销授权后，该应用将无法再访问您的账户信息</li>
+              <li>相关刷新令牌将被立即作废</li>
+            </ul>
+          </div>
+        </div>
+      </Card>
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        title="撤销应用授权"
+        description="确定要撤销此应用的访问权限吗？撤销后该应用将无法再访问您的账户信息。"
+        onConfirm={() => confirmDelete && handleRevoke(confirmDelete)}
+        confirmText="确认撤销"
+        variant="danger"
+        loading={revokingId === confirmDelete}
+      />
     </div>
   )
 }

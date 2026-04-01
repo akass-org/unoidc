@@ -5,6 +5,7 @@ import 'virtual:uno.css'
 import '@unocss/reset/tailwind.css'
 import App from './App.tsx'
 import { initTheme } from './stores/theme.ts'
+import { ToastProvider } from './components/ui'
 
 function ThemeInitializer() {
   useEffect(() => {
@@ -16,8 +17,10 @@ function ThemeInitializer() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <ThemeInitializer />
-      <App />
+      <ToastProvider>
+        <ThemeInitializer />
+        <App />
+      </ToastProvider>
     </BrowserRouter>
   </StrictMode>,
 )

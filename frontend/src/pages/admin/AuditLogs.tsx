@@ -1,4 +1,25 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { 
+  ClipboardList, 
+  Search, 
+  Download,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  Key,
+  LogOut,
+  UserPlus,
+  Lock
+} from 'lucide-react'
+import { adminApi } from '#src/api/admin'
+import { useToast, Button } from '#src/components/ui'
+import { 
+  Card, 
+  Badge,
+  EmptyState,
+  Table
+} from '#src/components/ui'
+import { getErrorMessage } from '#src/api/client'
 
 interface AuditLog {
   id: string
@@ -13,98 +34,207 @@ interface AuditLog {
   created_at: string
 }
 
-const mockLogs: AuditLog[] = [
-  {
-    id: '1',
-    event_type: 'login_success',
-    user_id: '1',
-    username: 'admin',
-    ip_address: '192.168.1.1',
-    user_agent: 'Mozilla/5.0...',
-    outcome: 'success',
-    created_at: '2025-03-30 10:30:00',
-  },
-  {
-    id: '2',
-    event_type: 'login_failure',
-    username: 'user1',
-    ip_address: '192.168.1.2',
-    user_agent: 'Mozilla/5.0...',
-    outcome: 'failure',
-    reason: '密码错误',
-    created_at: '2025-03-30 09:15:00',
-  },
-  {
-    id: '3',
-    event_type: 'token_issued',
-    user_id: '2',
-    username: 'user1',
-    client_id: 'demo-app',
-    ip_address: '192.168.1.1',
-    user_agent: 'Mozilla/5.0...',
-    outcome: 'success',
-    created_at: '2025-03-30 10:35:00',
-  },
-]
-
-const eventTypeLabels: Record<string, string> = {
-  login_success: '登录成功',
-  login_failure: '登录失败',
-  logout: '登出',
-  token_issued: '令牌发放',
-  token_refresh: '令牌刷新',
-  consent_granted: '授权同意',
-  consent_revoked: '授权撤销',
-  account_locked: '账户锁定',
-}
-
-const eventTypeIcons: Record<string, string> = {
-  login_success: '✅',
-  login_failure: '❌',
-  logout: '🚪',
-  token_issued: '🔑',
-  token_refresh: '🔄',
-  consent_granted: '✓',
-  consent_revoked: '✗',
-  account_locked: '🔒',
+const eventTypeConfig: Record<string, { label: string; icon: typeof CheckCircle; color: string }> = {
+  login_success: { label: '登录成功', icon: CheckCircle, color: 'text-emerald-400' },
+  login_failure: { label: '登录失败', icon: XCircle, color: 'text-red-400' },
+  logout: { label: '登出', icon: LogOut, color: 'text-gray-500' },
+  token_issued: { label: '令牌发放', icon: Key, color: 'text-blue-400' },
+  token_refresh: { label: '令牌刷新', icon: RefreshCw, color: 'text-cyan-400' },
+  consent_granted: { label: '授权同意', icon: CheckCircle, color: 'text-emerald-400' },
+  consent_revoked: { label: '授权撤销', icon: XCircle, color: 'text-amber-400' },
+  user_created: { label: '用户创建', icon: UserPlus, color: 'text-blue-400' },
+  password_reset: { label: '密码重置', icon: Lock, color: 'text-orange-400' },
 }
 
 export function AdminAuditLogs() {
-  const [logs] = useState<AuditLog[]>(mockLogs)
+  const [logs, setLogs] = useState<AuditLog[]>([])
+  const [filteredLogs, setFilteredLogs] = useState<AuditLog[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'success' | 'failure'>('all')
+  const { addToast } = useToast()
 
-  const filteredLogs = logs.filter((log) => {
-    const matchesSearch =
-      log.username?.toLowerCase().includes(search.toLowerCase()) ||
-      log.event_type.toLowerCase().includes(search.toLowerCase()) ||
-      log.ip_address.includes(search)
-    const matchesFilter = filter === 'all' || log.outcome === filter
-    return matchesSearch && matchesFilter
+  // Load logs
+  useEffect(() => {
+    loadLogs()
+  }, [])
+
+  // Filter logs
+  useEffect(() => {
+    let filtered = logs
+    
+    if (search) {
+      filtered = filtered.filter(log =>
+        log.username?.toLowerCase().includes(search.toLowerCase()) ||
+        log.event_type.toLowerCase().includes(search.toLowerCase()) ||
+        log.ip_address.includes(search)
+      )
+    }
+    
+    if (filter !== 'all') {
+      filtered = filtered.filter(log => log.outcome === filter)
+    }
+    
+    setFilteredLogs(filtered)
+  }, [logs, search, filter])
+
+  const loadLogs = async () => {
+    try {
+      setLoading(true)
+      const data = await adminApi.getAuditLogs() as AuditLog[]
+      setLogs(data)
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: '加载失败',
+        message: getErrorMessage(err),
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return date.toLocaleString('zh-CN', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  const columns = [
+    {
+      key: 'event',
+      title: '事件',
+      render: (log: AuditLog) => {
+        const config = eventTypeConfig[log.event_type] || { 
+          label: log.event_type, 
+          icon: ClipboardList, 
+          color: 'text-gray-500' 
+        }
+        const Icon = config.icon
+        return (
+          <div className="flex items-center gap-2">
+            <Icon className={`w-4 h-4 ${config.color}`} />
+            <span className="text-sm text-gray-900 dark:text-white">{config.label}</span>
+          </div>
+        )
+      },
+    },
+    {
+      key: 'user',
+      title: '用户',
+      render: (log: AuditLog) => (
+        <span className="text-sm text-gray-500">{log.username || '-'}</span>
+      ),
+    },
+    {
+      key: 'client',
+      title: '应用',
+      render: (log: AuditLog) => (
+        <span className="text-xs text-gray-600">{log.client_id || '-'}</span>
+      ),
+    },
+    {
+      key: 'ip',
+      title: 'IP 地址',
+      render: (log: AuditLog) => (
+        <code className="text-[11px] text-gray-600 font-mono">{log.ip_address}</code>
+      ),
+    },
+    {
+      key: 'outcome',
+      title: '结果',
+      render: (log: AuditLog) => (
+        log.outcome === 'success' ? (
+          <Badge variant="success">成功</Badge>
+        ) : (
+          <Badge variant="error">失败</Badge>
+        )
+      ),
+    },
+    {
+      key: 'time',
+      title: '时间',
+      render: (log: AuditLog) => (
+        <span className="text-xs text-gray-600">{formatDate(log.created_at)}</span>
+      ),
+    },
+  ]
+
+  const todayLogs = logs.filter(l => {
+    const logDate = new Date(l.created_at)
+    const today = new Date()
+    return logDate.toDateString() === today.toDateString()
   })
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">审计日志</h1>
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-medium text-gray-900 dark:text-white">审计日志</h1>
+          <p className="text-sm text-gray-500 mt-0.5">查看系统操作和安全事件记录</p>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => addToast({ type: 'info', title: '导出功能开发中' })}
+        >
+          <Download className="w-4 h-4" />
+          导出
+        </Button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-3">
+        <Card className="text-center py-4">
+          <p className="text-xl font-medium text-gray-900 dark:text-white">{todayLogs.length}</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">今日事件</p>
+        </Card>
+        <Card className="text-center py-4">
+          <p className="text-xl font-medium text-emerald-400">
+            {todayLogs.filter(l => l.outcome === 'success').length}
+          </p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">成功</p>
+        </Card>
+        <Card className="text-center py-4">
+          <p className="text-xl font-medium text-red-400">
+            {todayLogs.filter(l => l.outcome === 'failure').length}
+          </p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">失败</p>
+        </Card>
+        <Card className="text-center py-4">
+          <p className="text-xl font-medium text-gray-600 dark:text-gray-300">{logs.length}</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">总计</p>
+        </Card>
+      </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <input
-          type="text"
-          placeholder="搜索日志..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 max-w-md px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
-        />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <Card padding="sm" className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
+            <input
+              type="text"
+              placeholder="搜索日志..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-transparent pl-9 pr-4 py-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-700 focus:outline-none"
+            />
+          </div>
+        </Card>
+        
         <div className="flex gap-2">
           {(['all', 'success', 'failure'] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
                 filter === f
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
+                  : 'bg-gray-50 dark:bg-white/[0.02] text-gray-500 border-gray-200 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/[0.12]'
               }`}
             >
               {f === 'all' ? '全部' : f === 'success' ? '成功' : '失败'}
@@ -113,85 +243,39 @@ export function AdminAuditLogs() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">今日事件</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">128</p>
-        </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">成功</p>
-          <p className="text-2xl font-bold text-green-600 dark:text-green-400">120</p>
-        </div>
-        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">失败</p>
-          <p className="text-2xl font-bold text-red-600 dark:text-red-400">8</p>
-        </div>
-      </div>
-
       {/* Table */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 dark:bg-gray-800">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">事件</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">用户</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">IP 地址</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">结果</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">时间</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-            {filteredLogs.map((log) => (
-              <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <span>{eventTypeIcons[log.event_type] || '📝'}</span>
-                    <span className="text-sm text-gray-900 dark:text-white">
-                      {eventTypeLabels[log.event_type] || log.event_type}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
-                  {log.username || '-'}
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300 font-mono">
-                  {log.ip_address}
-                </td>
-                <td className="px-6 py-4">
-                  {log.outcome === 'success' ? (
-                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300">
-                      成功
-                    </span>
-                  ) : (
-                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300">
-                      失败
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                  {log.created_at}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Card padding="none">
+        <Table
+          data={filteredLogs}
+          columns={columns}
+          keyExtractor={(log) => log.id}
+          loading={loading}
+          emptyState={
+            <EmptyState
+              icon={<ClipboardList className="w-6 h-6" />}
+              title="暂无日志"
+              description="没有找到匹配的审计日志记录"
+            />
+          }
+        />
+      </Card>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between mt-6">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          显示 {filteredLogs.length} 条记录
-        </p>
-        <div className="flex gap-2">
-          <button className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50" disabled>
-            上一页
-          </button>
-          <button className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50" disabled>
-            下一页
-          </button>
+      {/* Pagination placeholder */}
+      {filteredLogs.length > 0 && (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-gray-600">
+            显示 {filteredLogs.length} 条记录
+          </p>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" disabled>
+              上一页
+            </Button>
+            <Button variant="ghost" size="sm" disabled>
+              下一页
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

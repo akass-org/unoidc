@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { LoginPage } from './pages/Login'
 import { RegisterPage } from './pages/Register'
 import { ForgotPasswordPage } from './pages/ForgotPassword'
+import { ResetPasswordPage } from './pages/ResetPassword'
 import { AuthorizePage } from './pages/Authorize'
 import { ProfilePage } from './pages/Profile'
 import { MyAppsPage } from './pages/MyApps'
@@ -22,6 +23,7 @@ export const routes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/reset-password', element: <ResetPasswordPage /> },
 
   // OIDC 授权
   { path: '/authorize', element: <AuthorizePage /> },

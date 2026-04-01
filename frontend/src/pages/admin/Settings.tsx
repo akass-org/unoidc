@@ -1,154 +1,271 @@
-import { useState } from 'react'
-import { useUIConfigStore } from '#src/stores/theme'
-import { LoginLayoutSelector } from '#src/components/LoginLayout'
-import { ThemeSelector } from '#src/components/ThemeToggle'
+import { useState, useEffect } from 'react'
+import { 
+  Palette, 
+  Type,
+  RefreshCw,
+  Shield,
+  Save
+} from 'lucide-react'
+import { adminApi } from '#src/api/admin'
+import { useUIConfigStore, type LoginLayout } from '#src/stores/theme'
+import { useApi } from '#src/hooks'
+import { 
+  Card, 
+  CardHeader,
+  Button, 
+  Input,
+  useToast
+} from '#src/components/ui'
+
+const layoutOptions: { value: LoginLayout; label: string; description: string }[] = [
+  { value: 'split-left', label: '左侧品牌', description: '品牌展示在左' },
+  { value: 'split-right', label: '右侧品牌', description: '品牌展示在右' },
+  { value: 'centered', label: '居中', description: '简洁居中布局' },
+  { value: 'fullscreen', label: '全屏', description: '沉浸式深色背景' },
+]
 
 export function AdminSettings() {
-  const { loginLayout, setLoginLayout, brandName, setBrandName } = useUIConfigStore()
-  const [activeTab, setActiveTab] = useState<'branding' | 'appearance'>('branding')
+  const { brandName, setBrandName, loginLayout, setLoginLayout } = useUIConfigStore()
+  const { addToast } = useToast()
+  void addToast // suppress unused warning
+  const [activeTab, setActiveTab] = useState<'branding' | 'appearance' | 'security'>('branding')
+  
+  // Settings state
+  const [settings, setSettings] = useState({
+    brand_name: brandName,
+    logo_url: '',
+    login_background_url: '',
+    login_layout: loginLayout,
+    session_timeout: 24,
+    max_login_attempts: 5,
+  })
+
+  // Load settings
+  useEffect(() => {
+    loadSettings()
+  }, [])
+
+  const loadSettings = async () => {
+    try {
+      const data = await adminApi.getSettings() as typeof settings
+      setSettings(prev => ({ ...prev, ...data }))
+    } catch (err) {
+      // Use defaults if backend not ready
+    }
+  }
+
+  const { loading: saving, execute: saveSettings } = useApi(
+    adminApi.updateSettings,
+    {
+      successMessage: '设置已保存',
+      onSuccess: (_data) => {
+        // Update local store
+        setBrandName(settings.brand_name)
+        setLoginLayout(settings.login_layout)
+      }
+    }
+  )
+
+  const { loading: rotating, execute: rotateKey } = useApi(
+    adminApi.rotateKey,
+    {
+      successMessage: '密钥轮换成功',
+    }
+  )
+
+  const handleSave = async () => {
+    await saveSettings(settings)
+  }
+
+  const tabs = [
+    { id: 'branding', label: '品牌', icon: Type },
+    { id: 'appearance', label: '外观', icon: Palette },
+    { id: 'security', label: '安全', icon: Shield },
+  ]
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">系统设置</h1>
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-medium text-gray-900 dark:text-white">系统设置</h1>
+          <p className="text-sm text-gray-500 mt-0.5">配置系统品牌和外观</p>
+        </div>
+        <Button 
+          onClick={handleSave}
+          loading={saving}
+          size="sm"
+        >
+          <Save className="w-4 h-4" />
+          保存
+        </Button>
+      </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-800 mb-6">
-        <nav className="flex gap-6">
-          <button
-            onClick={() => setActiveTab('branding')}
-            className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'branding'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            品牌设置
-          </button>
-          <button
-            onClick={() => setActiveTab('appearance')}
-            className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'appearance'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            外观设置
-          </button>
+      <div className="border-b border-gray-200 dark:border-white/[0.06]">
+        <nav className="flex gap-1">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-black text-black dark:border-white dark:text-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            )
+          })}
         </nav>
       </div>
 
+      {/* Branding Tab */}
       {activeTab === 'branding' && (
-        <div className="space-y-6 max-w-2xl">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">品牌信息</h3>
+        <div className="space-y-4 max-w-lg">
+          <Card>
+            <CardHeader 
+              title="品牌信息" 
+              subtitle="配置系统的品牌标识"
+            />
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  品牌名称
-                </label>
-                <input
-                  type="text"
-                  value={brandName}
-                  onChange={(e) => setBrandName(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Logo URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://example.com/logo.png"
-                  className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="mt-1 text-xs text-gray-500">留空使用默认图标</p>
-              </div>
+              <Input
+                label="品牌名称"
+                value={settings.brand_name}
+                onChange={(e) => setSettings({ ...settings, brand_name: e.target.value })}
+                placeholder="UNOIDC"
+                helper="显示在登录页和导航栏的品牌名称"
+              />
+              <Input
+                label="Logo URL"
+                type="url"
+                value={settings.logo_url}
+                onChange={(e) => setSettings({ ...settings, logo_url: e.target.value })}
+                placeholder="https://example.com/logo.png"
+                helper="建议使用 200x200 像素的 PNG 图片"
+              />
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
+      {/* Appearance Tab */}
       {activeTab === 'appearance' && (
-        <div className="space-y-6 max-w-2xl">
-          {/* Theme */}
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">主题模式</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              选择系统的主题模式。自动模式会根据系统设置自动切换深浅色。
-            </p>
-            <ThemeSelector />
-          </div>
-
-          {/* Login Layout */}
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">登录页布局</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              选择登录页的布局样式。更改会立即生效。
-            </p>
-            <LoginLayoutSelector value={loginLayout} onChange={setLoginLayout} />
-          </div>
-
-          {/* Background Image */}
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">登录页背景</h3>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                背景图片 URL
-              </label>
-              <input
-                type="url"
-                placeholder="https://example.com/background.jpg"
-                className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="mt-1 text-xs text-gray-500">建议使用 1920x1080 或更大尺寸的图片</p>
+        <div className="space-y-4 max-w-lg">
+          <Card>
+            <CardHeader 
+              title="登录页布局" 
+              subtitle="选择登录页的显示样式"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              {layoutOptions.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setSettings({ ...settings, login_layout: option.value })}
+                  className={`flex flex-col gap-1 p-3 rounded-lg border text-left transition-all ${
+                    settings.login_layout === option.value
+                      ? 'border-black bg-gray-100 dark:border-white dark:bg-white/[0.04]'
+                      : 'border-gray-200 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/[0.12]'
+                  }`}
+                >
+                  <span className={`text-sm font-medium ${
+                    settings.login_layout === option.value ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
+                  }`}>
+                    {option.label}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-600">{option.description}</span>
+                </button>
+              ))}
             </div>
-          </div>
+          </Card>
 
-          {/* Preview */}
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">预览</h3>
-            <div className="aspect-video rounded-lg bg-gray-100 dark:bg-gray-800 overflow-hidden border border-gray-200 dark:border-gray-700">
-              {loginLayout === 'split-left' && (
-                <div className="flex h-full">
-                  <div className="w-1/2 bg-gradient-to-br from-blue-600 to-purple-700" />
-                  <div className="w-1/2 bg-white dark:bg-gray-900 p-8">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 mb-4" />
-                    <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
-                    <div className="h-3 w-32 bg-gray-100 dark:bg-gray-800 rounded" />
-                  </div>
-                </div>
-              )}
-              {loginLayout === 'split-right' && (
-                <div className="flex h-full">
-                  <div className="w-1/2 bg-white dark:bg-gray-900 p-8">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 mb-4" />
-                    <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
-                    <div className="h-3 w-32 bg-gray-100 dark:bg-gray-800 rounded" />
-                  </div>
-                  <div className="w-1/2 bg-gradient-to-br from-blue-600 to-purple-700" />
-                </div>
-              )}
-              {loginLayout === 'centered' && (
-                <div className="flex h-full items-center justify-center bg-gray-50 dark:bg-gray-950 p-8">
-                  <div className="w-48 bg-white dark:bg-gray-900 rounded-xl shadow-lg p-6">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 mx-auto mb-3" />
-                    <div className="h-3 w-20 bg-gray-200 dark:bg-gray-700 rounded mx-auto mb-2" />
-                    <div className="h-2 w-28 bg-gray-100 dark:bg-gray-800 rounded mx-auto" />
-                  </div>
-                </div>
-              )}
-              {loginLayout === 'fullscreen' && (
-                <div className="flex h-full items-center justify-center bg-gradient-to-br from-blue-900 via-purple-900 to-gray-900 p-8">
-                  <div className="w-48 bg-white/95 dark:bg-gray-900/95 rounded-xl p-6 backdrop-blur">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 mx-auto mb-3" />
-                    <div className="h-3 w-20 bg-gray-200 dark:bg-gray-700 rounded mx-auto mb-2" />
-                    <div className="h-2 w-28 bg-gray-100 dark:bg-gray-800 rounded mx-auto" />
-                  </div>
-                </div>
-              )}
+          <Card>
+            <CardHeader 
+              title="登录页背景" 
+              subtitle="配置登录页的背景图片"
+            />
+            <Input
+              label="背景图片 URL"
+              type="url"
+              value={settings.login_background_url}
+              onChange={(e) => setSettings({ ...settings, login_background_url: e.target.value })}
+              placeholder="https://example.com/background.jpg"
+              helper="建议使用 1920x1080 或更大尺寸的图片"
+            />
+          </Card>
+        </div>
+      )}
+
+      {/* Security Tab */}
+      {activeTab === 'security' && (
+        <div className="space-y-4 max-w-lg">
+          <Card>
+            <CardHeader 
+              title="会话设置" 
+              subtitle="配置用户会话安全参数"
+            />
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+                  会话超时（小时）
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={168}
+                  value={settings.session_timeout}
+                  onChange={(e) => setSettings({ ...settings, session_timeout: parseInt(e.target.value) })}
+                  className="w-full max-w-xs bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-lg px-4 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-black/10 dark:focus:ring-white/20"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-600 mt-1.5">
+                  用户登录后多少小时自动过期
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+                  最大登录尝试次数
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={settings.max_login_attempts}
+                  onChange={(e) => setSettings({ ...settings, max_login_attempts: parseInt(e.target.value) })}
+                  className="w-full max-w-xs bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-lg px-4 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-black/10 dark:focus:ring-white/20"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-600 mt-1.5">
+                  超过此次数后账户将被临时锁定
+                </p>
+              </div>
             </div>
-          </div>
+          </Card>
+
+          <Card>
+            <CardHeader 
+              title="密钥管理" 
+              subtitle="管理签名密钥"
+            />
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-white/[0.02] rounded-lg border border-gray-200 dark:border-white/[0.06]">
+              <div>
+                <p className="text-sm text-gray-900 dark:text-white">轮换签名密钥</p>
+                <p className="text-xs text-gray-500 dark:text-gray-600 mt-0.5">
+                  生成新的 JWT 签名密钥
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={rotateKey}
+                loading={rotating}
+              >
+                <RefreshCw className="w-4 h-4" />
+                轮换
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
     </div>
