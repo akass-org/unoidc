@@ -60,7 +60,7 @@ export const useUIConfigStore = create<UIConfigState>()(
       loginLayout: 'split-left',
       setLoginLayout: (layout) => set({ loginLayout: layout }),
 
-      brandName: 'OIDC Provider',
+      brandName: 'UNOIDC',
       setBrandName: (name) => set({ brandName: name }),
 
       logoUrl: undefined,

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { ArrowRight, Shield, User, Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { getErrorMessage } from '#src/api/client'
 import { authApi } from '#src/api/auth'
 import { LoginPageWrapper } from '#src/components/LoginLayout'
 import { ThemeToggle } from '#src/components/ThemeToggle'
@@ -39,8 +40,8 @@ export function RegisterPage() {
         password: formData.password,
       })
       navigate('/login')
-    } catch {
-      setError('注册失败，请检查输入信息')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -163,14 +164,17 @@ export function RegisterPage() {
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
             确认密码
           </label>
-          <input
-            type={showPassword ? 'text' : 'password'}
-            value={formData.confirmPassword}
-            onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-            required
-            className="input-field"
-            placeholder="再次输入密码"
-          />
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={formData.confirmPassword}
+              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+              required
+              className="input-field pl-9"
+              placeholder="再次输入密码"
+            />
+          </div>
         </div>
 
         <button

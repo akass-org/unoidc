@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Eye, EyeOff, ArrowRight, Shield } from 'lucide-react'
 import { useSessionStore } from '#src/stores/session'
 import { useUIConfigStore } from '#src/stores/theme'
+import { getErrorMessage } from '#src/api/client'
 import { authApi } from '#src/api/auth'
 import { LoginPageWrapper } from '#src/components/LoginLayout'
 import { ThemeToggle } from '#src/components/ThemeToggle'
@@ -31,8 +32,8 @@ export function LoginPage() {
       const result = await authApi.login(username, password) as { user: unknown }
       setUser(result.user as { id: string; username: string; email: string; display_name: string; picture?: string; is_admin: boolean })
       navigate(returnTo)
-    } catch {
-      setError('用户名或密码错误')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setLoading(false)
     }

@@ -116,7 +116,7 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
   )
 
   const imageSection = (
-    <div className="relative hidden lg:flex lg:w-[55%] bg-gradient-to-br from-primary-600 via-primary-700 to-slate-900 overflow-hidden">
+    <div className="relative hidden lg:flex lg:w-[60%] bg-gradient-to-br from-primary-600 via-primary-700 to-slate-900 overflow-hidden">
       <GeometricPattern />
       {loginBackgroundUrl ? (
         <>

@@ -26,7 +26,7 @@ export function ThemeToggle({ showLabel = false }: { showLabel?: boolean }) {
       title={`当前: ${themeConfig[mode].label} (${resolvedMode === 'dark' ? '深色' : '浅色'}模式)`}
     >
       <span className="transition-transform duration-200 group-hover:scale-110">
-        {resolvedMode === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+        {themeConfig[mode].icon}
       </span>
       {showLabel && (
         <span className="text-sm font-medium">{themeConfig[mode].label}</span>
