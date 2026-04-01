@@ -23,13 +23,8 @@ use crate::{
     AppState,
 };
 
-/// 检查用户是否为管理员
-async fn require_admin(
-    pool: &sqlx::PgPool,
-    headers: &HeaderMap,
-) -> Result<AuthUser> {
-    let auth_user = require_auth_user(pool, headers).await?;
-    
+/// 检查指定用户是否为管理员
+async fn is_user_admin(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool> {
     // 获取 admin 组
     let admin_group = crate::repo::GroupRepo::find_by_name(pool, "admin")
         .await
@@ -39,15 +34,27 @@ async fn require_admin(
     
     if let Some(group) = admin_group {
         // 检查用户是否在 admin 组
-        let user_groups = crate::repo::GroupRepo::find_user_groups(pool, auth_user.user.id)
+        let user_groups = crate::repo::GroupRepo::find_user_groups(pool, user_id)
             .await
             .map_err(|e| AppError::InternalServerError {
                 error_code: Some(format!("DB_ERROR: {}", e)),
             })?;
         
-        if user_groups.iter().any(|g| g.id == group.id) {
-            return Ok(auth_user);
-        }
+        return Ok(user_groups.iter().any(|g| g.id == group.id));
+    }
+    
+    Ok(false)
+}
+
+/// 检查当前请求用户是否为管理员
+async fn require_admin(
+    pool: &sqlx::PgPool,
+    headers: &HeaderMap,
+) -> Result<AuthUser> {
+    let auth_user = require_auth_user(pool, headers).await?;
+    
+    if is_user_admin(pool, auth_user.user.id).await? {
+        return Ok(auth_user);
     }
     
     Err(AppError::Forbidden {
@@ -90,18 +97,19 @@ pub struct UpdateUserRequest {
     pub is_active: Option<bool>,
 }
 
-impl From<crate::model::User> for UserResponse {
-    fn from(user: crate::model::User) -> Self {
-        Self {
-            id: user.id.to_string(),
-            username: user.username,
-            email: user.email,
-            display_name: user.display_name.unwrap_or_default(),
-            is_admin: false, // TODO: 从组关系判断
-            is_active: user.enabled,
-            created_at: user.created_at.to_string(),
-        }
-    }
+/// 异步将 User 转换为 UserResponse，检查管理员权限
+async fn user_to_response(pool: &sqlx::PgPool, user: crate::model::User) -> Result<UserResponse> {
+    let is_admin = is_user_admin(pool, user.id).await.unwrap_or(false);
+    
+    Ok(UserResponse {
+        id: user.id.to_string(),
+        username: user.username,
+        email: user.email,
+        display_name: user.display_name.unwrap_or_default(),
+        is_admin,
+        is_active: user.enabled,
+        created_at: user.created_at.to_string(),
+    })
 }
 
 /// 获取所有用户
@@ -110,7 +118,6 @@ pub async fn get_users(
     headers: HeaderMap,
 ) -> Result<Json<Vec<UserResponse>>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     let users = UserService::list_users(&state.db, 1000, 0).await.map_err(|e| {
         AppError::InternalServerError {
@@ -118,7 +125,12 @@ pub async fn get_users(
         }
     })?;
 
-    Ok(Json(users.into_iter().map(UserResponse::from).collect()))
+    let mut responses = Vec::new();
+    for user in users {
+        responses.push(user_to_response(&state.db, user).await?);
+    }
+
+    Ok(Json(responses))
 }
 
 /// 创建用户（管理员）
@@ -152,7 +164,7 @@ pub async fn create_user(
 
     // TODO: 如果 is_admin 为 true，添加用户到 admin 组
 
-    Ok(Json(UserResponse::from(user)))
+    Ok(Json(user_to_response(&state.db, user).await?))
 }
 
 /// 更新用户
@@ -183,7 +195,7 @@ pub async fn update_user(
 
     // TODO: 处理 is_admin 字段（添加/移除 admin 组）
 
-    Ok(Json(UserResponse::from(user)))
+    Ok(Json(user_to_response(&state.db, user).await?))
 }
 
 #[derive(Debug, Serialize)]
