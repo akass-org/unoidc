@@ -49,9 +49,16 @@ pub async fn require_auth_user(
 }
 
 /// 从 Cookie 头中提取 unoidc_session
+/// 
+/// 返回 session_id（不包含签名）
 pub fn extract_session_cookie(headers: &HeaderMap) -> Option<String> {
     let cookie_header = headers.get("cookie")?.to_str().ok()?;
-    extract_cookie_value(cookie_header, "unoidc_session")
+    let cookie_value = extract_cookie_value(cookie_header, "unoidc_session")?;
+    
+    // Cookie 格式: session_id.signature
+    // 只返回 session_id 部分
+    let (session_id, _signature) = cookie_value.split_once('.')?;
+    Some(session_id.to_string())
 }
 
 /// 从 cookie 字符串中提取指定 cookie 的值

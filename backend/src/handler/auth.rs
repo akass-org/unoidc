@@ -63,9 +63,11 @@ fn build_cookie_value(session_id: &str, cookie_domain: Option<&String>, secure: 
     let signature = crypto::sign_session(session_id, session_secret).unwrap_or_default();
     let cookie_content = format!("{}.{}", session_id, signature);
     let secure_flag = if secure { "; Secure" } else { "" };
+    // 开发环境使用 Lax 以允许跨端口请求，生产环境使用 Strict
+    let same_site = if secure { "Strict" } else { "Lax" };
     let mut cookie = format!(
-        "unoidc_session={}; HttpOnly{}; SameSite=Strict; Path=/",
-        cookie_content, secure_flag
+        "unoidc_session={}; HttpOnly{}; SameSite={}; Path=/",
+        cookie_content, secure_flag, same_site
     );
     if let Some(domain) = cookie_domain {
         cookie = format!("{}; Domain={}", cookie, domain);
@@ -233,9 +235,10 @@ pub async fn logout(
 
     let secure = is_secure_context(&state.config.issuer);
     let secure_flag = if secure { "; Secure" } else { "" };
+    let same_site = if secure { "Strict" } else { "Lax" };
     let mut cookie_value = format!(
-        "unoidc_session=; HttpOnly{}; SameSite=Strict; Path=/; Max-Age=0",
-        secure_flag
+        "unoidc_session=; HttpOnly{}; SameSite={}; Path=/; Max-Age=0",
+        secure_flag, same_site
     );
     if let Some(domain) = &state.config.cookie_domain {
         cookie_value = format!("{}; Domain={}", cookie_value, domain);
