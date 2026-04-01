@@ -6,10 +6,12 @@ import { authApi } from '#src/api/auth'
 import { LoginPageWrapper } from '#src/components/LoginLayout'
 import { ThemeToggle } from '#src/components/ThemeToggle'
 import { useUIConfigStore } from '#src/stores/theme'
+import { useSessionStore } from '#src/stores/session'
 
 export function RegisterPage() {
   const navigate = useNavigate()
   const { brandName } = useUIConfigStore()
+  const { setUser } = useSessionStore()
 
   const [formData, setFormData] = useState({
     username: '',
@@ -33,13 +35,20 @@ export function RegisterPage() {
 
     setLoading(true)
     try {
+      // 注册
       await authApi.register({
         username: formData.username,
         email: formData.email,
         display_name: formData.displayName,
         password: formData.password,
       })
-      navigate('/login')
+
+      // 自动登录
+      const result = await authApi.login(formData.username, formData.password) as { user: unknown }
+      setUser(result.user as { id: string; username: string; email: string; display_name: string; picture?: string; is_admin: boolean })
+
+      // 跳转到个人资料页
+      navigate('/profile')
     } catch (err: unknown) {
       setError(getErrorMessage(err))
     } finally {
