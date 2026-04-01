@@ -1,5 +1,6 @@
 import type { RouteObject } from 'react-router-dom'
 import { Navigate } from 'react-router-dom'
+import { ProtectedRoute } from './components/ProtectedRoute'
 import { LoginPage } from './pages/Login'
 import { RegisterPage } from './pages/Register'
 import { ForgotPasswordPage } from './pages/ForgotPassword'
@@ -25,22 +26,37 @@ export const routes: RouteObject[] = [
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/reset-password', element: <ResetPasswordPage /> },
 
-  // OIDC 授权
-  { path: '/authorize', element: <AuthorizePage /> },
+  // OIDC 授权（需要登录）
+  { 
+    path: '/authorize', 
+    element: (
+      <ProtectedRoute>
+        <AuthorizePage />
+      </ProtectedRoute>
+    ) 
+  },
 
-  // 用户自助
+  // 用户自助（需要登录）
   {
-    element: <UserLayout />,
+    element: (
+      <ProtectedRoute>
+        <UserLayout />
+      </ProtectedRoute>
+    ),
     children: [
       { path: '/profile', element: <ProfilePage /> },
       { path: '/my-apps', element: <MyAppsPage /> },
     ],
   },
 
-  // 管理后台
+  // 管理后台（需要管理员权限）
   {
     path: '/admin',
-    element: <AdminLayout />,
+    element: (
+      <ProtectedRoute requireAdmin>
+        <AdminLayout />
+      </ProtectedRoute>
+    ),
     children: [
       { path: 'users', element: <AdminUsers /> },
       { path: 'groups', element: <AdminGroups /> },
