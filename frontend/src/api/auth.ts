@@ -19,4 +19,13 @@ export const authApi = {
 
   getSession: () =>
     api.get('api/v1/auth/session').json(),
+
+  // 获取公共配置（用于登录页）
+  getPublicConfig: () =>
+    api.get('api/v1/public/config').json<{
+      brand_name: string
+      logo_url: string
+      login_background_url: string
+      login_layout: 'split-left' | 'split-right' | 'centered' | 'fullscreen'
+    }>(),
 }

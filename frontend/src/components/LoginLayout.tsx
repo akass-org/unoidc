@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
+import { useState, useEffect } from 'react'
 import { Shield, Fingerprint, Lock, KeyRound } from 'lucide-react'
-import { useUIConfigStore, type LoginLayout } from '#src/stores/theme'
+import { authApi } from '#src/api/auth'
+import type { LoginLayout } from '#src/stores/theme'
 
 interface LoginLayoutSelectorProps {
   value: LoginLayout
@@ -102,8 +104,47 @@ interface LoginPageWrapperProps {
   children: ReactNode
 }
 
+// 默认配置
+const defaultConfig = {
+  brandName: 'UNOIDC',
+  loginLayout: 'split-left' as LoginLayout,
+  loginBackgroundUrl: '',
+}
+
 export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
-  const { loginLayout, loginBackgroundUrl, brandName } = useUIConfigStore()
+  // 从后端获取公共配置
+  const [config, setConfig] = useState(defaultConfig)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    authApi.getPublicConfig()
+      .then((data) => {
+        setConfig({
+          brandName: data.brand_name,
+          loginLayout: data.login_layout,
+          loginBackgroundUrl: data.login_background_url,
+        })
+      })
+      .catch(() => {
+        // 使用默认配置
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }, [])
+
+  const { brandName, loginLayout, loginBackgroundUrl } = config
+
+  if (loading) {
+    // 加载时显示简洁的加载状态
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black">
+        <div className="animate-pulse">
+          <div className="w-8 h-8 rounded-md bg-gray-300 dark:bg-gray-700" />
+        </div>
+      </div>
+    )
+  }
 
   const formSection = (
     <div className="flex-1 flex items-center justify-center p-6 lg:p-12 bg-gray-50 dark:bg-black">
