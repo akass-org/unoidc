@@ -320,3 +320,65 @@ pub async fn forgot_password() -> Result<Json<LoginResponse>> {
         error_description: Some("Password reset not yet implemented".to_string()),
     })
 }
+
+/// 获取当前会话信息
+#[derive(Debug, Serialize)]
+pub struct SessionResponse {
+    pub user: UserInfo,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserInfo {
+    pub id: String,
+    pub username: String,
+    pub email: String,
+    pub display_name: String,
+    pub picture: Option<String>,
+    pub is_admin: bool,
+}
+
+pub async fn get_session(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<SessionResponse>> {
+    let session_id = extract_session_cookie(&headers, &state.config.session_secret)
+        .ok_or(AppError::Unauthorized {
+            reason: Some("No valid session".to_string()),
+        })?;
+
+    let session = crate::repo::SessionRepo::find_by_session_id(&state.db, &session_id)
+        .await
+        .map_err(|e| AppError::InternalServerError {
+            error_code: Some(format!("DB_ERROR: {}", e)),
+        })?
+        .ok_or(AppError::Unauthorized {
+            reason: Some("Session not found".to_string()),
+        })?;
+
+    // Check if session is expired
+    if session.is_expired() {
+        return Err(AppError::Unauthorized {
+            reason: Some("Session expired".to_string()),
+        });
+    }
+
+    let user = crate::repo::UserRepo::find_by_id(&state.db, session.user_id)
+        .await
+        .map_err(|e| AppError::InternalServerError {
+            error_code: Some(format!("DB_ERROR: {}", e)),
+        })?
+        .ok_or(AppError::Unauthorized {
+            reason: Some("User not found".to_string()),
+        })?;
+
+    Ok(Json(SessionResponse {
+        user: UserInfo {
+            id: user.id.to_string(),
+            username: user.username,
+            email: user.email,
+            display_name: user.display_name.unwrap_or_default(),
+            picture: user.picture,
+            is_admin: false, // TODO: Check admin group membership
+        },
+    }))
+}

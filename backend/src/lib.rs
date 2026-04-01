@@ -42,6 +42,7 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .route("/api/v1/auth/logout", post(handler::auth::logout))
         .route("/api/v1/auth/register", post(handler::auth::register))
         .route("/api/v1/auth/forgot-password", post(handler::auth::forgot_password))
+        .route("/api/v1/auth/session", get(handler::auth::get_session))
 
         .route("/.well-known/openid-configuration", get(handler::oidc::discovery))
         .route("/jwks.json", get(handler::oidc::jwks))
