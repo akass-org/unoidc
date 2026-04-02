@@ -17,7 +17,8 @@ use crate::{
     error::{AppError, Result},
     middleware::auth::{require_auth_user, AuthUser},
     model::UpdateUser,
-    service::{AuditService, UserService},
+    repo::RefreshTokenRepo,
+    service::{AuditService, AuthService, UserService},
     AppState,
 };
 
@@ -156,6 +157,19 @@ pub async fn change_password(
             }
         }
     })?;
+
+    // 密码修改后，强制所有客户端重新登录：清理会话并撤销刷新令牌
+    AuthService::logout_all_sessions(&state.db, auth_user.user.id)
+        .await
+        .map_err(|_| AppError::InternalServerError {
+            error_code: Some("SESSION_REVOKE_FAILED".to_string()),
+        })?;
+
+    RefreshTokenRepo::revoke_all_for_user(&state.db, auth_user.user.id)
+        .await
+        .map_err(|_| AppError::InternalServerError {
+            error_code: Some("TOKEN_REVOKE_FAILED".to_string()),
+        })?;
 
     // 记录审计日志
     let ip_address = headers
