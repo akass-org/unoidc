@@ -7,7 +7,8 @@ import {
   Trash2,
   Edit,
   Copy,
-  Check
+  Check,
+  Minus
 } from 'lucide-react'
 import { adminApi } from '#src/api/admin'
 import { useApi } from '#src/hooks'
@@ -53,7 +54,7 @@ export function AdminClients() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    redirect_uri: '',
+    redirect_uris: [''],
   })
 
   // Load clients
@@ -91,7 +92,7 @@ export function AdminClients() {
         const result = data as { client: Client; client_secret: string }
         setNewClientSecret({ client: result.client, secret: result.client_secret })
         setShowCreateModal(false)
-        setFormData({ name: '', description: '', redirect_uri: '' })
+        setFormData({ name: '', description: '', redirect_uris: [''] })
         loadClients()
       }
     }
@@ -135,7 +136,7 @@ export function AdminClients() {
     await createClient({
       name: formData.name,
       description: formData.description,
-      redirect_uris: [formData.redirect_uri],
+      redirect_uris: formData.redirect_uris.filter(Boolean),
     })
   }
 
@@ -165,6 +166,19 @@ export function AdminClients() {
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '从未使用'
     return new Date(dateStr).toLocaleDateString('zh-CN')
+  }
+
+  const getOidcEndpoints = () => {
+    const baseUrl = window.location.origin
+    return {
+      issuer: baseUrl,
+      well_known_endpoint: `${baseUrl}/.well-known/openid-configuration`,
+      authorization_endpoint: `${baseUrl}/authorize`,
+      token_endpoint: `${baseUrl}/token`,
+      userinfo_endpoint: `${baseUrl}/userinfo`,
+      jwks_uri: `${baseUrl}/jwks.json`,
+      end_session_endpoint: `${baseUrl}/logout`,
+    }
   }
 
   return (
@@ -283,19 +297,47 @@ export function AdminClients() {
                 </div>
               </div>
 
+              {/* OIDC Config */}
+              <div className="mt-4 pt-3 border-t border-gray-200 dark:border-white/[0.04]">
+                <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <Shield className="w-3 h-3" />
+                  OIDC 配置
+                </p>
+                <div className="bg-gray-100 dark:bg-white/[0.04] rounded-lg border border-gray-200 dark:border-white/[0.06] p-3 space-y-1.5">
+                  {(() => {
+                    const endpoints = getOidcEndpoints()
+                    const items = [
+                      { label: 'Issuer', value: endpoints.issuer },
+                      { label: 'Well-Known', value: endpoints.well_known_endpoint },
+                      { label: 'Client ID', value: client.client_id },
+                      { label: '授权端点', value: endpoints.authorization_endpoint },
+                      { label: '令牌端点', value: endpoints.token_endpoint },
+                    ]
+                    return items.map(({ label, value }) => (
+                      <div key={label} className="flex items-center gap-2 text-xs">
+                        <span className="text-gray-500 w-20 shrink-0">{label}</span>
+                        <code className="flex-1 font-mono text-gray-700 dark:text-gray-300 truncate">{value}</code>
+                      </div>
+                    ))
+                  })()}
+                </div>
+              </div>
+
               {/* Redirect URIs */}
-              {client.redirect_uris.length > 0 && (
-                <div className="mt-4 pt-3 border-t border-gray-200 dark:border-white/[0.04]">
-                  <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mb-1.5">重定向 URI</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {client.redirect_uris.map((uri, i) => (
+              <div className="mt-4 pt-3 border-t border-gray-200 dark:border-white/[0.04]">
+                <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mb-1.5">登录回调</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {client.redirect_uris.length > 0 ? (
+                    client.redirect_uris.map((uri, i) => (
                       <code key={i} className="text-[11px] bg-gray-100 dark:bg-white/[0.04] px-2 py-1 rounded text-gray-500 border border-gray-200 dark:border-white/[0.06]">
                         {uri}
                       </code>
-                    ))}
-                  </div>
+                    ))
+                  ) : (
+                    <span className="text-xs text-gray-400 italic">未配置</span>
+                  )}
                 </div>
-              )}
+              </div>
             </Card>
           ))}
         </div>
@@ -341,15 +383,48 @@ export function AdminClients() {
               className="w-full bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-lg px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/20 transition-all resize-none"
             />
           </div>
-          <Input
-            label="重定向 URI"
-            type="url"
-            value={formData.redirect_uri}
-            onChange={(e) => setFormData({ ...formData, redirect_uri: e.target.value })}
-            placeholder="https://example.com/callback"
-            helper="OAuth 授权后的回调地址"
-            required
-          />
+          {/* Redirect URIs */}
+          <div>
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+              登录回调 URI
+            </label>
+            <div className="space-y-2">
+              {formData.redirect_uris.map((uri, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    type="url"
+                    value={uri}
+                    onChange={(e) => {
+                      const newUris = [...formData.redirect_uris]
+                      newUris[index] = e.target.value
+                      setFormData({ ...formData, redirect_uris: newUris })
+                    }}
+                    placeholder="https://example.com/callback"
+                    className="flex-1 bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-lg px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/20 transition-all font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ 
+                      ...formData, 
+                      redirect_uris: formData.redirect_uris.filter((_, i) => i !== index)
+                    })}
+                    className="p-2.5 text-gray-500 hover:text-red-500 hover:bg-red-500/[0.08] rounded-lg border border-gray-200 dark:border-white/[0.08] transition-colors"
+                    title="删除"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, redirect_uris: [...formData.redirect_uris, ''] })}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 border border-dashed border-gray-300 dark:border-white/[0.12] hover:border-gray-400 dark:hover:border-white/20 rounded-lg transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                添加回调地址
+              </button>
+            </div>
+          </div>
         </form>
       </Modal>
 
@@ -390,19 +465,50 @@ export function AdminClients() {
                 className="w-full bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-lg px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/20 transition-all resize-none"
               />
             </div>
+            {/* Redirect URIs */}
             <div>
               <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                重定向 URI（每行一个）
+                登录回调 URI
               </label>
-              <textarea
-                value={editingClient.redirect_uris.join('\n')}
-                onChange={(e) => setEditingClient({ 
-                  ...editingClient, 
-                  redirect_uris: e.target.value.split('\n').filter(Boolean)
-                })}
-                rows={3}
-                className="w-full bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-lg px-4 py-2.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/20 transition-all font-mono resize-none"
-              />
+              <div className="space-y-2">
+                {editingClient.redirect_uris.map((uri, index) => (
+                  <div key={index} className="flex gap-2">
+                    <input
+                      type="url"
+                      value={uri}
+                      onChange={(e) => {
+                        const newUris = [...editingClient.redirect_uris]
+                        newUris[index] = e.target.value
+                        setEditingClient({ ...editingClient, redirect_uris: newUris })
+                      }}
+                      placeholder="https://example.com/callback"
+                      className="flex-1 bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-lg px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/20 focus:border-white/20 transition-all font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setEditingClient({ 
+                        ...editingClient, 
+                        redirect_uris: editingClient.redirect_uris.filter((_, i) => i !== index)
+                      })}
+                      className="p-2.5 text-gray-500 hover:text-red-500 hover:bg-red-500/[0.08] rounded-lg border border-gray-200 dark:border-white/[0.08] transition-colors"
+                      title="删除"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setEditingClient({ 
+                    ...editingClient, 
+                    redirect_uris: [...editingClient.redirect_uris, ''] 
+                  })}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 border border-dashed border-gray-300 dark:border-white/[0.12] hover:border-gray-400 dark:hover:border-white/20 rounded-lg transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  添加回调地址
+                </button>
+              </div>
             </div>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
