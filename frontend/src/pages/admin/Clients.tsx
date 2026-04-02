@@ -362,22 +362,23 @@ export function AdminClients() {
                       <div className="space-y-2">
                         <div>
                           <span className="text-[10px] text-gray-400 uppercase tracking-wider">登录回调</span>
-                          <div className="mt-1 space-y-1 min-h-[28px]">
+                          <div className="mt-1 space-y-1.5">
                             {client.redirect_uris.length > 0 ? (
                               client.redirect_uris.map((uri, i) => (
                                 <div key={i} className="flex items-center gap-2 group">
-                                  <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-black/20 px-2 py-1.5 rounded border border-gray-200 dark:border-white/[0.06] truncate">{uri}</code>
+                                  <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-black/20 px-3 py-2 rounded border border-gray-200 dark:border-white/[0.06] truncate">{uri}</code>
                                   <button
                                     onClick={() => handleCopy(uri, `redirect-${i}`)}
-                                    className="p-1 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="p-1.5 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                                   >
-                                    {copiedField === `redirect-${i}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                    {copiedField === `redirect-${i}` ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                                   </button>
                                 </div>
                               ))
                             ) : (
                               <div className="flex items-center gap-2">
-                                <span className="flex-1 text-xs text-gray-400 italic bg-white dark:bg-black/20 px-2 py-1.5 rounded border border-dashed border-gray-200 dark:border-white/[0.06]">未配置</span>
+                                <span className="flex-1 text-xs text-gray-400 italic bg-white dark:bg-black/20 px-3 py-2 rounded border border-dashed border-gray-200 dark:border-white/[0.06]">未配置</span>
+                                <div className="w-8 shrink-0"></div>
                               </div>
                             )}
                           </div>
@@ -385,15 +386,15 @@ export function AdminClients() {
                         {client.post_logout_redirect_uris && client.post_logout_redirect_uris.length > 0 && (
                           <div>
                             <span className="text-[10px] text-gray-400 uppercase tracking-wider">登出回调</span>
-                            <div className="mt-1 space-y-1 min-h-[28px]">
+                            <div className="mt-1 space-y-1.5">
                               {client.post_logout_redirect_uris.map((uri, i) => (
                                 <div key={i} className="flex items-center gap-2 group">
-                                  <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-black/20 px-2 py-1.5 rounded border border-gray-200 dark:border-white/[0.06] truncate">{uri}</code>
+                                  <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-black/20 px-3 py-2 rounded border border-gray-200 dark:border-white/[0.06] truncate">{uri}</code>
                                   <button
                                     onClick={() => handleCopy(uri, `logout-${i}`)}
-                                    className="p-1 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="p-1.5 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                                   >
-                                    {copiedField === `logout-${i}` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                    {copiedField === `logout-${i}` ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                                   </button>
                                 </div>
                               ))}
