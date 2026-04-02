@@ -362,11 +362,11 @@ export function AdminClients() {
                       <div className="space-y-2">
                         <div>
                           <span className="text-[10px] text-gray-400 uppercase tracking-wider">登录回调</span>
-                          <div className="mt-1 space-y-1">
+                          <div className="mt-1 space-y-1 min-h-[28px]">
                             {client.redirect_uris.length > 0 ? (
                               client.redirect_uris.map((uri, i) => (
                                 <div key={i} className="flex items-center gap-2 group">
-                                  <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-black/20 px-2 py-1 rounded border border-gray-200 dark:border-white/[0.06] truncate">{uri}</code>
+                                  <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-black/20 px-2 py-1.5 rounded border border-gray-200 dark:border-white/[0.06] truncate">{uri}</code>
                                   <button
                                     onClick={() => handleCopy(uri, `redirect-${i}`)}
                                     className="p-1 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -376,17 +376,19 @@ export function AdminClients() {
                                 </div>
                               ))
                             ) : (
-                              <span className="text-xs text-gray-400 italic">未配置</span>
+                              <div className="flex items-center gap-2">
+                                <span className="flex-1 text-xs text-gray-400 italic bg-white dark:bg-black/20 px-2 py-1.5 rounded border border-dashed border-gray-200 dark:border-white/[0.06]">未配置</span>
+                              </div>
                             )}
                           </div>
                         </div>
                         {client.post_logout_redirect_uris && client.post_logout_redirect_uris.length > 0 && (
                           <div>
                             <span className="text-[10px] text-gray-400 uppercase tracking-wider">登出回调</span>
-                            <div className="mt-1 space-y-1">
+                            <div className="mt-1 space-y-1 min-h-[28px]">
                               {client.post_logout_redirect_uris.map((uri, i) => (
                                 <div key={i} className="flex items-center gap-2 group">
-                                  <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-black/20 px-2 py-1 rounded border border-gray-200 dark:border-white/[0.06] truncate">{uri}</code>
+                                  <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-black/20 px-2 py-1.5 rounded border border-gray-200 dark:border-white/[0.06] truncate">{uri}</code>
                                   <button
                                     onClick={() => handleCopy(uri, `logout-${i}`)}
                                     className="p-1 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
