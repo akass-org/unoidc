@@ -94,14 +94,36 @@ export function AdminAuditLogs() {
     }
   }
 
+  const parseDate = (dateStr: string): Date => {
+    if (!dateStr || typeof dateStr !== 'string') return new Date(NaN)
+    
+    // Rust OffsetDateTime::to_string() format: "2024-01-15 10:30:00.123456789 +00:00"
+    // Replace first space (date/time sep) with T, remove second space (before timezone)
+    let normalized = dateStr.trim().replace(/^([^ ]+) ([^ ]+) ([+-])/, '$1T$2$3')
+    
+    // Try to parse normalized string
+    let date = new Date(normalized)
+    if (!isNaN(date.getTime())) return date
+    
+    // Try removing microseconds if present (keep only milliseconds)
+    const cleaned = normalized.replace(/\.(\d{3})\d+([+-]|Z)/, '.$1$2')
+    date = new Date(cleaned)
+    if (!isNaN(date.getTime())) return date
+    
+    // Fallback: try to extract date components
+    const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
+    if (match) {
+      const [, year, month, day, hour, minute, second] = match
+      return new Date(Date.UTC(+year, +month - 1, +day, +hour, +minute, +second))
+    }
+    
+    return new Date(NaN)
+  }
+
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleString('zh-CN', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    const date = parseDate(dateStr)
+    if (isNaN(date.getTime())) return '-'
+    return date.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   const columns = [
@@ -165,9 +187,14 @@ export function AdminAuditLogs() {
   ]
 
   const todayLogs = logs.filter(l => {
-    const logDate = new Date(l.created_at)
+    const logDate = parseDate(l.created_at)
     const today = new Date()
-    return logDate.toDateString() === today.toDateString()
+    if (isNaN(logDate.getTime())) return false
+    return (
+      logDate.getFullYear() === today.getFullYear() &&
+      logDate.getMonth() === today.getMonth() &&
+      logDate.getDate() === today.getDate()
+    )
   })
 
   return (
