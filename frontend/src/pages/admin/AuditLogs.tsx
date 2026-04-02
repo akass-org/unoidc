@@ -102,33 +102,39 @@ export function AdminAuditLogs() {
   const parseDate = (dateStr: string): Date => {
     if (!dateStr || typeof dateStr !== 'string') return new Date(NaN)
     
-    // Rust OffsetDateTime::to_string() format: "2024-01-15 10:30:00.123456789 +00:00"
-    // Replace first space (date/time sep) with T, remove second space (before timezone)
-    let normalized = dateStr.trim().replace(/^([^ ]+) ([^ ]+) ([+-])/, '$1T$2$3')
-    
-    // Try to parse normalized string
-    let date = new Date(normalized)
-    if (!isNaN(date.getTime())) return date
-    
-    // Try removing microseconds if present (keep only milliseconds)
-    const cleaned = normalized.replace(/\.(\d{3})\d+([+-]|Z)/, '.$1$2')
-    date = new Date(cleaned)
-    if (!isNaN(date.getTime())) return date
-    
-    // Fallback: try to extract date components
-    const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
-    if (match) {
-      const [, year, month, day, hour, minute, second] = match
-      return new Date(Date.UTC(+year, +month - 1, +day, +hour, +minute, +second))
+    try {
+      // Support RFC 3339 format: "2024-01-15T10:30:00+00:00"
+      // and Rust to_string format: "2024-01-15 10:30:00.123456789 +00:00"
+      let normalized = dateStr.trim()
+      
+      // If it has space instead of T, replace it
+      if (normalized.includes(' ') && !normalized.includes('T')) {
+        normalized = normalized.replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T')
+      }
+      
+      // Remove fractional seconds if too long
+      normalized = normalized.replace(/(\d{2}:\d{2}:\d{2})\.(\d{6})\d+/, '$1.$2')
+      
+      // Parse as ISO date
+      const date = new Date(normalized)
+      return date
+    } catch {
+      return new Date(NaN)
     }
-    
-    return new Date(NaN)
   }
 
   const formatDate = (dateStr: string) => {
     const date = parseDate(dateStr)
-    if (isNaN(date.getTime())) return '-'
-    return date.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    if (isNaN(date.getTime())) return dateStr || '-'
+    
+    // Format as: "Apr 2, 10:30"
+    return date.toLocaleString('zh-CN', { 
+      month: 'short', 
+      day: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false
+    })
   }
 
   const columns = [
@@ -228,13 +234,13 @@ export function AdminAuditLogs() {
         </Card>
         <Card className="text-center py-4">
           <p className="text-xl font-medium text-emerald-400">
-            {todayLogs.filter(l => l.outcome === 'success').length}
+            {logs.filter(l => l.outcome === 'success').length}
           </p>
           <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">成功</p>
         </Card>
         <Card className="text-center py-4">
           <p className="text-xl font-medium text-red-400">
-            {todayLogs.filter(l => l.outcome === 'failure').length}
+            {logs.filter(l => l.outcome === 'failure').length}
           </p>
           <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">失败</p>
         </Card>

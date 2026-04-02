@@ -808,7 +808,7 @@ pub async fn get_audit_logs(
                 user_agent: row.user_agent.unwrap_or_else(|| "unknown".to_string()),
                 outcome: row.outcome,
                 reason: row.reason_code,
-                created_at: row.created_at.to_string(),
+                created_at: row.created_at.format(&Rfc3339).unwrap_or_else(|_| row.created_at.to_string()),
             }
         })
         .collect();
