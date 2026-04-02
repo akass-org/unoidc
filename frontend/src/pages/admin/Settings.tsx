@@ -22,10 +22,10 @@ const fadeIn = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`
 const slideUp = `@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`
 
 const layoutOptions: { value: LoginLayout; label: string; description: string }[] = [
-  { value: 'split-left', label: '左侧品牌', description: '品牌展示在左' },
-  { value: 'split-right', label: '右侧品牌', description: '品牌展示在右' },
-  { value: 'centered', label: '居中', description: '简洁居中布局' },
-  { value: 'fullscreen', label: '全屏', description: '沉浸式深色背景' },
+  { value: 'split-left', label: '左侧品牌', description: '图片占 65%，品牌在左' },
+  { value: 'split-right', label: '右侧品牌', description: '图片占 65%，品牌在右' },
+  { value: 'centered', label: '简洁模式', description: '纯净居中卡片' },
+  { value: 'fullscreen', label: '背景图片模式', description: '使用背景图的沉浸式布局' },
 ]
 
 export function AdminSettings() {
@@ -131,7 +131,7 @@ export function AdminSettings() {
 
       {/* Branding Tab */}
       {activeTab === 'branding' && (
-        <div className="space-y-4 max-w-lg">
+        <div className="space-y-4 max-w-5xl w-full">
           <Card>
             <CardHeader 
               title="品牌信息" 
@@ -160,7 +160,7 @@ export function AdminSettings() {
 
       {/* Appearance Tab */}
       {activeTab === 'appearance' && (
-        <div className="space-y-4 max-w-lg">
+        <div className="space-y-4 max-w-5xl w-full">
           <Card>
             <CardHeader 
               title="登录页布局" 
@@ -207,7 +207,7 @@ export function AdminSettings() {
 
       {/* Security Tab */}
       {activeTab === 'security' && (
-        <div className="space-y-4 max-w-lg">
+        <div className="space-y-4 max-w-5xl w-full">
           <Card>
             <CardHeader 
               title="会话设置" 

@@ -10,10 +10,10 @@ interface LoginLayoutSelectorProps {
 }
 
 const layoutOptions: { value: LoginLayout; label: string; description: string }[] = [
-  { value: 'split-left', label: '左侧品牌', description: '品牌展示在左' },
-  { value: 'split-right', label: '右侧品牌', description: '品牌展示在右' },
-  { value: 'centered', label: '居中', description: '简洁居中布局' },
-  { value: 'fullscreen', label: '全屏', description: '沉浸式深色背景' },
+  { value: 'split-left', label: '左侧品牌', description: '图片占 65%，品牌在左' },
+  { value: 'split-right', label: '右侧品牌', description: '图片占 65%，品牌在右' },
+  { value: 'centered', label: '简洁模式', description: '纯净居中卡片' },
+  { value: 'fullscreen', label: '背景图片模式', description: '使用背景图的沉浸式布局' },
 ]
 
 export function LoginLayoutSelector({ value, onChange }: LoginLayoutSelectorProps) {
@@ -73,8 +73,9 @@ function GeometricPattern() {
 // Brand content for sidebar
 function BrandContent({ brandName }: { brandName: string }) {
   return (
-    <div className="relative z-10 flex flex-col justify-center h-full p-12 text-white">
-      <div className="mb-8">
+    <div className="relative z-10 flex flex-col justify-center h-full px-10 py-12 lg:px-16 xl:px-20 text-white">
+      <div className="max-w-sm">
+        <div className="mb-8">
         <div className="inline-flex items-center justify-center w-14 h-14 mb-6 rounded-xl bg-white/[0.06] backdrop-blur-sm ring-1 ring-white/[0.08]">
           <Shield className="w-7 h-7 text-white" />
         </div>
@@ -82,9 +83,9 @@ function BrandContent({ brandName }: { brandName: string }) {
         <p className="text-base text-white/50 max-w-sm leading-relaxed">
           安全、可靠的统一身份认证解决方案
         </p>
-      </div>
+        </div>
 
-      <div className="space-y-3 mt-8">
+        <div className="space-y-3 mt-8">
         {[
           { icon: Fingerprint, text: '多因素身份验证' },
           { icon: Lock, text: '企业级安全防护' },
@@ -95,6 +96,7 @@ function BrandContent({ brandName }: { brandName: string }) {
             <span className="text-sm">{text}</span>
           </div>
         ))}
+        </div>
       </div>
     </div>
   )
@@ -147,15 +149,19 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
   }
 
   const formSection = (
-    <div className="flex-1 flex items-center justify-center p-6 lg:p-12 bg-gray-50 dark:bg-black">
-      <div className="w-full max-w-sm">
+    <div className="relative flex h-full items-center justify-center overflow-hidden bg-gray-50 dark:bg-black px-6 py-10 lg:px-10">
+      <div className="absolute inset-0 opacity-60">
+        <div className="absolute -right-24 top-1/4 h-72 w-72 rounded-full bg-black/[0.04] blur-3xl dark:bg-white/[0.04]" />
+        <div className="absolute -left-16 bottom-0 h-56 w-56 rounded-full bg-black/[0.03] blur-3xl dark:bg-white/[0.03]" />
+      </div>
+      <div className="relative z-10 w-full max-w-md">
         {children}
       </div>
     </div>
   )
 
   const imageSection = (
-    <div className="relative hidden lg:flex lg:w-[55%] bg-gray-900 dark:bg-neutral-950 overflow-hidden">
+    <div className="relative hidden lg:flex lg:basis-[65%] lg:flex-[0_0_65%] bg-gray-900 dark:bg-neutral-950 overflow-hidden">
       <GeometricPattern />
       {loginBackgroundUrl ? (
         <>
@@ -174,16 +180,16 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
   switch (loginLayout) {
     case 'split-left':
       return (
-        <div className="min-h-screen flex">
+        <div className="min-h-screen grid lg:grid-cols-[65fr_35fr]">
           {imageSection}
-          {formSection}
+          <div className="lg:min-h-screen">{formSection}</div>
         </div>
       )
 
     case 'split-right':
       return (
-        <div className="min-h-screen flex">
-          {formSection}
+        <div className="min-h-screen grid lg:grid-cols-[35fr_65fr]">
+          <div className="lg:min-h-screen">{formSection}</div>
           {imageSection}
         </div>
       )
@@ -191,8 +197,8 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
     case 'centered':
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black p-4">
-          <div className="w-full max-w-[380px]">
-            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] rounded-xl p-8 shadow-sm dark:shadow-none">
+          <div className="w-full max-w-[420px]">
+            <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] rounded-2xl p-8 shadow-sm dark:shadow-none">
               {children}
             </div>
           </div>
@@ -201,19 +207,33 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
 
     case 'fullscreen':
       return (
-        <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gray-50 dark:bg-black">
-          {/* Subtle grid background */}
-          <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.03] opacity-0">
-            <div className="absolute inset-0" style={{
-              backgroundImage: `linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)`,
-              backgroundSize: '60px 60px'
-            }} />
-          </div>
+        <div className="min-h-screen relative overflow-hidden bg-gray-950 dark:bg-black">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.14),_transparent_36%),radial-gradient(circle_at_bottom_right,_rgba(255,255,255,0.08),_transparent_32%)]" />
+          {loginBackgroundUrl ? (
+            <>
+              <img
+                src={loginBackgroundUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover opacity-30"
+              />
+              <div className="absolute inset-0 bg-black/60" />
+            </>
+          ) : (
+            <div
+              className="absolute inset-0 opacity-30"
+              style={{
+                backgroundImage:
+                  'linear-gradient(to right, rgba(255,255,255,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.12) 1px, transparent 1px)',
+                backgroundSize: '72px 72px',
+              }}
+            />
+          )}
 
-          {/* Card */}
-          <div className="relative w-full max-w-[380px]">
-            <div className="bg-white dark:bg-white/[0.02] backdrop-blur-xl rounded-xl border border-gray-200 dark:border-white/[0.06] p-8 shadow-lg dark:shadow-none">
-              {children}
+          <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+            <div className="w-full max-w-[420px]">
+              <div className="rounded-2xl border border-white/10 bg-black/45 backdrop-blur-xl p-8 shadow-2xl shadow-black/20">
+                {children}
+              </div>
             </div>
           </div>
         </div>
