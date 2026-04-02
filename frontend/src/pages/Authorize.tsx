@@ -12,7 +12,7 @@ import {
 import { useSessionStore } from '#src/stores/session'
 import { ThemeToggle } from '#src/components/ThemeToggle'
 import { Button, Card, Avatar, useToast, Badge } from '#src/components/ui'
-import { getErrorMessage } from '#src/api/client'
+import { api, getErrorMessage } from '#src/api/client'
 
 interface ConsentRequest {
   client_id: string
@@ -21,6 +21,29 @@ interface ConsentRequest {
   client_logo?: string
   scopes: string[]
   redirect_uri: string
+}
+
+interface ConsentResponse {
+  code?: string
+  redirect_uri?: string
+}
+
+function parseSafeRedirectUri(raw: string | null): URL | null {
+  if (!raw) return null
+
+  try {
+    const url = new URL(raw)
+    if (!['https:', 'http:'].includes(url.protocol)) {
+      return null
+    }
+    // 拒绝带凭据的 URL，避免混淆与日志泄露风险
+    if (url.username || url.password) {
+      return null
+    }
+    return url
+  } catch {
+    return null
+  }
 }
 
 const scopeConfig: Record<string, { label: string; description: string; icon: typeof User }> = {
@@ -113,10 +136,8 @@ export function AuthorizePage() {
   const handleApprove = async () => {
     setProcessing(true)
     try {
-      const response = await fetch('/api/v1/oidc/consent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const data = await api.post('authorize/consent', {
+        json: {
           client_id: clientId,
           redirect_uri: redirectUri,
           state,
@@ -124,19 +145,22 @@ export function AuthorizePage() {
           nonce,
           scopes: selectedScopes,
           approved: true,
-        }),
-      })
+        },
+      }).json<ConsentResponse>()
 
-      if (!response.ok) {
-        throw new Error('授权失败')
+      const approvedRedirect = parseSafeRedirectUri(data.redirect_uri || redirectUri)
+      if (!approvedRedirect) {
+        throw new Error('无效的回调地址')
       }
-
-      const data = await response.json()
       
       const params = new URLSearchParams()
+      if (!data.code) {
+        throw new Error('授权响应缺少 code')
+      }
       params.set('code', data.code)
       if (state) params.set('state', state)
-      window.location.href = `${redirectUri}?${params.toString()}`
+      approvedRedirect.search = params.toString()
+      window.location.href = approvedRedirect.toString()
     } catch (err) {
       addToast({
         type: 'error',
@@ -148,11 +172,18 @@ export function AuthorizePage() {
   }
 
   const handleDeny = () => {
+    const deniedRedirect = parseSafeRedirectUri(redirectUri)
+    if (!deniedRedirect) {
+      setError('无效的回调地址')
+      return
+    }
+
     const params = new URLSearchParams()
     params.set('error', 'access_denied')
     params.set('error_description', '用户拒绝了授权请求')
     if (state) params.set('state', state)
-    window.location.href = `${redirectUri}?${params.toString()}`
+    deniedRedirect.search = params.toString()
+    window.location.href = deniedRedirect.toString()
   }
 
   const toggleScope = (scope: string) => {

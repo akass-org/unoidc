@@ -30,8 +30,8 @@ export const useSessionStore = create<SessionState>((set) => ({
   logout: async () => {
     try {
       await authApi.logout()
-    } catch (err) {
-      console.error('Logout error:', err)
+    } catch {
+      // 忽略登出失败，仍清理本地会话状态
     } finally {
       set({ user: null, loading: false })
     }

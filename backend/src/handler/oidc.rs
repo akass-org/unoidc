@@ -176,8 +176,8 @@ pub async fn userinfo(
     // 获取公钥用于验证 token
     let jwks = KeyService::get_jwks(&state.db)
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("JWKS_ERROR: {}", e)),
+        .map_err(|_| AppError::InternalServerError {
+            error_code: Some("JWKS_UNAVAILABLE".to_string()),
         })?;
 
     if jwks.is_empty() {
@@ -195,8 +195,8 @@ pub async fn userinfo(
 
     let user = UserRepo::find_by_id(&state.db, user_id)
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DATABASE_ERROR: {}", e)),
+        .map_err(|_| AppError::InternalServerError {
+            error_code: Some("USER_LOOKUP_FAILED".to_string()),
         })?
         .ok_or_else(|| AppError::Unauthorized {
             reason: Some("User no longer exists".to_string()),
@@ -205,8 +205,8 @@ pub async fn userinfo(
     // 加载用户组
     let groups: Vec<String> = GroupRepo::find_user_groups(&state.db, user.id)
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DATABASE_ERROR: {}", e)),
+        .map_err(|_| AppError::InternalServerError {
+            error_code: Some("GROUP_LOOKUP_FAILED".to_string()),
         })?
         .into_iter()
         .map(|g| g.name)

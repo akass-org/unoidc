@@ -21,7 +21,23 @@ export function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const returnTo = searchParams.get('return_to') || '/profile'
+  const rawReturnTo = searchParams.get('return_to') || '/profile'
+  const returnTo = (() => {
+    if (rawReturnTo.startsWith('/')) {
+      return rawReturnTo
+    }
+
+    try {
+      const url = new URL(rawReturnTo)
+      if (url.origin === window.location.origin) {
+        return `${url.pathname}${url.search}`
+      }
+    } catch {
+      // ignore invalid URL
+    }
+
+    return '/profile'
+  })()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

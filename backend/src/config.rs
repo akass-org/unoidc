@@ -9,6 +9,7 @@ pub struct Config {
     pub session_secret: String,
     pub cookie_domain: Option<String>,
     pub access_token_ttl: i64,
+    pub id_token_ttl: i64,
     pub refresh_token_ttl: i64,
     pub session_ttl: i64,
     pub storage_path: String,
@@ -32,6 +33,7 @@ impl Default for Config {
             session_secret: "dev-secret-key-change-in-production".to_string(),
             cookie_domain: None,
             access_token_ttl: 3600,
+            id_token_ttl: 3600,
             refresh_token_ttl: 604800,
             session_ttl: 86400,
             storage_path: "./storage".to_string(),
@@ -71,6 +73,9 @@ impl Config {
                 .unwrap_or_else(|_| "dev-secret-key-change-in-production".to_string()),
             cookie_domain: env::var("COOKIE_DOMAIN").ok(),
             access_token_ttl: env::var("ACCESS_TOKEN_TTL")
+                .unwrap_or_else(|_| "3600".to_string())
+                .parse()?,
+            id_token_ttl: env::var("ID_TOKEN_TTL")
                 .unwrap_or_else(|_| "3600".to_string())
                 .parse()?,
             refresh_token_ttl: env::var("REFRESH_TOKEN_TTL")

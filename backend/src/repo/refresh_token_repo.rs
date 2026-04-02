@@ -168,7 +168,7 @@ impl RefreshTokenRepo {
 
     /// 递归检测 token 族重放攻击
     ///
-    /// 检查当前 token 的任何祖先是否已被撤销或替换
+    /// 只要发现当前 token 的祖先出现“撤销”或“分叉替换”就判定为重放风险
     /// 防止攻击者使用多代之前的旧 token 进行重放
     pub async fn detect_family_replay(pool: &PgPool, token_hash: &str) -> Result<bool, sqlx::Error> {
         // 递归 CTE 查询：追踪整个 token 族谱
@@ -187,7 +187,11 @@ impl RefreshTokenRepo {
             )
             SELECT COUNT(*)
             FROM token_chain
-            WHERE revoked_at IS NOT NULL OR token_hash != $1
+                        WHERE token_hash != $1
+                            AND (
+                                revoked_at IS NOT NULL
+                                OR replaced_by_token_hash IS NOT NULL
+                            )
             "#,
         )
         .bind(token_hash)
