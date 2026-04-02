@@ -1,6 +1,7 @@
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 use std::error::Error;
+use time::OffsetDateTime;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -55,7 +56,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             serde_json::json!({"event": "login_success"}),
             format!("192.168.1.{}", 100 + i),
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            chrono::Utc::now().naive_utc()
+            OffsetDateTime::now_utc()
         )
         .execute(&pool)
         .await;
@@ -84,7 +85,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         serde_json::json!({"event": "logout"}),
         "192.168.1.200",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-        chrono::Utc::now().naive_utc()
+        OffsetDateTime::now_utc()
     )
     .execute(&pool)
     .await;
@@ -113,7 +114,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             serde_json::json!({"event": "token_issued", "token_type": "id_token"}),
             "192.168.1.100",
             "Mozilla/5.0 (X11; Linux x86_64)",
-            chrono::Utc::now().naive_utc()
+            OffsetDateTime::now_utc()
         )
         .execute(&pool)
         .await;
@@ -142,7 +143,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         serde_json::json!({"event": "login_failure", "username": "wronguser"}),
         "192.168.1.50",
         "Mozilla/5.0 (Windows NT 10.0)",
-        chrono::Utc::now().naive_utc()
+        OffsetDateTime::now_utc()
     )
     .execute(&pool)
     .await;
