@@ -35,12 +35,18 @@ async fn ensure_admin_group(pool: &sqlx::PgPool) -> Result<crate::model::Group> 
             },
         )
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+        .map_err(|e| {
+            tracing::error!("Database error while creating admin group: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("ADMIN_GROUP_ERROR".to_string()),
+            }
         }),
-        Err(e) => Err(AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
-        }),
+        Err(e) => {
+            tracing::error!("Database error while finding admin group: {}", e);
+            Err(AppError::InternalServerError {
+                error_code: Some("ADMIN_GROUP_ERROR".to_string()),
+            })
+        }
     }
 }
 
@@ -49,16 +55,22 @@ async fn is_user_admin(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool> {
     // 获取 admin 组
     let admin_group = crate::repo::GroupRepo::find_by_name(pool, "admin")
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+        .map_err(|e| {
+            tracing::error!("Database error while finding admin group: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("ADMIN_CHECK_ERROR".to_string()),
+            }
         })?;
     
     if let Some(group) = admin_group {
         // 检查用户是否在 admin 组
         let user_groups = crate::repo::GroupRepo::find_user_groups(pool, user_id)
             .await
-            .map_err(|e| AppError::InternalServerError {
-                error_code: Some(format!("DB_ERROR: {}", e)),
+            .map_err(|e| {
+                tracing::error!("Database error while finding user groups: {}", e);
+                AppError::InternalServerError {
+                    error_code: Some("ADMIN_CHECK_ERROR".to_string()),
+                }
             })?;
         
         return Ok(user_groups.iter().any(|g| g.id == group.id));
@@ -141,8 +153,9 @@ pub async fn get_users(
     let _auth_user = require_admin(&state.db, &headers).await?;
 
     let users = UserService::list_users(&state.db, 1000, 0).await.map_err(|e| {
+        tracing::error!("Database error while listing users: {}", e);
         AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+            error_code: Some("USERS_FETCH_ERROR".to_string()),
         }
     })?;
 
@@ -161,7 +174,6 @@ pub async fn create_user(
     Json(req): Json<CreateUserRequest>,
 ) -> Result<Json<UserResponse>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     req.validate().map_err(|e| AppError::ValidationError {
         field: "request".to_string(),
@@ -176,31 +188,18 @@ pub async fn create_user(
         req.password
     };
 
-    let user = UserService::register(&state.db, req.username, req.email, password)
+    let mut user = UserService::register(
+        &state.db,
+        req.username,
+        req.email,
+        password,
+        Some(req.display_name),
+    )
         .await
         .map_err(|e| AppError::BusinessError {
             code: "USER_CREATE_FAILED".to_string(),
             message: e.to_string(),
         })?;
-
-    // 创建后补齐显示名（register 目前不会写 display_name）
-    let mut user = UserService::update_user(
-        &state.db,
-        user.id,
-        UpdateUser {
-            display_name: Some(req.display_name),
-            given_name: None,
-            family_name: None,
-            picture: None,
-            email_verified: None,
-            enabled: None,
-        },
-    )
-    .await
-    .map_err(|e| AppError::BusinessError {
-        code: "USER_UPDATE_FAILED".to_string(),
-        message: e.to_string(),
-    })?;
 
     if req.is_admin {
         let admin_group = ensure_admin_group(&state.db).await?;
@@ -232,7 +231,6 @@ pub async fn update_user(
     Json(req): Json<UpdateUserRequest>,
 ) -> Result<Json<UserResponse>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     if let Some(ref email) = req.email {
         if !email.contains('@') {
@@ -244,8 +242,11 @@ pub async fn update_user(
 
         if let Some(existing) = UserRepo::find_by_email(&state.db, email)
             .await
-            .map_err(|e| AppError::InternalServerError {
-                error_code: Some(format!("DB_ERROR: {}", e)),
+            .map_err(|e| {
+                tracing::error!("Database error while checking email: {}", e);
+                AppError::InternalServerError {
+                    error_code: Some("EMAIL_CHECK_ERROR".to_string()),
+                }
             })?
         {
             if existing.id != id {
@@ -324,7 +325,6 @@ pub async fn reset_user_password(
     headers: HeaderMap,
 ) -> Result<Json<ResetPasswordResponse>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     let new_password = crypto::generate_secure_token(16).map_err(|e| AppError::InternalServerError {
         error_code: Some(format!("TOKEN_GEN_ERROR: {}", e)),
@@ -392,11 +392,11 @@ pub async fn get_groups(
     headers: HeaderMap,
 ) -> Result<Json<Vec<GroupResponse>>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     let groups = GroupService::list_groups(&state.db).await.map_err(|e| {
+        tracing::error!("Database error while listing groups: {}", e);
         AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+            error_code: Some("GROUPS_FETCH_ERROR".to_string()),
         }
     })?;
 
@@ -404,8 +404,11 @@ pub async fn get_groups(
     for group in groups {
         let member_count = crate::repo::GroupRepo::find_group_user_ids(&state.db, group.id)
             .await
-            .map_err(|e| AppError::InternalServerError {
-                error_code: Some(format!("DB_ERROR: {}", e)),
+            .map_err(|e| {
+                tracing::error!("Database error while fetching group members: {}", e);
+                AppError::InternalServerError {
+                    error_code: Some("GROUP_MEMBERS_ERROR".to_string()),
+                }
             })?
             .len() as i64;
 
@@ -431,7 +434,6 @@ pub async fn create_group(
     Json(req): Json<CreateGroupRequest>,
 ) -> Result<Json<GroupResponse>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     req.validate().map_err(|e| AppError::ValidationError {
         field: "request".to_string(),
@@ -467,7 +469,6 @@ pub async fn update_group(
     Json(req): Json<UpdateGroupRequest>,
 ) -> Result<Json<GroupResponse>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     let update = UpdateGroup {
         name: req.name,
@@ -483,8 +484,11 @@ pub async fn update_group(
 
     let member_count = crate::repo::GroupRepo::find_group_user_ids(&state.db, group.id)
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+        .map_err(|e| {
+            tracing::error!("Database error while fetching group members: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("GROUP_MEMBERS_ERROR".to_string()),
+            }
         })?
         .len() as i64;
 
@@ -504,7 +508,6 @@ pub async fn delete_group(
     headers: HeaderMap,
 ) -> Result<impl IntoResponse> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     GroupService::delete_group(&state.db, id)
         .await
@@ -577,11 +580,11 @@ pub async fn get_clients(
     headers: HeaderMap,
 ) -> Result<Json<Vec<ClientResponse>>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     let clients = ClientService::list_clients(&state.db).await.map_err(|e| {
+        tracing::error!("Database error while listing clients: {}", e);
         AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+            error_code: Some("CLIENTS_FETCH_ERROR".to_string()),
         }
     })?;
 
@@ -595,7 +598,6 @@ pub async fn create_client(
     Json(req): Json<CreateClientRequest>,
 ) -> Result<Json<CreateClientResponse>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     let input = CreateClient {
         client_id: String::new(), // 将由服务生成
@@ -632,7 +634,6 @@ pub async fn update_client(
     Json(req): Json<UpdateClientRequest>,
 ) -> Result<Json<ClientResponse>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     let update = UpdateClient {
         name: req.name,
@@ -660,7 +661,6 @@ pub async fn delete_client(
     headers: HeaderMap,
 ) -> Result<impl IntoResponse> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     ClientService::delete_client(&state.db, id)
         .await
@@ -685,7 +685,6 @@ pub async fn reset_client_secret(
     headers: HeaderMap,
 ) -> Result<Json<ResetSecretResponse>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     let secret = ClientService::regenerate_secret(&state.db, id)
         .await
@@ -731,7 +730,6 @@ pub async fn get_audit_logs(
     headers: HeaderMap,
 ) -> Result<Json<Vec<AuditLogResponse>>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     let query = crate::model::AuditLogQuery {
         limit: Some(500),
@@ -741,8 +739,11 @@ pub async fn get_audit_logs(
 
     let logs = AuditService::query_logs(&state.db, query)
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+        .map_err(|e| {
+            tracing::error!("Database error while querying audit logs: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("AUDIT_LOGS_FETCH_ERROR".to_string()),
+            }
         })?;
 
     let responses: Vec<AuditLogResponse> = logs
@@ -890,7 +891,6 @@ pub async fn rotate_key(
     headers: HeaderMap,
 ) -> Result<Json<RotateKeyResponse>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
-    // TODO: 检查管理员权限
 
     let _new_key = KeyService::rotate_key(&state.db, &state.config.private_key_encryption_key)
         .await

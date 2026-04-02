@@ -244,29 +244,29 @@ export function AdminAuditLogs() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Card padding="sm" className="flex-1">
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Card padding="none" className="flex-1 h-9 px-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
+            <Search className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
             <input
               type="text"
               placeholder="搜索日志..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-transparent pl-9 pr-4 py-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-700 focus:outline-none"
+              className="h-9 w-full bg-transparent pl-6 pr-2 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-700 focus:outline-none"
             />
           </div>
         </Card>
         
-        <div className="flex gap-2">
+        <div className="flex h-9 items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-white/[0.06] dark:bg-white/[0.02]">
           {(['all', 'success', 'failure'] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
+              className={`h-full px-3 rounded-md text-xs font-medium transition-colors ${
                 filter === f
-                  ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
-                  : 'bg-gray-50 dark:bg-white/[0.02] text-gray-500 border-gray-200 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/[0.12]'
+                  ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
               }`}
             >
               {f === 'all' ? '全部' : f === 'success' ? '成功' : '失败'}

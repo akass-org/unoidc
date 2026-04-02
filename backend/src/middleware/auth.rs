@@ -86,8 +86,11 @@ pub async fn check_user_client_access(
 ) -> Result<()> {
     let has_access = crate::repo::ClientRepo::can_user_access_client(pool, user_id, client_db_id)
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+        .map_err(|e| {
+            tracing::error!("Database error while checking client access: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("ACCESS_CHECK_ERROR".to_string()),
+            }
         })?;
 
     if !has_access {

@@ -18,6 +18,7 @@ impl UserService {
         username: String,
         email: String,
         password: String,
+        display_name: Option<String>,
     ) -> Result<User, anyhow::Error> {
         if username.is_empty() || username.len() > 64 {
             return Err(anyhow::anyhow!("Username must be 1-64 characters"));
@@ -45,7 +46,7 @@ impl UserService {
                 username,
                 email,
                 password_hash,
-                display_name: None,
+                display_name,
                 given_name: None,
                 family_name: None,
             },

@@ -17,6 +17,7 @@ fn is_exempt_path(path: &str) -> bool {
         path,
         "/token"
             | "/api/v1/auth/login"
+            | "/api/v1/auth/register"
             | "/api/v1/auth/logout"
             | "/api/v1/auth/forgot-password"
     )
@@ -101,8 +102,8 @@ mod tests {
     fn test_is_exempt_path() {
         assert!(is_exempt_path("/token"));
         assert!(is_exempt_path("/api/v1/auth/login"));
+        assert!(is_exempt_path("/api/v1/auth/register"));
         assert!(is_exempt_path("/api/v1/auth/logout"));
-        assert!(!is_exempt_path("/api/v1/auth/register"));
         assert!(!is_exempt_path("/authorize/consent"));
     }
 

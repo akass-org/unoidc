@@ -4,7 +4,7 @@
 // 所有时间字段均为 Unix 时间戳 (NumericDate)，符合 OIDC 规范
 
 use anyhow::Result;
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 /// ID Token Claims (OIDC Core Section 2)

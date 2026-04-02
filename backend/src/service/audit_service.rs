@@ -440,4 +440,35 @@ impl AuditService {
         );
         Ok(log)
     }
+
+    /// 记录邮箱修改事件
+    pub async fn log_email_changed(
+        pool: &PgPool,
+        user_id: Uuid,
+        new_email: &str,
+        correlation_id: Option<String>,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+    ) -> Result<AuditLog, sqlx::Error> {
+        let create_log = CreateAuditLog::success(
+            "email_changed",
+            "user_account",
+            user_id.to_string(),
+        )
+        .with_actor(user_id)
+        .with_correlation_id(correlation_id.unwrap_or_default())
+        .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
+        .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
+        .with_metadata(serde_json::json!({
+            "event": "email_changed",
+            "new_email": crate::middleware::log_redaction::SensitiveValueRedactor::redact_email(new_email)
+        }));
+
+        let log = AuditLogRepo::create(pool, create_log).await?;
+        info!(
+            "Audit log: email changed for user {}",
+            user_id
+        );
+        Ok(log)
+    }
 }

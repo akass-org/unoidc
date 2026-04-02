@@ -1,7 +1,7 @@
 use axum::{
     extract::State,
     http::{header, HeaderMap},
-    response::{AppendHeaders, IntoResponse, Response},
+    response::{IntoResponse, Response},
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
@@ -38,6 +38,9 @@ pub struct RegisterRequest {
     #[validate(length(min = 8, max = 128, message = "password must be 8-128 characters"))]
     pub password: String,
 
+    #[validate(length(min = 1, max = 100, message = "display name must be 1-100 characters"))]
+    pub display_name: Option<String>,
+
     #[validate(length(max = 100, message = "given name must not exceed 100 characters"))]
     pub given_name: Option<String>,
 
@@ -70,10 +73,20 @@ fn build_cookie_value(session_id: &str, cookie_domain: Option<&String>, secure: 
         "unoidc_session={}; HttpOnly{}; SameSite={}; Path=/",
         cookie_content, secure_flag, same_site
     );
-    // 只在 HTTPS 环境设置 Domain，localhost 设置 Domain 会导致 cookie 不工作
+    
+    // Domain 配置说明：
+    // - 只在 HTTPS 环境（secure=true）设置 Domain，localhost 设置 Domain 会导致 cookie 不工作
+    // - 未配置 Domain 且 HTTPS 环境下，cookie 仅限于当前主机名，不会跨子域名
+    // - 跨子域名场景需要明确配置 Domain 参数
     if secure {
         if let Some(domain) = cookie_domain {
             cookie = format!("{}; Domain={}", cookie, domain);
+        } else {
+            // 生产环境 (HTTPS) 未配置 Domain 时的警告
+            tracing::warn!(
+                "Production environment (secure=true) without Domain configured - \
+                 session cookie will only work on exact hostname, not across subdomains"
+            );
         }
     }
     cookie
@@ -295,7 +308,15 @@ pub async fn register(
 
     let username = req.username.clone();
 
-    match UserService::register(&state.db, req.username, req.email, req.password).await {
+    match UserService::register(
+        &state.db,
+        req.username,
+        req.email,
+        req.password,
+        req.display_name,
+    )
+    .await
+    {
         Ok(user) => {
             let _ = AuditService::log_user_created(
                 &state.db,

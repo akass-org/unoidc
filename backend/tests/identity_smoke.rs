@@ -152,8 +152,15 @@ async fn test_user_service() {
     let username = format!("testuser_{}", uuid::Uuid::new_v4());
     let email = format!("test_{}@example.com", uuid::Uuid::new_v4());
     let password = "test_password_123".to_string();
+        let display_name = "Test User"; // Added display name variable
 
-    let user = service::UserService::register(&pool, username.clone(), email.clone(), password.clone())
+        let user = service::UserService::register(
+            &pool,
+            username.clone(),
+            email.clone(),
+            password.clone(),
+            Some(display_name.to_string()),
+        )
         .await
         .expect("Failed to register user");
 

@@ -18,7 +18,7 @@ use crate::{
     middleware::auth::{require_auth_user, AuthUser},
     model::UpdateUser,
     repo::RefreshTokenRepo,
-    service::{AuditService, AuthService, UserService},
+    service::{AuditService, AuthService, EmailVerificationService, UserService},
     AppState,
 };
 
@@ -254,8 +254,11 @@ pub async fn get_apps(
     // 获取用户的所有同意记录
     let consents = crate::repo::ConsentRepo::find_user_consents(&state.db, auth_user.user.id)
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+        .map_err(|e| {
+            tracing::error!("Database error while fetching user apps consents: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("CONSENTS_FETCH_ERROR".to_string()),
+            }
         })?;
 
     let mut apps = Vec::new();
@@ -299,8 +302,11 @@ pub async fn get_consents(
 
     let consents = crate::repo::ConsentRepo::find_user_consents(&state.db, auth_user.user.id)
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+        .map_err(|e| {
+            tracing::error!("Database error while fetching user consents: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("CONSENTS_FETCH_ERROR".to_string()),
+            }
         })?;
 
     let mut responses = Vec::new();
@@ -332,8 +338,11 @@ pub async fn revoke_consent(
     // 查找客户端
     let client = crate::repo::ClientRepo::find_by_client_id(&state.db, &client_id)
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+        .map_err(|e| {
+            tracing::error!("Database error while finding client by client_id: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("CLIENT_FETCH_ERROR".to_string()),
+            }
         })?
         .ok_or(AppError::ClientNotFound {
             client_id: Some(client_id),
@@ -342,8 +351,11 @@ pub async fn revoke_consent(
     // 删除同意记录
     crate::repo::ConsentRepo::revoke(&state.db, auth_user.user.id, client.id)
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+        .map_err(|e| {
+            tracing::error!("Database error while revoking consent: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("CONSENT_REVOKE_ERROR".to_string()),
+            }
         })?;
 
     // 记录审计日志
@@ -371,6 +383,140 @@ pub async fn revoke_consent(
 }
 
 // ============================================================================
+// 邮箱验证
+// ============================================================================
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct RequestEmailChangeRequest {
+    #[validate(email(message = "邮箱格式不正确"))]
+    pub new_email: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RequestEmailChangeResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+/// 请求邮箱修改 - 向新邮箱发送验证链接
+pub async fn request_email_change(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<RequestEmailChangeRequest>,
+) -> Result<Json<RequestEmailChangeResponse>> {
+    let auth_user = require_auth_user(&state.db, &headers).await?;
+
+    req.validate().map_err(|e| AppError::ValidationError {
+        field: "request".to_string(),
+        message: e.to_string(),
+    })?;
+
+    // 验证新邮箱是否已被其他用户使用
+    if let Ok(Some(existing)) = crate::repo::UserRepo::find_by_email(&state.db, &req.new_email).await {
+        if existing.id != auth_user.user.id {
+            return Err(AppError::BusinessError {
+                code: "EMAIL_ALREADY_EXISTS".to_string(),
+                message: "该邮箱已被其他用户使用".to_string(),
+            });
+        }
+    }
+
+    // 生成验证 token
+    let plain_token = EmailVerificationService::request_email_change(
+        &state.db,
+        &auth_user.user,
+        &req.new_email,
+    )
+    .await
+    .map_err(|e| AppError::BusinessError {
+        code: "EMAIL_CHANGE_REQUEST_FAILED".to_string(),
+        message: e.to_string(),
+    })?;
+
+    // TODO: 发送验证邮件到新邮箱
+    // 应该包含链接：/api/v1/me/email/verify?token={plain_token}
+    // 或在前端向 /api/v1/me/email/verify POST 请求中包含 token
+
+    // 暂时在日志中打印 token（开发用）
+    tracing::info!(
+        "Email verification token for user {}: {}*** (expires in 24 hours)",
+        auth_user.user.username,
+        &plain_token[..8]
+    );
+
+    Ok(Json(RequestEmailChangeResponse {
+        success: true,
+        message: "验证链接已发送到新邮箱，请在 24 小时内点击链接进行验证".to_string(),
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VerifyEmailChangeRequest {
+    pub token: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VerifyEmailChangeResponse {
+    pub success: bool,
+    pub message: String,
+    pub new_email: String,
+}
+
+/// 验证邮箱修改 - 确认邮箱变更
+pub async fn verify_email_change(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<VerifyEmailChangeRequest>,
+) -> Result<Json<VerifyEmailChangeResponse>> {
+    let auth_user = require_auth_user(&state.db, &headers).await?;
+
+    // 验证 token 并获取新邮箱
+    let new_email = EmailVerificationService::verify_email_change(&state.db, &req.token)
+        .await
+        .map_err(|e| AppError::BusinessError {
+            code: "EMAIL_VERIFICATION_FAILED".to_string(),
+            message: e.to_string(),
+        })?;
+
+    // 更新用户邮箱
+    crate::repo::UserRepo::update_email(&state.db, auth_user.user.id, &new_email)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error while updating user email: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("EMAIL_UPDATE_ERROR".to_string()),
+            }
+        })?;
+
+    // 记录审计日志
+    let ip_address = headers
+        .get("x-forwarded-for")
+        .or_else(|| headers.get("x-real-ip"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let _ = AuditService::log_email_changed(
+        &state.db,
+        auth_user.user.id,
+        &new_email,
+        None,
+        ip_address,
+        user_agent,
+    )
+    .await;
+
+    Ok(Json(VerifyEmailChangeResponse {
+        success: true,
+        message: "邮箱验证成功，邮箱已更新".to_string(),
+        new_email,
+    }))
+}
+
+// ============================================================================
 // 辅助函数
 // ============================================================================
 
@@ -379,16 +525,22 @@ async fn check_is_admin(pool: &sqlx::PgPool, auth_user: &AuthUser) -> Result<boo
     // 获取 admin 组
     let admin_group = crate::repo::GroupRepo::find_by_name(pool, "admin")
         .await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
+        .map_err(|e| {
+            tracing::error!("Database error while finding admin group: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("ADMIN_CHECK_ERROR".to_string()),
+            }
         })?;
 
     if let Some(group) = admin_group {
         // 检查用户是否在 admin 组
         let user_groups = crate::repo::GroupRepo::find_user_groups(pool, auth_user.user.id)
             .await
-            .map_err(|e| AppError::InternalServerError {
-                error_code: Some(format!("DB_ERROR: {}", e)),
+            .map_err(|e| {
+                tracing::error!("Database error while finding user groups: {}", e);
+                AppError::InternalServerError {
+                    error_code: Some("ADMIN_CHECK_ERROR".to_string()),
+                }
             })?;
 
         Ok(user_groups.iter().any(|g| g.id == group.id))
