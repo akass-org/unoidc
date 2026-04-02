@@ -127,9 +127,10 @@ export function AdminAuditLogs() {
     const date = parseDate(dateStr)
     if (isNaN(date.getTime())) return dateStr || '-'
     
-    // Format as: "Apr 2, 10:30"
+    // Format as: "2024/4/2 10:30"
     return date.toLocaleString('zh-CN', { 
-      month: 'short', 
+      year: 'numeric',
+      month: 'numeric', 
       day: 'numeric', 
       hour: '2-digit', 
       minute: '2-digit',
