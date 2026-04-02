@@ -710,6 +710,21 @@ pub async fn reset_client_secret(
 // 审计日志
 // ============================================================================
 
+#[derive(Debug, sqlx::FromRow)]
+struct AuditLogRow {
+    id: uuid::Uuid,
+    actor_user_id: Option<uuid::Uuid>,
+    username: Option<String>,
+    client_id: Option<uuid::Uuid>,
+    client_name: Option<String>,
+    action: String,
+    outcome: String,
+    reason_code: Option<String>,
+    ip_address: Option<String>,
+    user_agent: Option<String>,
+    created_at: time::OffsetDateTime,
+}
+
 #[derive(Debug, Serialize)]
 pub struct AuditLogResponse {
     pub id: String,
@@ -717,6 +732,7 @@ pub struct AuditLogResponse {
     pub user_id: Option<String>,
     pub username: Option<String>,
     pub client_id: Option<String>,
+    pub client_name: Option<String>,
     pub ip_address: String,
     pub user_agent: String,
     pub outcome: String,
@@ -731,50 +747,68 @@ pub async fn get_audit_logs(
 ) -> Result<Json<Vec<AuditLogResponse>>> {
     let _auth_user = require_admin(&state.db, &headers).await?;
 
-    let query = crate::model::AuditLogQuery {
-        limit: Some(500),
-        offset: Some(0),
-        ..Default::default()
-    };
-
-    let logs = AuditService::query_logs(&state.db, query)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error while querying audit logs: {}", e);
-            AppError::InternalServerError {
-                error_code: Some("AUDIT_LOGS_FETCH_ERROR".to_string()),
-            }
-        })?;
+    // 直接查询 JOIN 用户和客户端信息
+    let logs = sqlx::query_as::<_, AuditLogRow>(
+        r#"
+        SELECT 
+            al.id,
+            al.actor_user_id,
+            u.username,
+            al.client_id,
+            c.name as client_name,
+            al.action,
+            al.outcome,
+            al.reason_code,
+            al.ip_address,
+            al.user_agent,
+            al.created_at
+        FROM audit_logs al
+        LEFT JOIN users u ON al.actor_user_id = u.id
+        LEFT JOIN clients c ON al.client_id = c.id
+        ORDER BY al.created_at DESC
+        LIMIT 500
+        "#
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Database error while querying audit logs: {}", e);
+        AppError::InternalServerError {
+            error_code: Some("AUDIT_LOGS_FETCH_ERROR".to_string()),
+        }
+    })?;
 
     let responses: Vec<AuditLogResponse> = logs
         .into_iter()
-        .map(|log| {
+        .map(|row| {
             // 将 action 转换为 event_type
-            let event_type = match log.action.as_str() {
-                "login" if log.outcome == "success" => "login_success",
-                "login" => "login_failure",
-                "logout" => "logout",
-                "token_issued" => "token_issued",
-                "token_refresh" => "token_refresh",
-                "consent_granted" => "consent_granted",
-                "consent_denied" => "consent_revoked",
-                "user_created" => "user_created",
-                "password_reset" => "password_reset",
-                _ => &log.action,
+            let event_type = match (row.action.as_str(), row.outcome.as_str()) {
+                ("login", "success") => "login_success",
+                ("login", _) => "login_failure",
+                ("logout", _) => "logout",
+                ("token_issued", _) => "token_issued",
+                ("token_refresh", _) => "token_refresh",
+                ("consent_granted", _) => "consent_granted",
+                ("consent_denied", _) => "consent_revoked",
+                ("user_created", _) => "user_created",
+                ("password_reset", _) => "password_reset",
+                ("registration_failure", _) => "registration_failure",
+                _ => row.action.as_str(),
             }
             .to_string();
 
             AuditLogResponse {
-                id: log.id.to_string(),
+                id: row.id.to_string(),
                 event_type,
-                user_id: log.actor_user_id.map(|u| u.to_string()),
-                username: None, // TODO: 查询用户名
-                client_id: log.client_id.map(|c| c.to_string()),
-                ip_address: log.ip_address.unwrap_or_default(),
-                user_agent: log.user_agent.unwrap_or_default(),
-                outcome: log.outcome,
-                reason: log.reason_code,
-                created_at: log.created_at.to_string(),
+                user_id: row.actor_user_id.map(|id| id.to_string()),
+                username: row.username,
+                client_id: row.client_id.map(|id| id.to_string()),
+                client_name: row.client_name,
+                ip_address: row.ip_address.unwrap_or_else(|| "unknown".to_string()),
+                user_agent: row.user_agent.unwrap_or_else(|| "unknown".to_string()),
+                outcome: row.outcome,
+                reason: row.reason_code,
+                created_at: row.created_at.to_string(),
             }
         })
         .collect();

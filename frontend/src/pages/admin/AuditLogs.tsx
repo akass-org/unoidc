@@ -31,6 +31,7 @@ interface AuditLog {
   user_id?: string
   username?: string
   client_id?: string
+  client_name?: string
   ip_address: string
   user_agent: string
   outcome: 'success' | 'failure'
@@ -160,7 +161,7 @@ export function AdminAuditLogs() {
       key: 'client',
       title: '应用',
       render: (log: AuditLog) => (
-        <span className="text-xs text-gray-600">{log.client_id || '-'}</span>
+        <span className="text-xs text-gray-600">{log.client_name || '-'}</span>
       ),
     },
     {
