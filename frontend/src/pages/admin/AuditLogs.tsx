@@ -21,6 +21,10 @@ import {
 } from '#src/components/ui'
 import { getErrorMessage } from '#src/api/client'
 
+// Animation keyframes
+const fadeIn = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`
+const slideUp = `@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`
+
 interface AuditLog {
   id: string
   event_type: string
@@ -198,10 +202,11 @@ export function AdminAuditLogs() {
   })
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" style={{ animation: 'slideUp 0.3s ease-out' }}>
+      <style>{fadeIn}{slideUp}</style>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-medium text-gray-900 dark:text-white">审计日志</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">审计日志</h1>
           <p className="text-sm text-gray-500 mt-0.5">查看系统操作和安全事件记录</p>
         </div>
         <Button
