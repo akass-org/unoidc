@@ -171,7 +171,7 @@ export function AdminGroups() {
           <p className="text-xl font-medium text-gray-600 dark:text-gray-300">
             {groups.reduce((sum, g) => sum + g.member_count, 0)}
           </p>
-          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">总成员</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">成员关系数</p>
         </Card>
       </div>
 

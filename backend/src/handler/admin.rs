@@ -10,6 +10,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -18,10 +19,30 @@ use crate::{
     error::{AppError, Result},
     middleware::auth::{require_auth_user, AuthUser},
     model::{CreateClient, CreateGroup, UpdateClient, UpdateGroup, UpdateUser},
-    service::{AuditService, ClientService, GroupService, KeyService, UserService},
-    repo::{AuditLogRepo, SettingsRepo},
+    service::{AuditService, AuthService, ClientService, GroupService, KeyService, UserService},
+    repo::{AuditLogRepo, GroupRepo, RefreshTokenRepo, SettingsRepo, UserRepo},
     AppState,
 };
+
+async fn ensure_admin_group(pool: &sqlx::PgPool) -> Result<crate::model::Group> {
+    match GroupRepo::find_by_name(pool, "admin").await {
+        Ok(Some(group)) => Ok(group),
+        Ok(None) => GroupRepo::create(
+            pool,
+            CreateGroup {
+                name: "admin".to_string(),
+                description: Some("System administrators".to_string()),
+            },
+        )
+        .await
+        .map_err(|e| AppError::InternalServerError {
+            error_code: Some(format!("DB_ERROR: {}", e)),
+        }),
+        Err(e) => Err(AppError::InternalServerError {
+            error_code: Some(format!("DB_ERROR: {}", e)),
+        }),
+    }
+}
 
 /// 检查指定用户是否为管理员
 async fn is_user_admin(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool> {
@@ -162,7 +183,43 @@ pub async fn create_user(
             message: e.to_string(),
         })?;
 
-    // TODO: 如果 is_admin 为 true，添加用户到 admin 组
+    // 创建后补齐显示名（register 目前不会写 display_name）
+    let mut user = UserService::update_user(
+        &state.db,
+        user.id,
+        UpdateUser {
+            display_name: Some(req.display_name),
+            given_name: None,
+            family_name: None,
+            picture: None,
+            email_verified: None,
+            enabled: None,
+        },
+    )
+    .await
+    .map_err(|e| AppError::BusinessError {
+        code: "USER_UPDATE_FAILED".to_string(),
+        message: e.to_string(),
+    })?;
+
+    if req.is_admin {
+        let admin_group = ensure_admin_group(&state.db).await?;
+        GroupRepo::add_user_to_group(&state.db, user.id, admin_group.id)
+            .await
+            .map_err(|e| AppError::InternalServerError {
+                error_code: Some(format!("DB_ERROR: {}", e)),
+            })?;
+
+        user = UserRepo::find_by_id(&state.db, user.id)
+            .await
+            .map_err(|e| AppError::InternalServerError {
+                error_code: Some(format!("DB_ERROR: {}", e)),
+            })?
+            .ok_or_else(|| AppError::BusinessError {
+                code: "USER_NOT_FOUND".to_string(),
+                message: "User not found after create".to_string(),
+            })?;
+    }
 
     Ok(Json(user_to_response(&state.db, user).await?))
 }
@@ -177,6 +234,29 @@ pub async fn update_user(
     let _auth_user = require_admin(&state.db, &headers).await?;
     // TODO: 检查管理员权限
 
+    if let Some(ref email) = req.email {
+        if !email.contains('@') {
+            return Err(AppError::ValidationError {
+                field: "email".to_string(),
+                message: "邮箱格式不正确".to_string(),
+            });
+        }
+
+        if let Some(existing) = UserRepo::find_by_email(&state.db, email)
+            .await
+            .map_err(|e| AppError::InternalServerError {
+                error_code: Some(format!("DB_ERROR: {}", e)),
+            })?
+        {
+            if existing.id != id {
+                return Err(AppError::BusinessError {
+                    code: "EMAIL_ALREADY_EXISTS".to_string(),
+                    message: "Email already exists".to_string(),
+                });
+            }
+        }
+    }
+
     let update = UpdateUser {
         display_name: req.display_name,
         given_name: None,
@@ -186,14 +266,48 @@ pub async fn update_user(
         enabled: req.is_active,
     };
 
-    let user = UserService::update_user(&state.db, id, update)
+    UserService::update_user(&state.db, id, update)
         .await
         .map_err(|e| AppError::BusinessError {
             code: "USER_UPDATE_FAILED".to_string(),
             message: e.to_string(),
         })?;
 
-    // TODO: 处理 is_admin 字段（添加/移除 admin 组）
+    if let Some(email) = req.email {
+        UserRepo::update_email(&state.db, id, &email)
+            .await
+            .map_err(|e| AppError::BusinessError {
+                code: "USER_UPDATE_FAILED".to_string(),
+                message: format!("Failed to update email: {}", e),
+            })?;
+    }
+
+    if let Some(is_admin) = req.is_admin {
+        let admin_group = ensure_admin_group(&state.db).await?;
+        if is_admin {
+            GroupRepo::add_user_to_group(&state.db, id, admin_group.id)
+                .await
+                .map_err(|e| AppError::InternalServerError {
+                    error_code: Some(format!("DB_ERROR: {}", e)),
+                })?;
+        } else {
+            GroupRepo::remove_user_from_group(&state.db, id, admin_group.id)
+                .await
+                .map_err(|e| AppError::InternalServerError {
+                    error_code: Some(format!("DB_ERROR: {}", e)),
+                })?;
+        }
+    }
+
+    let user = UserRepo::find_by_id(&state.db, id)
+        .await
+        .map_err(|e| AppError::InternalServerError {
+            error_code: Some(format!("DB_ERROR: {}", e)),
+        })?
+        .ok_or_else(|| AppError::BusinessError {
+            code: "USER_NOT_FOUND".to_string(),
+            message: "User not found after update".to_string(),
+        })?;
 
     Ok(Json(user_to_response(&state.db, user).await?))
 }
@@ -225,6 +339,19 @@ pub async fn reset_user_password(
         .map_err(|e| AppError::BusinessError {
             code: "PASSWORD_RESET_FAILED".to_string(),
             message: e.to_string(),
+        })?;
+
+    // 管理员重置密码后，强制目标用户全局下线
+    AuthService::logout_all_sessions(&state.db, id)
+        .await
+        .map_err(|_| AppError::InternalServerError {
+            error_code: Some("SESSION_REVOKE_FAILED".to_string()),
+        })?;
+
+    RefreshTokenRepo::revoke_all_for_user(&state.db, id)
+        .await
+        .map_err(|_| AppError::InternalServerError {
+            error_code: Some("TOKEN_REVOKE_FAILED".to_string()),
         })?;
 
     // 记录审计日志
@@ -287,7 +414,10 @@ pub async fn get_groups(
             name: group.name,
             description: group.description.unwrap_or_default(),
             member_count,
-            created_at: group.created_at.to_string(),
+            created_at: group
+                .created_at
+                .format(&Rfc3339)
+                .unwrap_or_else(|_| group.created_at.to_string()),
         });
     }
 

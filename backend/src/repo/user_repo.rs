@@ -242,6 +242,26 @@ impl UserRepo {
         Ok(())
     }
 
+    /// 更新用户邮箱
+    pub async fn update_email(pool: &PgPool, id: Uuid, email: &str) -> Result<(), sqlx::Error> {
+        let now = time::OffsetDateTime::now_utc();
+
+        sqlx::query(
+            r#"
+            UPDATE users
+            SET email = $2, updated_at = $3
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .bind(email)
+        .bind(now)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// 统计用户总数
     pub async fn count(pool: &PgPool) -> Result<i64, sqlx::Error> {
         let result: (i64,) = sqlx::query_as(
