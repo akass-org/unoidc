@@ -20,7 +20,7 @@ use crate::{
     middleware::auth::{require_auth_user, AuthUser},
     model::{CreateClient, CreateGroup, UpdateClient, UpdateGroup, UpdateUser},
     service::{AuditService, AuthService, ClientService, GroupService, KeyService, UserService},
-    repo::{AuditLogRepo, GroupRepo, RefreshTokenRepo, SettingsRepo, UserRepo},
+    repo::{AuditLogRepo, ClientRepo, GroupRepo, RefreshTokenRepo, SettingsRepo, UserRepo},
     AppState,
 };
 
@@ -105,6 +105,10 @@ pub struct UserResponse {
     pub username: String,
     pub email: String,
     pub display_name: String,
+    pub given_name: Option<String>,
+    pub family_name: Option<String>,
+    pub picture: Option<String>,
+    pub groups: Vec<String>,
     pub is_admin: bool,
     pub is_active: bool,
     pub created_at: String,
@@ -133,12 +137,27 @@ pub struct UpdateUserRequest {
 /// 异步将 User 转换为 UserResponse，检查管理员权限
 async fn user_to_response(pool: &sqlx::PgPool, user: crate::model::User) -> Result<UserResponse> {
     let is_admin = is_user_admin(pool, user.id).await.unwrap_or(false);
+    let groups = GroupRepo::find_user_groups(pool, user.id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error while finding user groups: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("USER_GROUPS_FETCH_ERROR".to_string()),
+            }
+        })?
+        .into_iter()
+        .map(|group| group.name)
+        .collect();
     
     Ok(UserResponse {
         id: user.id.to_string(),
         username: user.username,
         email: user.email,
         display_name: user.display_name.unwrap_or_default(),
+        given_name: user.given_name,
+        family_name: user.family_name,
+        picture: user.picture,
+        groups,
         is_admin,
         is_active: user.enabled,
         created_at: user.created_at.to_string(),
@@ -566,12 +585,41 @@ impl From<crate::model::Client> for ClientResponse {
             name: client.name,
             description: client.description,
             redirect_uris,
-            allowed_groups: None, // TODO: 从组关系获取
+            allowed_groups: None,
             is_active: client.enabled,
             created_at: client.created_at.to_string(),
             last_used: None, // TODO: 从使用记录获取
         }
     }
+}
+
+async fn client_to_response(pool: &sqlx::PgPool, client: crate::model::Client) -> Result<ClientResponse> {
+    let mut response = ClientResponse::from(client.clone());
+    let group_ids = ClientRepo::find_client_groups(pool, client.id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error while finding client groups: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("CLIENT_GROUPS_FETCH_ERROR".to_string()),
+            }
+        })?;
+
+    if !group_ids.is_empty() {
+        let mut group_names = Vec::new();
+        for group_id in group_ids {
+            if let Some(group) = GroupRepo::find_by_id(pool, group_id).await.map_err(|e| {
+                tracing::error!("Database error while finding client group details: {}", e);
+                AppError::InternalServerError {
+                    error_code: Some("CLIENT_GROUPS_FETCH_ERROR".to_string()),
+                }
+            })? {
+                group_names.push(group.name);
+            }
+        }
+        response.allowed_groups = Some(group_names);
+    }
+
+    Ok(response)
 }
 
 /// 获取所有客户端
@@ -588,7 +636,12 @@ pub async fn get_clients(
         }
     })?;
 
-    Ok(Json(clients.into_iter().map(ClientResponse::from).collect()))
+    let mut responses = Vec::with_capacity(clients.len());
+    for client in clients {
+        responses.push(client_to_response(&state.db, client).await?);
+    }
+
+    Ok(Json(responses))
 }
 
 /// 创建客户端
@@ -621,7 +674,7 @@ pub async fn create_client(
         })?;
 
     Ok(Json(CreateClientResponse {
-        client: ClientResponse::from(client),
+        client: client_to_response(&state.db, client).await?,
         client_secret: secret.unwrap_or_default(),
     }))
 }
@@ -651,7 +704,7 @@ pub async fn update_client(
             message: e.to_string(),
         })?;
 
-    Ok(Json(ClientResponse::from(client)))
+    Ok(Json(client_to_response(&state.db, client).await?))
 }
 
 /// 删除客户端
@@ -701,7 +754,7 @@ pub async fn reset_client_secret(
         })?;
 
     Ok(Json(ResetSecretResponse {
-        client: ClientResponse::from(client),
+        client: client_to_response(&state.db, client).await?,
         client_secret: secret,
     }))
 }

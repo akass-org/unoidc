@@ -30,6 +30,40 @@ import { getErrorMessage } from '#src/api/client'
 const fadeIn = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`
 const slideUp = `@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`
 
+type OidcScope = 'openid' | 'email' | 'profile' | 'groups'
+
+interface OidcPreviewUser {
+  display_name: string
+  preferred_username: string
+  email: string
+  email_verified: boolean
+  given_name: string
+  family_name: string
+  picture: string
+  sub: string
+  groups: string[]
+}
+
+interface AdminUser {
+  id: string
+  username: string
+  email: string
+  display_name: string
+  given_name?: string | null
+  family_name?: string | null
+  picture?: string | null
+  groups: string[]
+  is_admin: boolean
+  is_active: boolean
+  created_at: string
+}
+
+interface OidcPreviewPayload {
+  idToken: Record<string, unknown>
+  accessToken: Record<string, unknown>
+  userinfo: Record<string, unknown>
+}
+
 interface Client {
   id: string
   client_id: string
@@ -43,8 +77,156 @@ interface Client {
   last_used?: string
 }
 
+const allScopes: OidcScope[] = ['openid', 'email', 'profile', 'groups']
+
+function getUserInitials(user: AdminUser) {
+  const base = user.display_name || user.username || '?'
+  const parts = base.trim().split(/\s+/)
+  return parts.length > 1
+    ? `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase()
+    : base.slice(0, 2).toUpperCase()
+}
+
+function toOidcPreviewUser(user: AdminUser): OidcPreviewUser {
+  return {
+    display_name: user.display_name,
+    preferred_username: user.username,
+    email: user.email,
+    email_verified: user.is_active,
+    given_name: user.given_name || '',
+    family_name: user.family_name || '',
+    picture: user.picture || '',
+    sub: user.id,
+    groups: user.groups,
+  }
+}
+
+function formatJsonValue(value: unknown) {
+  if (value === null) return 'null'
+  if (value === undefined) return 'undefined'
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return `${value.length} 项`
+  return '对象'
+}
+
+function JsonTree({ value }: { value: unknown }) {
+  if (Array.isArray(value)) {
+    return (
+      <div className="space-y-2">
+        {value.length === 0 ? (
+          <div className="text-xs text-gray-400 italic">[]</div>
+        ) : (
+          value.map((item, index) => (
+            <div key={index} className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-black/20 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">[{index}]</div>
+              <JsonTree value={item} />
+            </div>
+          ))
+        )}
+      </div>
+    )
+  }
+
+  if (value && typeof value === 'object') {
+    return (
+      <div className="space-y-2">
+        {Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => {
+          const hasNestedObject = entryValue !== null && typeof entryValue === 'object'
+
+          return (
+            <div key={key} className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-black/20 px-3 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[10px] uppercase tracking-wider text-gray-400 shrink-0">{key}</span>
+                <span className="text-xs text-gray-700 dark:text-gray-300 text-right break-all">{formatJsonValue(entryValue)}</span>
+              </div>
+              {hasNestedObject && (
+                <div className="mt-2 pl-3 border-l border-gray-200 dark:border-white/[0.08]">
+                  <JsonTree value={entryValue} />
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  return <span className="text-xs text-gray-700 dark:text-gray-300 break-all">{formatJsonValue(value)}</span>
+}
+
+function buildOidcPreview(user: OidcPreviewUser, scopes: OidcScope[]): OidcPreviewPayload {
+  const idTokenBase = {
+    aud: ['d4d7cd9e-d7e6-41bb-aa2e-c6b0f8b9589a'],
+    exp: '2026-04-02T10:28:20.122145659Z',
+    iat: '2026-04-02T09:28:20.122145659Z',
+    iss: 'https://sso.akass.cn',
+    jti: 'c4fd4554-e1da-4903-9c01-890e5a290c78',
+    sub: user.sub,
+  }
+
+  const accessTokenBase = {
+    aud: ['d4d7cd9e-d7e6-41bb-aa2e-c6b0f8b9589a'],
+    exp: '2026-04-02T10:28:20.122154566Z',
+    iat: '2026-04-02T09:28:20.122154566Z',
+    iss: 'https://sso.akass.cn',
+    jti: '45b29f4c-6a7d-44b2-93f8-23c00b4744ce',
+    sub: user.sub,
+  }
+
+  const has = (scope: OidcScope) => scopes.includes(scope)
+
+  const idToken = {
+    ...idTokenBase,
+    type: 'id-token',
+    ...(has('profile') ? {
+      display_name: user.display_name,
+      given_name: user.given_name,
+      family_name: user.family_name,
+      name: user.display_name,
+      preferred_username: user.preferred_username,
+      picture: user.picture,
+    } : {}),
+    ...(has('email') ? {
+      email: user.email,
+      email_verified: user.email_verified,
+    } : {}),
+    ...(has('groups') ? {
+      groups: user.groups,
+    } : {}),
+  }
+
+  const accessToken = {
+    ...accessTokenBase,
+    type: 'oauth-access-token',
+  }
+
+  const userinfo = {
+    sub: user.sub,
+    ...(has('profile') ? {
+      display_name: user.display_name,
+      given_name: user.given_name,
+      family_name: user.family_name,
+      name: user.display_name,
+      preferred_username: user.preferred_username,
+      picture: user.picture,
+    } : {}),
+    ...(has('email') ? {
+      email: user.email,
+      email_verified: user.email_verified,
+    } : {}),
+    ...(has('groups') ? {
+      groups: user.groups,
+    } : {}),
+  }
+
+  return { idToken, accessToken, userinfo }
+}
+
 export function AdminClients() {
   const [clients, setClients] = useState<Client[]>([])
+  const [users, setUsers] = useState<AdminUser[]>([])
   const [filteredClients, setFilteredClients] = useState<Client[]>([])
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -54,6 +236,10 @@ export function AdminClients() {
   const [resettingClient, setResettingClient] = useState<Client | null>(null)
   const [newClientSecret, setNewClientSecret] = useState<{ client: Client; secret: string } | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [selectedUserId, setSelectedUserId] = useState('')
+  const [selectedScopes, setSelectedScopes] = useState<OidcScope[]>(['openid', 'email', 'profile', 'groups'])
+  const [showOidcPreview, setShowOidcPreview] = useState(false)
+  const [selectedPreviewPanel, setSelectedPreviewPanel] = useState<'id-token' | 'access-token' | 'userinfo'>('id-token')
   const { addToast } = useToast()
 
   // Form states
@@ -67,6 +253,11 @@ export function AdminClients() {
   // Load clients
   useEffect(() => {
     loadClients()
+  }, [])
+
+  // Load users
+  useEffect(() => {
+    loadUsers()
   }, [])
 
   // Filter clients
@@ -86,6 +277,19 @@ export function AdminClients() {
       addToast({
         type: 'error',
         title: '加载失败',
+        message: getErrorMessage(err),
+      })
+    }
+  }
+
+  const loadUsers = async () => {
+    try {
+      const data = await adminApi.getUsers() as AdminUser[]
+      setUsers(data)
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: '加载用户失败',
         message: getErrorMessage(err),
       })
     }
@@ -193,6 +397,82 @@ export function AdminClients() {
     }
   }
 
+  const getEligibleUsers = (client: Client) => {
+    const activeUsers = users.filter((user) => user.is_active)
+    if (!client.allowed_groups || client.allowed_groups.length === 0) {
+      return activeUsers
+    }
+
+    return activeUsers.filter((user) =>
+      user.groups.some((group) => client.allowed_groups?.includes(group))
+    )
+  }
+
+  const toggleScope = (scope: OidcScope) => {
+    if (scope === 'openid') return
+
+    setSelectedScopes((current) => {
+      if (current.includes(scope)) {
+        return current.filter((item) => item !== scope)
+      }
+
+      return [...current, scope]
+    })
+  }
+
+  const renderUserChip = (user: AdminUser, active: boolean, onClick: () => void) => (
+    <button
+      key={user.id}
+      type="button"
+      onClick={onClick}
+      className={`flex min-w-[176px] items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${active ? 'border-black bg-black text-white dark:border-white dark:bg-white dark:text-black' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-white/[0.08] dark:bg-black/20 dark:text-gray-300 dark:hover:border-white/[0.16] dark:hover:bg-white/[0.04]'}`}
+    >
+      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${active ? 'bg-white/15 text-white dark:bg-black/10 dark:text-black' : 'bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-200'}`}>
+        {getUserInitials(user)}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-medium">{user.display_name || user.username}</span>
+          {user.is_admin && <Badge variant={active ? 'default' : 'warning'}>管理员</Badge>}
+        </div>
+        <p className={`truncate text-[11px] ${active ? 'text-white/70 dark:text-black/70' : 'text-gray-500 dark:text-gray-500'}`}>
+          @{user.username}
+        </p>
+      </div>
+    </button>
+  )
+
+  const handleCopyJson = async (payload: Record<string, unknown>, field: string) => {
+    await handleCopy(JSON.stringify(payload, null, 2), field)
+  }
+
+  const renderPreviewPanel = (
+    title: string,
+    payload: Record<string, unknown>,
+    fieldKey: string,
+    note: string,
+  ) => (
+    <div className="rounded-xl border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-black/20 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-3">
+        <div>
+          <h4 className="text-sm font-medium text-gray-900 dark:text-white">{title}</h4>
+          <p className="text-xs text-gray-500 dark:text-gray-600 mt-1">{note}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => handleCopyJson(payload, fieldKey)}
+          className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 dark:border-white/[0.08] px-2.5 py-1.5 text-xs text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
+        >
+          {copiedField === fieldKey ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+          复制 JSON
+        </button>
+      </div>
+      <div className="max-h-[340px] overflow-auto pr-1">
+        <JsonTree value={payload} />
+      </div>
+    </div>
+  )
+
   return (
     <div className="space-y-5" style={{ animation: 'slideUp 0.3s ease-out' }}>
       <style>{fadeIn}{slideUp}</style>
@@ -258,59 +538,81 @@ export function AdminClients() {
             const isExpanded = expandedId === client.id
             
             return (
-              <Card key={client.id} className="overflow-hidden">
+              <Card key={client.id} className="overflow-hidden group">
                 {/* Header Row */}
-                <div 
-                  className="flex items-start gap-3 p-4 cursor-pointer hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors"
+                <div
+                  className="flex items-start gap-4 px-5 py-4 cursor-pointer hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors"
                   onClick={() => setExpandedId(isExpanded ? null : client.id)}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06] flex items-center justify-center shrink-0">
-                    <Shield className="w-5 h-5 text-gray-500" />
+                  {/* App Icon */}
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-gray-100 to-gray-50 dark:from-white/[0.06] dark:to-white/[0.02] border border-gray-200/80 dark:border-white/[0.06] flex items-center justify-center shrink-0 shadow-sm">
+                    <Shield className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-medium text-gray-900 dark:text-white">{client.name}</h3>
-                      <Badge variant={client.is_active ? 'success' : 'error'}>
+                  {/* Main Content */}
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    {/* Title Row */}
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <h3 className="text-base font-semibold text-gray-900 dark:text-white leading-none">{client.name}</h3>
+                      <Badge variant={client.is_active ? 'success' : 'error'} size="sm">
                         {client.is_active ? '活跃' : '禁用'}
                       </Badge>
                     </div>
-                    <code className="text-xs text-gray-500 font-mono block mt-0.5">{client.client_id}</code>
-                    
-                    <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-500">
-                      <span className="inline-flex items-center gap-1">
-                        <LinkIcon className="w-3 h-3" />
+
+                    {/* Client ID Row */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <code className="text-xs font-mono text-gray-500 dark:text-gray-400 bg-gray-100/80 dark:bg-white/[0.04] px-2 py-1 rounded-md">
+                        {client.client_id}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleCopy(client.client_id, `${client.id}-client-id`) }}
+                        className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded transition-colors"
+                        title="复制 Client ID"
+                      >
+                        {copiedField === `${client.id}-client-id` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    {/* Meta Info */}
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                      <span className="inline-flex items-center gap-1.5">
+                        <LinkIcon className="w-3.5 h-3.5 text-gray-400" />
                         {client.redirect_uris.length} 个回调
                       </span>
+                      {client.allowed_groups && client.allowed_groups.length > 0 && (
+                        <span className="text-gray-400">·</span>
+                      )}
                       {client.allowed_groups && client.allowed_groups.length > 0 && (
                         <span>{client.allowed_groups.length} 个用户组</span>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-0.5 shrink-0">
+                  {/* Actions */}
+                  <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
                     <button
                       onClick={(e) => { e.stopPropagation(); setEditingClient(client) }}
-                      className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded transition-colors"
+                      className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg transition-colors"
                       title="编辑"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); setResettingClient(client) }}
-                      className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded transition-colors"
+                      className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg transition-colors"
                       title="重置密钥"
                     >
                       <Key className="w-4 h-4" />
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); setDeletingClient(client) }}
-                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-500/[0.08] rounded transition-colors"
+                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-500/[0.08] rounded-lg transition-colors"
                       title="删除"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                    <div className="ml-1 text-gray-400">
+                    <div className="ml-1 p-2 text-gray-400">
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </div>
                   </div>
@@ -318,14 +620,17 @@ export function AdminClients() {
 
                 {/* Expanded Details */}
                 {isExpanded && (
-                  <div className="border-t border-gray-200 dark:border-white/[0.04] px-4 py-4 bg-gray-50/30 dark:bg-white/[0.02]">
+                  <div className="border-t border-gray-200 dark:border-white/[0.04] px-4 py-5 bg-gray-50/30 dark:bg-white/[0.02]">
                     {/* OIDC Config */}
-                    <div>
-                      <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1.5">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <h4 className="text-xs font-medium text-gray-500 flex items-center gap-1.5">
                         <Shield className="w-3.5 h-3.5" />
                         OIDC 配置
-                      </h4>
-                      <div className="space-y-1.5">
+                        </h4>
+                        <span className="text-[10px] text-gray-500 uppercase tracking-wider">基础端点</span>
+                      </div>
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5">
                         {(() => {
                           const endpoints = getOidcEndpoints()
                           const items = [
@@ -338,9 +643,9 @@ export function AdminClients() {
                             { label: 'JWKS', value: endpoints.jwks_uri },
                           ]
                           return items.map(({ label, value }) => (
-                            <div key={label} className="flex items-center gap-2 group">
+                            <div key={label} className="flex items-center gap-2 group min-w-0 rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-black/20 px-3 py-2">
                               <span className="text-xs text-gray-500 w-20 shrink-0">{label}</span>
-                              <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 bg-white dark:bg-black/20 px-3 py-2 rounded border border-gray-200 dark:border-white/[0.06] truncate">{value}</code>
+                              <code className="flex-1 text-xs font-mono text-gray-700 dark:text-gray-300 truncate">{value}</code>
                               <button
                                 onClick={() => handleCopy(value, `${client.id}-${label}`)}
                                 className="p-1.5 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
@@ -352,6 +657,127 @@ export function AdminClients() {
                         })()}
                       </div>
                     </div>
+
+                    {/* OIDC Preview */}
+                    {(() => {
+                      const eligibleUsers = getEligibleUsers(client)
+                      const previewUser = eligibleUsers.find((user) => user.id === selectedUserId) ?? eligibleUsers[0]
+                      const previewData = previewUser ? buildOidcPreview(toOidcPreviewUser(previewUser), selectedScopes) : null
+
+                      return (
+                        <div className="mt-5 rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-black/20 p-4 lg:p-5">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-medium text-gray-500 mb-1 flex items-center gap-1.5">
+                                <Shield className="w-3.5 h-3.5" />
+                                OIDC 数据预览
+                              </h4>
+                              <p className="text-xs text-gray-500 dark:text-gray-600">
+                                这部分是次级调试项，默认收起；点开后可切换用户和 scope 组合，单独查看一种令牌或 Userinfo。
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowOidcPreview((current) => !current)}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 dark:border-white/[0.08] px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
+                            >
+                              {showOidcPreview ? '收起预览' : '展开预览'}
+                            </button>
+                          </div>
+
+                          {showOidcPreview && (
+                            <div className="mt-4 space-y-4">
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedScopes(['openid'])}
+                                  className="rounded-full border border-gray-200 dark:border-white/[0.08] px-3 py-1.5 text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
+                                >
+                                  最小 scope
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedScopes(allScopes)}
+                                  className="rounded-full border border-gray-200 dark:border-white/[0.08] px-3 py-1.5 text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
+                                >
+                                  全选
+                                </button>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="text-[10px] uppercase tracking-wider text-gray-400">选择用户</span>
+                                  <span className="text-[10px] uppercase tracking-wider text-gray-400">{eligibleUsers.length} 位可访问用户</span>
+                                </div>
+                                <div className="flex gap-2 overflow-x-auto pb-1">
+                                  {eligibleUsers.map((user) => renderUserChip(
+                                    user,
+                                    selectedUserId === user.id,
+                                    () => setSelectedUserId(user.id)
+                                  ))}
+                                  {eligibleUsers.length === 0 && (
+                                    <div className="rounded-xl border border-dashed border-gray-200 dark:border-white/[0.08] px-3 py-2 text-xs text-gray-500 dark:text-gray-600">
+                                      暂无可访问用户
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-3 mb-2">
+                                  <span className="text-[10px] uppercase tracking-wider text-gray-400">选择 scope</span>
+                                  <span className="text-[10px] text-gray-500 dark:text-gray-600">openid 必选</span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {allScopes.map((scope) => {
+                                    const active = scope === 'openid' || selectedScopes.includes(scope)
+                                    return (
+                                      <button
+                                        key={scope}
+                                        type="button"
+                                        onClick={() => toggleScope(scope)}
+                                        className={`rounded-full px-3 py-1.5 text-xs transition-colors border ${active ? 'border-emerald-500 bg-emerald-500/[0.12] text-emerald-400' : 'border-gray-200 text-gray-500 hover:text-gray-900 dark:border-white/[0.08] dark:text-gray-400 dark:hover:text-white'}`}
+                                      >
+                                        {scope}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+
+                              {previewData ? (
+                                <div className="rounded-xl border border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-black/20 p-3">
+                                  <div className="flex flex-wrap gap-2 mb-3">
+                                    {([
+                                      { id: 'id-token', label: 'ID Token' },
+                                      { id: 'access-token', label: 'Access Token' },
+                                      { id: 'userinfo', label: 'Userinfo' },
+                                    ] as const).map((item) => (
+                                      <button
+                                        key={item.id}
+                                        type="button"
+                                        onClick={() => setSelectedPreviewPanel(item.id)}
+                                        className={`rounded-full px-3 py-1.5 text-xs transition-colors border ${selectedPreviewPanel === item.id ? 'border-black bg-black text-white dark:border-white dark:bg-white dark:text-black' : 'border-gray-200 text-gray-500 hover:text-gray-900 dark:border-white/[0.08] dark:text-gray-400 dark:hover:text-white'}`}
+                                      >
+                                        {item.label}
+                                      </button>
+                                    ))}
+                                  </div>
+
+                                  {selectedPreviewPanel === 'id-token' && renderPreviewPanel('ID Token', previewData.idToken, `${client.id}-id-token-preview`, '身份令牌，按当前 scope 动态展示声明')}
+                                  {selectedPreviewPanel === 'access-token' && renderPreviewPanel('Access Token', previewData.accessToken, `${client.id}-access-token-preview`, '访问令牌，仅展示令牌元数据')}
+                                  {selectedPreviewPanel === 'userinfo' && renderPreviewPanel('Userinfo', previewData.userinfo, `${client.id}-userinfo-preview`, 'Userinfo 响应，和 scope 绑定')}
+                                </div>
+                              ) : (
+                                <div className="rounded-xl border border-dashed border-gray-200 dark:border-white/[0.08] px-4 py-6 text-sm text-gray-500 dark:text-gray-400">
+                                  当前没有可用于预览的注册用户。
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {/* Callback URLs */}
                     <div className="mt-4">
@@ -682,31 +1108,54 @@ export function AdminClients() {
           onClose={() => setNewClientSecret(null)}
           title="Client Secret"
           description={`${newClientSecret.client.name} 的密钥`}
+          size="xl"
           footer={<Button onClick={() => setNewClientSecret(null)}>我已保存</Button>}
         >
           <div className="space-y-4">
-            <div className="p-3 bg-amber-500/[0.08] border border-amber-500/[0.16] rounded-lg">
-              <p className="text-sm text-amber-400 font-medium mb-1">请立即复制并保存此密钥</p>
-              <p className="text-xs text-amber-400/70">密钥只显示一次，关闭后将无法再次查看。</p>
+            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.08] p-4">
+              <p className="text-sm text-amber-300 font-medium mb-1">请立即复制并保存此密钥</p>
+              <p className="text-xs text-amber-300/70">密钥只显示一次，关闭后将无法再次查看。</p>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Client ID</label>
-              <code className="block w-full p-2.5 bg-gray-50 dark:bg-black/20 rounded text-xs font-mono text-gray-500 break-all border border-gray-200 dark:border-white/[0.06]">
-                {newClientSecret.client.client_id}
-              </code>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Client Secret</label>
-              <div className="relative">
-                <code className="block w-full p-2.5 pr-10 bg-gray-50 dark:bg-black/20 rounded text-xs font-mono text-gray-900 dark:text-white break-all border border-gray-200 dark:border-white/[0.06]">
+
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-black/20 p-4">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Client ID</p>
+                    <p className="text-[11px] text-gray-500 mt-1">创建后即可用于 OIDC 配置</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(newClientSecret.client.client_id, 'create-client-id')}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 dark:border-white/[0.08] px-2.5 py-1.5 text-xs text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.04] transition-colors"
+                  >
+                    {copiedField === 'create-client-id' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    复制 ID
+                  </button>
+                </div>
+                <code className="block rounded-xl border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-black/30 px-4 py-4 text-sm font-mono text-gray-900 dark:text-white break-all leading-6">
+                  {newClientSecret.client.client_id}
+                </code>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-black/20 p-4">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Client Secret</p>
+                    <p className="text-[11px] text-gray-500 mt-1">只有这一处能复制到原始密钥</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(newClientSecret.secret, 'secret')}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 dark:border-white/[0.08] px-2.5 py-1.5 text-xs text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.04] transition-colors"
+                  >
+                    {copiedField === 'secret' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    复制密钥
+                  </button>
+                </div>
+                <code className="block rounded-xl border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-black/30 px-4 py-4 text-sm font-mono text-gray-900 dark:text-white break-all leading-6">
                   {newClientSecret.secret}
                 </code>
-                <button
-                  onClick={() => handleCopy(newClientSecret.secret, 'secret')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"
-                >
-                  {copiedField === 'secret' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
               </div>
             </div>
           </div>
