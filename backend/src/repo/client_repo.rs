@@ -277,11 +277,12 @@ impl ClientRepo {
     pub async fn find_accessible_clients_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Client>, sqlx::Error> {
         sqlx::query_as::<_, Client>(
             r#"
-            SELECT DISTINCT c.*
+            SELECT c.*
             FROM clients c
             INNER JOIN client_groups cg ON c.id = cg.client_id
             INNER JOIN user_groups ug ON ug.group_id = cg.group_id
             WHERE ug.user_id = $1 AND c.enabled = true
+            GROUP BY c.id
             ORDER BY c.created_at DESC
             "#,
         )
