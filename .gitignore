@@ -78,3 +78,6 @@ htmlcov/
 .eslintcache
 .stylelintcache
 *.tsbuildinfo
+
+# 坑逼AI生成的垃圾文件
+*.md
