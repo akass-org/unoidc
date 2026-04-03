@@ -11,6 +11,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -311,6 +312,120 @@ pub async fn get_apps(
     });
 
     Ok(Json(apps))
+}
+
+// ============================================================================
+// 审计日志
+// ============================================================================
+
+#[derive(Debug, sqlx::FromRow)]
+struct AuditLogRow {
+    id: uuid::Uuid,
+    actor_user_id: Option<uuid::Uuid>,
+    username: Option<String>,
+    client_id: Option<uuid::Uuid>,
+    client_name: Option<String>,
+    action: String,
+    outcome: String,
+    reason_code: Option<String>,
+    ip_address: Option<String>,
+    user_agent: Option<String>,
+    created_at: time::OffsetDateTime,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuditLogResponse {
+    pub id: String,
+    pub event_type: String,
+    pub user_id: Option<String>,
+    pub username: Option<String>,
+    pub client_id: Option<String>,
+    pub client_name: Option<String>,
+    pub ip_address: String,
+    pub user_agent: String,
+    pub outcome: String,
+    pub reason: Option<String>,
+    pub created_at: String,
+}
+
+/// 获取当前用户的审计日志
+pub async fn get_audit_logs(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<AuditLogResponse>>> {
+    let auth_user = require_auth_user(&state.db, &headers).await?;
+
+    let logs = sqlx::query_as::<_, AuditLogRow>(
+        r#"
+        SELECT
+            al.id,
+            al.actor_user_id,
+            u.username,
+            al.client_id,
+            c.name as client_name,
+            al.action,
+            al.outcome,
+            al.reason_code,
+            al.ip_address,
+            al.user_agent,
+            al.created_at
+        FROM audit_logs al
+        LEFT JOIN users u ON al.actor_user_id = u.id
+        LEFT JOIN clients c ON al.client_id = c.id
+        WHERE al.actor_user_id = $1
+           OR (al.action = 'login' AND al.target_id = $2)
+           OR (al.action = 'registration_failure' AND al.target_id = $2)
+        ORDER BY al.created_at DESC
+        LIMIT 200
+        "#,
+    )
+    .bind(auth_user.user.id)
+    .bind(&auth_user.user.username)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Database error while querying user audit logs: {}", e);
+        AppError::InternalServerError {
+            error_code: Some("AUDIT_LOGS_FETCH_ERROR".to_string()),
+        }
+    })?;
+
+    let responses: Vec<AuditLogResponse> = logs
+        .into_iter()
+        .map(|row| {
+            let event_type = match (row.action.as_str(), row.outcome.as_str()) {
+                ("login", "success") => "login_success",
+                ("login", _) => "login_failure",
+                ("logout", _) => "logout",
+                ("token_issued", _) => "token_issued",
+                ("token_refresh", _) => "token_refresh",
+                ("consent_granted", _) => "consent_granted",
+                ("consent_denied", _) => "consent_revoked",
+                ("user_created", _) => "user_created",
+                ("password_reset", _) => "password_reset",
+                ("registration_failure", _) => "registration_failure",
+                ("email_changed", _) => "email_changed",
+                _ => row.action.as_str(),
+            }
+            .to_string();
+
+            AuditLogResponse {
+                id: row.id.to_string(),
+                event_type,
+                user_id: row.actor_user_id.map(|id| id.to_string()),
+                username: row.username,
+                client_id: row.client_id.map(|id| id.to_string()),
+                client_name: row.client_name,
+                ip_address: row.ip_address.unwrap_or_else(|| "unknown".to_string()),
+                user_agent: row.user_agent.unwrap_or_else(|| "unknown".to_string()),
+                outcome: row.outcome,
+                reason: row.reason_code,
+                created_at: row.created_at.format(&Rfc3339).unwrap_or_else(|_| row.created_at.to_string()),
+            }
+        })
+        .collect();
+
+    Ok(Json(responses))
 }
 
 // ============================================================================

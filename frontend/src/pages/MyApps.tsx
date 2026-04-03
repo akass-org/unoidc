@@ -105,7 +105,7 @@ export function MyAppsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-lg font-medium text-gray-900 dark:text-white">我的应用</h1>
-        <p className="text-sm text-gray-500 mt-0.5">管理已授权访问您账户的第三方应用</p>
+        <p className="text-sm text-gray-500 mt-0.5">已授权的应用可撤销，指派的应用由管理员管理</p>
       </div>
 
       {apps.length === 0 ? (
@@ -200,20 +200,23 @@ export function MyAppsPage() {
         </div>
       )}
 
-      {/* Info Card */}
-      <Card className="bg-blue-50 dark:bg-blue-500/[0.02] border-blue-200 dark:border-blue-500/[0.08]">
-        <div className="flex items-start gap-3">
-          <Shield className="w-4 h-4 text-blue-500 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-          <div>
-            <h4 className="text-sm font-medium text-blue-600 dark:text-blue-400">关于应用授权</h4>
-            <ul className="text-sm text-blue-600/70 dark:text-blue-400/70 mt-2 space-y-1 list-disc list-inside">
-              <li>您可以随时撤销对任何应用的授权</li>
-              <li>撤销授权后，该应用将无法再访问您的账户信息</li>
-              <li>相关刷新令牌将被立即作废</li>
-            </ul>
+      {/* Info Card - Only show if there are consented apps */}
+      {apps.some((app) => app.access_source === 'consent') && (
+        <Card className="bg-blue-50 dark:bg-blue-500/[0.02] border-blue-200 dark:border-blue-500/[0.08]">
+          <div className="flex items-start gap-3">
+            <Shield className="w-4 h-4 text-blue-500 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <h4 className="text-sm font-medium text-blue-600 dark:text-blue-400">关于应用授权</h4>
+              <ul className="text-sm text-blue-600/70 dark:text-blue-400/70 mt-2 space-y-1 list-disc list-inside">
+                <li>您可以随时撤销对已授权应用的访问权限</li>
+                <li>撤销授权后，该应用将无法再访问您的账户信息</li>
+                <li>相关刷新令牌将被立即作废</li>
+                <li>通过用户组获得的应用由管理员分配，无法独立撤销</li>
+              </ul>
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       {/* Confirm Delete Modal */}
       <ConfirmModal

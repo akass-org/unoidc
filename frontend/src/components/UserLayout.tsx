@@ -1,13 +1,15 @@
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import { 
   User, 
-  AppWindow
+  AppWindow,
+  ClipboardList
 } from 'lucide-react'
 import { LayoutHeader } from './LayoutHeader'
 
 const navItems = [
   { path: '/profile', label: '个人资料', icon: User },
   { path: '/my-apps', label: '我的应用', icon: AppWindow },
+  { path: '/my-audit-logs', label: '我的审计日志', icon: ClipboardList },
 ]
 
 export function UserLayout() {

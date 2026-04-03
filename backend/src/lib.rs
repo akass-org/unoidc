@@ -52,6 +52,7 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .route("/api/v1/me/password", post(handler::me::change_password))
         .route("/api/v1/me/avatar", post(handler::me::upload_avatar))
         .route("/api/v1/me/apps", get(handler::me::get_apps))
+        .route("/api/v1/me/audit-logs", get(handler::me::get_audit_logs))
         .route("/api/v1/me/consents", get(handler::me::get_consents))
         .route("/api/v1/me/consents/{client_id}", delete(handler::me::revoke_consent))
 
@@ -92,7 +93,6 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .layer(axum::middleware::from_fn(rate_limit_middleware))
         .layer(axum::Extension(rate_limiter))
         .layer(axum::Extension::<Option<String>>(None))
-        .layer(axum::Extension::<Option<std::net::SocketAddr>>(None))
         .layer(axum::middleware::from_fn(request_context_middleware))
         .layer(cors_layer)
 

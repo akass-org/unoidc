@@ -12,6 +12,7 @@ export const meApi = {
     return api.post('api/v1/me/avatar', { body: formData }).json()
   },
   getApps: () => api.get('api/v1/me/apps').json(),
+  getAuditLogs: () => api.get('api/v1/me/audit-logs').json(),
   getConsents: () => api.get('api/v1/me/consents').json(),
   revokeConsent: (clientId: string) => api.delete(`api/v1/me/consents/${clientId}`).json(),
 }

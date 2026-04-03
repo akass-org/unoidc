@@ -8,6 +8,7 @@ import { ResetPasswordPage } from './pages/ResetPassword'
 import { AuthorizePage } from './pages/Authorize'
 import { ProfilePage } from './pages/Profile'
 import { MyAppsPage } from './pages/MyApps'
+import { MyAuditLogsPage } from './pages/MyAuditLogs'
 import { UserLayout } from './components/UserLayout'
 import { AdminLayout } from './pages/admin/Layout'
 import { AdminUsers } from './pages/admin/Users'
@@ -46,6 +47,7 @@ export const routes: RouteObject[] = [
     children: [
       { path: '/profile', element: <ProfilePage /> },
       { path: '/my-apps', element: <MyAppsPage /> },
+      { path: '/my-audit-logs', element: <MyAuditLogsPage /> },
     ],
   },
 

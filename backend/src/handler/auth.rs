@@ -5,7 +5,9 @@ use axum::{
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
+use axum::extract::ConnectInfo;
+use std::net::SocketAddr;
 use validator::Validate;
 
 use crate::{
@@ -137,7 +139,7 @@ fn is_secure_context(issuer: &str) -> bool {
 
 pub async fn login(
     State(state): State<Arc<AppState>>,
-    Extension(addr): Extension<Option<SocketAddr>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Extension(req_ctx): Extension<RequestContext>,
     headers: HeaderMap,
     Json(req): Json<LoginRequest>,
@@ -147,7 +149,13 @@ pub async fn login(
         message: e.to_string(),
     })?;
 
-    let ip_address = addr.map(|a| a.to_string());
+    // Try to get IP from proxy headers first, fallback to socket address
+    let ip_address = headers
+        .get("x-forwarded-for")
+        .or_else(|| headers.get("x-real-ip"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .or_else(|| Some(addr.ip().to_string()));
     let user_agent = headers
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
@@ -229,7 +237,7 @@ pub async fn login(
 
 pub async fn logout(
     State(state): State<Arc<AppState>>,
-    Extension(addr): Extension<Option<SocketAddr>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Extension(req_ctx): Extension<RequestContext>,
     headers: HeaderMap,
 ) -> Result<Response> {
@@ -238,7 +246,13 @@ pub async fn logout(
             reason: Some("No valid session cookie".to_string()),
         })?;
 
-    let ip_address = addr.map(|a| a.to_string());
+    // Try to get IP from proxy headers first, fallback to socket address
+    let ip_address = headers
+        .get("x-forwarded-for")
+        .or_else(|| headers.get("x-real-ip"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .or_else(|| Some(addr.ip().to_string()));
     let user_agent = headers
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
@@ -290,7 +304,7 @@ pub async fn logout(
 
 pub async fn register(
     State(state): State<Arc<AppState>>,
-    Extension(addr): Extension<Option<SocketAddr>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Extension(req_ctx): Extension<RequestContext>,
     headers: HeaderMap,
     Json(req): Json<RegisterRequest>,
@@ -300,7 +314,13 @@ pub async fn register(
         message: e.to_string(),
     })?;
 
-    let ip_address = addr.map(|a| a.to_string());
+    // Try to get IP from proxy headers first, fallback to socket address
+    let ip_address = headers
+        .get("x-forwarded-for")
+        .or_else(|| headers.get("x-real-ip"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .or_else(|| Some(addr.ip().to_string()));
     let user_agent = headers
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
