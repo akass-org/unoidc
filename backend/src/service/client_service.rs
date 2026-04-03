@@ -174,6 +174,25 @@ impl ClientService {
             .map_err(|e| anyhow::anyhow!("Failed to remove client from group: {}", e))
     }
 
+    /// 设置客户端所属的用户组
+    pub async fn set_client_groups(
+        pool: &PgPool,
+        client_id: Uuid,
+        group_ids: &[Uuid],
+    ) -> Result<(), anyhow::Error> {
+        Self::get_client(pool, client_id).await?;
+
+        for group_id in group_ids {
+            GroupRepo::find_by_id(pool, *group_id)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Group not found"))?;
+        }
+
+        ClientRepo::replace_client_groups(pool, client_id, group_ids)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to update client groups: {}", e))
+    }
+
     /// 检查用户是否可以访问客户端
     pub async fn can_user_access_client(
         pool: &PgPool,

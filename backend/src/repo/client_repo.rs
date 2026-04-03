@@ -224,6 +224,41 @@ impl ClientRepo {
         Ok(())
     }
 
+    /// 替换客户端所属的所有组
+    pub async fn replace_client_groups(
+        pool: &PgPool,
+        client_id: Uuid,
+        group_ids: &[Uuid],
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = pool.begin().await?;
+
+        sqlx::query(
+            r#"
+            DELETE FROM client_groups WHERE client_id = $1
+            "#,
+        )
+        .bind(client_id)
+        .execute(&mut *tx)
+        .await?;
+
+        for group_id in group_ids {
+            sqlx::query(
+                r#"
+                INSERT INTO client_groups (client_id, group_id)
+                VALUES ($1, $2)
+                ON CONFLICT DO NOTHING
+                "#,
+            )
+            .bind(client_id)
+            .bind(group_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
+    }
+
     /// 获取客户端可访问的组列表
     pub async fn find_client_groups(pool: &PgPool, client_id: Uuid) -> Result<Vec<uuid::Uuid>, sqlx::Error> {
         let results: Vec<(Uuid,)> = sqlx::query_as(
@@ -236,6 +271,23 @@ impl ClientRepo {
         .await?;
 
         Ok(results.into_iter().map(|r| r.0).collect())
+    }
+
+    /// 查找当前用户可见的客户端（通过用户组关系）
+    pub async fn find_accessible_clients_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Client>, sqlx::Error> {
+        sqlx::query_as::<_, Client>(
+            r#"
+            SELECT DISTINCT c.*
+            FROM clients c
+            INNER JOIN client_groups cg ON c.id = cg.client_id
+            INNER JOIN user_groups ug ON ug.group_id = cg.group_id
+            WHERE ug.user_id = $1 AND c.enabled = true
+            ORDER BY c.created_at DESC
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(pool)
+        .await
     }
 
     /// 检查用户是否可以访问客户端（通过组关系）

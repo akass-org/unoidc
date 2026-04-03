@@ -549,7 +549,8 @@ pub struct ClientResponse {
     pub name: String,
     pub description: Option<String>,
     pub redirect_uris: Vec<String>,
-    pub allowed_groups: Option<Vec<String>>,
+    pub allowed_group_ids: Vec<String>,
+    pub allowed_groups: Vec<String>,
     pub is_active: bool,
     pub created_at: String,
     pub last_used: Option<String>,
@@ -566,6 +567,7 @@ pub struct CreateClientRequest {
     pub name: String,
     pub description: Option<String>,
     pub redirect_uris: Vec<String>,
+    pub allowed_group_ids: Option<Vec<Uuid>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -574,6 +576,7 @@ pub struct UpdateClientRequest {
     pub description: Option<String>,
     pub redirect_uris: Option<Vec<String>>,
     pub is_active: Option<bool>,
+    pub allowed_group_ids: Option<Vec<Uuid>>,
 }
 
 impl From<crate::model::Client> for ClientResponse {
@@ -585,7 +588,8 @@ impl From<crate::model::Client> for ClientResponse {
             name: client.name,
             description: client.description,
             redirect_uris,
-            allowed_groups: None,
+            allowed_group_ids: Vec::new(),
+            allowed_groups: Vec::new(),
             is_active: client.enabled,
             created_at: client.created_at.to_string(),
             last_used: None, // TODO: 从使用记录获取
@@ -606,8 +610,8 @@ async fn client_to_response(pool: &sqlx::PgPool, client: crate::model::Client) -
 
     if !group_ids.is_empty() {
         let mut group_names = Vec::new();
-        for group_id in group_ids {
-            if let Some(group) = GroupRepo::find_by_id(pool, group_id).await.map_err(|e| {
+        for group_id in &group_ids {
+            if let Some(group) = GroupRepo::find_by_id(pool, *group_id).await.map_err(|e| {
                 tracing::error!("Database error while finding client group details: {}", e);
                 AppError::InternalServerError {
                     error_code: Some("CLIENT_GROUPS_FETCH_ERROR".to_string()),
@@ -616,7 +620,8 @@ async fn client_to_response(pool: &sqlx::PgPool, client: crate::model::Client) -
                 group_names.push(group.name);
             }
         }
-        response.allowed_groups = Some(group_names);
+        response.allowed_group_ids = group_ids.iter().map(|group_id| group_id.to_string()).collect();
+        response.allowed_groups = group_names;
     }
 
     Ok(response)
@@ -673,6 +678,15 @@ pub async fn create_client(
             message: e.to_string(),
         })?;
 
+    if let Some(group_ids) = req.allowed_group_ids.as_ref() {
+        ClientService::set_client_groups(&state.db, client.id, group_ids)
+            .await
+            .map_err(|e| AppError::BusinessError {
+                code: "CLIENT_GROUPS_UPDATE_FAILED".to_string(),
+                message: e.to_string(),
+            })?;
+    }
+
     Ok(Json(CreateClientResponse {
         client: client_to_response(&state.db, client).await?,
         client_secret: secret.unwrap_or_default(),
@@ -703,6 +717,15 @@ pub async fn update_client(
             code: "CLIENT_UPDATE_FAILED".to_string(),
             message: e.to_string(),
         })?;
+
+    if let Some(group_ids) = req.allowed_group_ids.as_ref() {
+        ClientService::set_client_groups(&state.db, client.id, group_ids)
+            .await
+            .map_err(|e| AppError::BusinessError {
+                code: "CLIENT_GROUPS_UPDATE_FAILED".to_string(),
+                message: e.to_string(),
+            })?;
+    }
 
     Ok(Json(client_to_response(&state.db, client).await?))
 }

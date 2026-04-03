@@ -11,7 +11,8 @@ import {
   Minus,
   ChevronDown,
   ChevronUp,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Tags
 } from 'lucide-react'
 import { adminApi } from '#src/api/admin'
 import { useApi } from '#src/hooks'
@@ -64,6 +65,14 @@ interface OidcPreviewPayload {
   userinfo: Record<string, unknown>
 }
 
+interface Group {
+  id: string
+  name: string
+  description?: string | null
+  member_count: number
+  created_at: string
+}
+
 interface Client {
   id: string
   client_id: string
@@ -71,6 +80,7 @@ interface Client {
   description?: string
   redirect_uris: string[]
   post_logout_redirect_uris?: string[]
+  allowed_group_ids?: string[]
   allowed_groups?: string[]
   is_active: boolean
   created_at: string
@@ -227,6 +237,7 @@ function buildOidcPreview(user: OidcPreviewUser, scopes: OidcScope[]): OidcPrevi
 export function AdminClients() {
   const [clients, setClients] = useState<Client[]>([])
   const [users, setUsers] = useState<AdminUser[]>([])
+  const [groups, setGroups] = useState<Group[]>([])
   const [filteredClients, setFilteredClients] = useState<Client[]>([])
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -248,6 +259,7 @@ export function AdminClients() {
     description: '',
     redirect_uris: [''],
     post_logout_redirect_uris: [''],
+    allowed_group_ids: [] as string[],
   })
 
   // Load clients
@@ -258,6 +270,11 @@ export function AdminClients() {
   // Load users
   useEffect(() => {
     loadUsers()
+  }, [])
+
+  // Load groups
+  useEffect(() => {
+    loadGroups()
   }, [])
 
   // Filter clients
@@ -295,6 +312,19 @@ export function AdminClients() {
     }
   }
 
+  const loadGroups = async () => {
+    try {
+      const data = await adminApi.getGroups() as Group[]
+      setGroups(data)
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: '加载用户组失败',
+        message: getErrorMessage(err),
+      })
+    }
+  }
+
   const { loading: creating, execute: createClient } = useApi(
     adminApi.createClient,
     {
@@ -303,7 +333,7 @@ export function AdminClients() {
         const result = data as { client: Client; client_secret: string }
         setNewClientSecret({ client: result.client, secret: result.client_secret })
         setShowCreateModal(false)
-        setFormData({ name: '', description: '', redirect_uris: [''], post_logout_redirect_uris: [''] })
+        setFormData({ name: '', description: '', redirect_uris: [''], post_logout_redirect_uris: [''], allowed_group_ids: [] })
         loadClients()
       }
     }
@@ -353,6 +383,7 @@ export function AdminClients() {
       post_logout_redirect_uris: formData.post_logout_redirect_uris.filter(Boolean).length > 0 
         ? formData.post_logout_redirect_uris.filter(Boolean) 
         : undefined,
+      allowed_group_ids: formData.allowed_group_ids,
     })
   }
 
@@ -365,6 +396,7 @@ export function AdminClients() {
       redirect_uris: editingClient.redirect_uris,
       post_logout_redirect_uris: editingClient.post_logout_redirect_uris,
       is_active: editingClient.is_active,
+      allowed_group_ids: editingClient.allowed_group_ids ?? [],
     })
   }
 
@@ -446,6 +478,74 @@ export function AdminClients() {
     await handleCopy(JSON.stringify(payload, null, 2), field)
   }
 
+  const toggleCreateGroup = (groupId: string) => {
+    setFormData((current) => ({
+      ...current,
+      allowed_group_ids: current.allowed_group_ids.includes(groupId)
+        ? current.allowed_group_ids.filter((id) => id !== groupId)
+        : [...current.allowed_group_ids, groupId],
+    }))
+  }
+
+  const toggleEditGroup = (groupId: string) => {
+    if (!editingClient) return
+
+    setEditingClient({
+      ...editingClient,
+      allowed_group_ids: (editingClient.allowed_group_ids ?? []).includes(groupId)
+        ? (editingClient.allowed_group_ids ?? []).filter((id) => id !== groupId)
+        : [...(editingClient.allowed_group_ids ?? []), groupId],
+    })
+  }
+
+  const renderGroupSelector = (
+    selectedGroupIds: string[],
+    onToggleGroup: (groupId: string) => void,
+    emptyText: string,
+  ) => (
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-1.5">
+        <label className="block text-sm font-medium text-gray-600 dark:text-gray-400">用户组</label>
+        <span className="text-xs text-gray-500 dark:text-gray-600">{selectedGroupIds.length} 个已选</span>
+      </div>
+      {groups.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-gray-300 dark:border-white/[0.12] px-3 py-3 text-sm text-gray-500 dark:text-gray-600">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
+          {groups.map((group) => {
+            const active = selectedGroupIds.includes(group.id)
+            return (
+              <button
+                key={group.id}
+                type="button"
+                onClick={() => onToggleGroup(group.id)}
+                className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${active ? 'border-black bg-black text-white dark:border-white dark:bg-white dark:text-black' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-white/[0.08] dark:bg-black/20 dark:text-gray-300 dark:hover:border-white/[0.16] dark:hover:bg-white/[0.04]'}`}
+              >
+                <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? 'bg-white/15 text-white dark:bg-black/10 dark:text-black' : 'bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300'}`}>
+                  <Tags className="h-3.5 w-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{group.name}</span>
+                    {active && <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] uppercase tracking-wider dark:bg-black/10">已选</span>}
+                  </div>
+                  <p className={`mt-0.5 truncate text-xs ${active ? 'text-white/70 dark:text-black/70' : 'text-gray-500 dark:text-gray-500'}`}>
+                    {group.description || '无描述'}
+                  </p>
+                  <p className={`mt-1 text-[11px] ${active ? 'text-white/60 dark:text-black/60' : 'text-gray-400 dark:text-gray-500'}`}>
+                    {group.member_count} 位成员
+                  </p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
   const renderPreviewPanel = (
     title: string,
     payload: Record<string, unknown>,
@@ -483,7 +583,13 @@ export function AdminClients() {
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">应用管理</h1>
           <p className="text-sm text-gray-500 mt-1">管理 OIDC 客户端和授权配置</p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)} size="sm">
+        <Button
+          onClick={() => {
+            setFormData({ name: '', description: '', redirect_uris: [''], post_logout_redirect_uris: [''], allowed_group_ids: [] })
+            setShowCreateModal(true)
+          }}
+          size="sm"
+        >
           <Plus className="w-4 h-4 mr-1.5" />
           创建应用
         </Button>
@@ -840,7 +946,10 @@ export function AdminClients() {
       {/* Create Modal */}
       <Modal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={() => {
+          setShowCreateModal(false)
+          setFormData({ name: '', description: '', redirect_uris: [''], post_logout_redirect_uris: [''], allowed_group_ids: [] })
+        }}
         title="创建应用"
         description="注册新的 OIDC 客户端"
         footer={
@@ -942,6 +1051,8 @@ export function AdminClients() {
               </button>
             </div>
           </div>
+
+          {renderGroupSelector(formData.allowed_group_ids, toggleCreateGroup, '暂无可选用户组，请先创建用户组')}
         </form>
       </Modal>
 
@@ -973,6 +1084,8 @@ export function AdminClients() {
                 className="w-full bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-lg px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-white/20 transition-all resize-none"
               />
             </div>
+
+            {renderGroupSelector(editingClient.allowed_group_ids ?? [], toggleEditGroup, '暂无可选用户组，请先创建用户组')}
             
             {/* Login Redirect URIs */}
             <div>

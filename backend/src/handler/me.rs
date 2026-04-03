@@ -9,6 +9,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 use validator::Validate;
@@ -240,8 +241,9 @@ pub struct AppResponse {
     pub client_id: String,
     pub client_name: String,
     pub description: Option<String>,
-    pub granted_at: String,
+    pub granted_at: Option<String>,
     pub scopes: Vec<String>,
+    pub access_source: String,
 }
 
 /// 获取当前用户已授权的应用列表
@@ -261,22 +263,52 @@ pub async fn get_apps(
             }
         })?;
 
-    let mut apps = Vec::new();
+    let mut apps_by_client_id: HashMap<String, AppResponse> = HashMap::new();
+
     for consent in consents {
         // 获取客户端信息
         if let Ok(Some(client)) =
             crate::repo::ClientRepo::find_by_id(&state.db, consent.client_id).await
         {
             let scopes: Vec<String> = consent.scope.split_whitespace().map(|s| s.to_string()).collect();
-            apps.push(AppResponse {
+            apps_by_client_id.insert(client.client_id.clone(), AppResponse {
                 client_id: client.client_id,
                 client_name: client.name,
                 description: client.description,
-                granted_at: consent.granted_at.to_string(),
+                granted_at: Some(consent.granted_at.to_string()),
                 scopes,
+                access_source: "consent".to_string(),
             });
         }
     }
+
+    let visible_clients = crate::repo::ClientRepo::find_accessible_clients_for_user(&state.db, auth_user.user.id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error while fetching visible apps: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("VISIBLE_APPS_FETCH_ERROR".to_string()),
+            }
+        })?;
+
+    for client in visible_clients {
+        apps_by_client_id.entry(client.client_id.clone()).or_insert_with(|| AppResponse {
+            client_id: client.client_id,
+            client_name: client.name,
+            description: client.description,
+            granted_at: None,
+            scopes: Vec::new(),
+            access_source: "group".to_string(),
+        });
+    }
+
+    let mut apps: Vec<AppResponse> = apps_by_client_id.into_values().collect();
+    apps.sort_by(|left, right| match (&left.granted_at, &right.granted_at) {
+        (Some(left_granted_at), Some(right_granted_at)) => right_granted_at.cmp(left_granted_at),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => left.client_name.cmp(&right.client_name),
+    });
 
     Ok(Json(apps))
 }

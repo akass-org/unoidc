@@ -14,8 +14,9 @@ interface App {
   client_id: string
   client_name: string
   description?: string
-  granted_at: string
+  granted_at?: string | null
   scopes: string[]
+  access_source: 'consent' | 'group'
 }
 
 const scopeLabels: Record<string, string> = {
@@ -66,7 +67,7 @@ export function MyAppsPage() {
     try {
       setRevokingId(clientId)
       await meApi.revokeConsent(clientId)
-      setApps(apps.filter(a => a.client_id !== clientId))
+      await loadApps()
       addToast({
         type: 'success',
         title: '授权已撤销',
@@ -111,8 +112,8 @@ export function MyAppsPage() {
         <Card padding="lg">
           <EmptyState
             icon={<AppWindow className="w-6 h-6" />}
-            title="暂无授权的应用"
-            description="您还没有授权任何第三方应用访问您的账户信息"
+            title="暂无可见的应用"
+            description="当前没有通过授权或用户组可见的应用"
           />
         </Card>
       ) : (
@@ -136,49 +137,64 @@ export function MyAppsPage() {
                         {app.description}
                       </p>
                     )}
-                    <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-600">
-                      <Clock className="w-3.5 h-3.5" />
-                      授权于 {formatDate(app.granted_at)}
+                    <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-600">
+                      {app.access_source === 'consent' ? (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-emerald-500 dark:text-emerald-400">
+                            <Clock className="w-3.5 h-3.5" />
+                            授权于 {app.granted_at ? formatDate(app.granted_at) : '未知时间'}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-blue-500 dark:text-blue-400">
+                          <Shield className="w-3.5 h-3.5" />
+                          通过用户组可见
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
                 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setConfirmDelete(app.client_id)}
-                  loading={revokingId === app.client_id}
-                  className="text-red-400 hover:text-red-300 hover:bg-red-500/[0.08]"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  撤销
-                </Button>
+                {app.access_source === 'consent' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConfirmDelete(app.client_id)}
+                    loading={revokingId === app.client_id}
+                    className="text-red-400 hover:text-red-300 hover:bg-red-500/[0.08]"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    撤销
+                  </Button>
+                )}
               </div>
 
               {/* Scopes */}
-              <div className="mt-5 pt-4 border-t border-gray-200 dark:border-white/[0.04]">
-                <p className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wider mb-2">
-                  已授权权限
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {app.scopes.map((scope) => (
-                    <div 
-                      key={scope}
-                      className="flex items-start gap-2.5 p-2.5 rounded-md bg-gray-50 dark:bg-white/[0.02]"
-                    >
-                      <Shield className="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-sm text-gray-700 dark:text-gray-300">
-                          {scopeLabels[scope] || scope}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-600 mt-0.5">
-                          {scopeDescriptions[scope] || `访问 ${scope}`}
-                        </p>
+              {app.access_source === 'consent' && app.scopes.length > 0 && (
+                <div className="mt-5 pt-4 border-t border-gray-200 dark:border-white/[0.04]">
+                  <p className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wider mb-2">
+                    已授权权限
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {app.scopes.map((scope) => (
+                      <div 
+                        key={scope}
+                        className="flex items-start gap-2.5 p-2.5 rounded-md bg-gray-50 dark:bg-white/[0.02]"
+                      >
+                        <Shield className="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">
+                            {scopeLabels[scope] || scope}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-600 mt-0.5">
+                            {scopeDescriptions[scope] || `访问 ${scope}`}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </Card>
           ))}
         </div>
