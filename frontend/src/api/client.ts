@@ -88,12 +88,15 @@ export const api = ky.create({
   hooks: {
     beforeRequest: [
       (request) => {
-        // 对于修改状态的请求，添加 CSRF token
+        // 对于修改状态的请求，必须携带 CSRF token
         const method = request.method.toUpperCase()
         if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
           const csrfToken = getCookie('unoidc_csrf')
           if (csrfToken) {
             request.headers.set('x-csrf-token', csrfToken)
+          } else {
+            // CSRF token 缺失时阻止修改请求，防止 CSRF 保护被绕过
+            console.warn('[CSRF] CSRF token missing for mutating request - server will reject')
           }
         }
       },

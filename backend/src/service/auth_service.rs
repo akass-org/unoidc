@@ -143,7 +143,7 @@ impl AuthService {
                 AppError::InternalServerError { error_code: None }
             })?;
 
-        info!("Session created for user {}: {}", username, session.session_id);
+        info!("Session created for user {}: {}***", username, &session.session_id[..8.min(session.session_id.len())]);
 
         Ok((user, session))
     }
@@ -159,7 +159,7 @@ impl AuthService {
                 AppError::InternalServerError { error_code: None }
             })?;
 
-        info!("Session logged out: {}", session_id);
+        info!("Session logged out: {}***", &session_id[..8.min(session_id.len())]);
 
         Ok(())
     }

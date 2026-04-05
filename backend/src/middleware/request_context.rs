@@ -45,6 +45,8 @@ impl RequestContext {
             .headers()
             .get(CORRELATION_ID_HEADER)
             .and_then(|h| h.to_str().ok())
+            .filter(|s| s.len() <= 128) // 限制长度防止 HTTP 头过大
+            .filter(|s| s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.~".contains(c)))
             .map(|s| s.to_string());
 
         Self {

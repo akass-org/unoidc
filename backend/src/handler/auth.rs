@@ -371,9 +371,12 @@ pub async fn register(
 
             metrics::AUTH_REGISTRATION_FAILURE_TOTAL.inc();
 
+            // 不泄露具体失败原因（防止用户名/邮箱枚举）
+            tracing::warn!("Registration failed for {}: {}", username, e);
+
             Err(AppError::BusinessError {
                 code: "REGISTRATION_FAILED".to_string(),
-                message: e.to_string(),
+                message: "注册失败，请检查输入信息后重试".to_string(),
             })
         }
     }

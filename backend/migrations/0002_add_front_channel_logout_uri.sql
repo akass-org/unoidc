@@ -2,5 +2,5 @@
 -- 
 -- 用于支持 OIDC Front-Channel Logout 规范
 
-ALTER TABLE clients 
-ADD COLUMN front_channel_logout_uri VARCHAR(512);
+ALTER TABLE clients
+ADD COLUMN IF NOT EXISTS front_channel_logout_uri VARCHAR(512);

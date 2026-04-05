@@ -62,7 +62,7 @@ pub async fn get_profile(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<ProfileResponse>> {
-    let auth_user = require_auth_user(&state.db, &headers).await?;
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
     let is_admin = check_is_admin(&state.db, &auth_user).await?;
 
     Ok(Json(ProfileResponse::from((auth_user.user, is_admin))))
@@ -82,7 +82,7 @@ pub async fn update_profile(
     headers: HeaderMap,
     Json(req): Json<UpdateProfileRequest>,
 ) -> Result<Json<ProfileResponse>> {
-    let auth_user = require_auth_user(&state.db, &headers).await?;
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
 
     req.validate().map_err(|e| AppError::ValidationError {
         field: "request".to_string(),
@@ -135,7 +135,7 @@ pub async fn change_password(
     headers: HeaderMap,
     Json(req): Json<ChangePasswordRequest>,
 ) -> Result<Json<ChangePasswordResponse>> {
-    let auth_user = require_auth_user(&state.db, &headers).await?;
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
 
     req.validate().map_err(|e| AppError::ValidationError {
         field: "request".to_string(),
@@ -221,7 +221,7 @@ pub async fn upload_avatar(
     headers: HeaderMap,
     Json(_req): Json<UploadAvatarRequest>,
 ) -> Result<Json<ProfileResponse>> {
-    let auth_user = require_auth_user(&state.db, &headers).await?;
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
 
     // TODO: 实现头像上传逻辑
     // 1. 验证图片格式和大小
@@ -252,7 +252,7 @@ pub async fn get_apps(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<AppResponse>>> {
-    let auth_user = require_auth_user(&state.db, &headers).await?;
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
 
     // 获取用户的所有同意记录
     let consents = crate::repo::ConsentRepo::find_user_consents(&state.db, auth_user.user.id)
@@ -353,7 +353,7 @@ pub async fn get_audit_logs(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<AuditLogResponse>>> {
-    let auth_user = require_auth_user(&state.db, &headers).await?;
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
 
     let logs = sqlx::query_as::<_, AuditLogRow>(
         r#"
@@ -445,7 +445,7 @@ pub async fn get_consents(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<ConsentResponse>>> {
-    let auth_user = require_auth_user(&state.db, &headers).await?;
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
 
     let consents = crate::repo::ConsentRepo::find_user_consents(&state.db, auth_user.user.id)
         .await
@@ -480,7 +480,7 @@ pub async fn revoke_consent(
     Path(client_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse> {
-    let auth_user = require_auth_user(&state.db, &headers).await?;
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
 
     // 查找客户端
     let client = crate::repo::ClientRepo::find_by_client_id(&state.db, &client_id)
@@ -551,7 +551,7 @@ pub async fn request_email_change(
     headers: HeaderMap,
     Json(req): Json<RequestEmailChangeRequest>,
 ) -> Result<Json<RequestEmailChangeResponse>> {
-    let auth_user = require_auth_user(&state.db, &headers).await?;
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
 
     req.validate().map_err(|e| AppError::ValidationError {
         field: "request".to_string(),
@@ -615,7 +615,7 @@ pub async fn verify_email_change(
     headers: HeaderMap,
     Json(req): Json<VerifyEmailChangeRequest>,
 ) -> Result<Json<VerifyEmailChangeResponse>> {
-    let auth_user = require_auth_user(&state.db, &headers).await?;
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
 
     // 验证 token 并获取新邮箱
     let new_email = EmailVerificationService::verify_email_change(&state.db, &req.token)

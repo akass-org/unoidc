@@ -1,6 +1,6 @@
 -- Email verification tokens table for secure email changes
 -- ============================================
-CREATE TABLE email_verification_tokens (
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
     id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     new_email VARCHAR(255) NOT NULL,

@@ -19,7 +19,7 @@ use crate::error::{AppError, OidcErrorCode, Result};
 use crate::metrics;
 use crate::model::Jwk;
 use crate::repo::{GroupRepo, UserRepo};
-use crate::service::{KeyService, LogoutService};
+use crate::service::{AuditService, AuthService, KeyService, LogoutService};
 use crate::AppState;
 use std::collections::HashMap;
 
@@ -365,11 +365,29 @@ pub struct LogoutRequest {
 /// GET /logout
 ///
 /// 处理 RP-Initiated Logout 请求
+/// 同时清除浏览器 session cookie 和服务端会话
 pub async fn logout(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Query(req): Query<LogoutRequest>,
 ) -> Result<impl IntoResponse> {
     use axum::http::StatusCode;
+
+    // 尝试提取并清除当前 session
+    let _session_cleared = if let Some(session_id) = extract_session_from_headers(&headers, &state.config.session_secret) {
+        match AuthService::logout(&state.db, &session_id).await {
+            Ok(()) => {
+                tracing::info!("OIDC logout: session destroyed for {}", &session_id[..8.min(session_id.len())]);
+                true
+            }
+            Err(e) => {
+                tracing::warn!("OIDC logout: failed to destroy session: {}", e);
+                false
+            }
+        }
+    } else {
+        false
+    };
 
     if let Some(ref hint) = req.id_token_hint {
         if !hint.is_empty() {
@@ -453,8 +471,35 @@ pub async fn logout(
         location
     };
 
-    Ok::<_, AppError>((
+    // 构建 session cookie 清除头
+    let secure = state.config.issuer.starts_with("https://");
+    let secure_flag = if secure { "; Secure" } else { "" };
+    let same_site = if secure { "Strict" } else { "Lax" };
+    let mut cookie_value = format!(
+        "unoidc_session=; HttpOnly{}; SameSite={}; Path=/; Max-Age=0",
+        secure_flag, same_site
+    );
+    if secure {
+        if let Some(domain) = &state.config.cookie_domain {
+            cookie_value = format!("{}; Domain={}", cookie_value, domain);
+        }
+    }
+
+    let mut response = (
         StatusCode::FOUND,
         [(axum::http::header::LOCATION, final_location)],
-    ).into_response())
+    ).into_response();
+    response.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        axum::http::HeaderValue::from_str(&cookie_value).unwrap_or_else(|_| {
+            axum::http::HeaderValue::from_static("unoidc_session=; HttpOnly; Path=/; Max-Age=0")
+        }),
+    );
+
+    Ok::<_, AppError>(response)
+}
+
+/// 从请求头中提取 session_id 并验证签名
+fn extract_session_from_headers(headers: &HeaderMap, session_secret: &str) -> Option<String> {
+    crate::middleware::auth::extract_session_cookie(headers, session_secret)
 }

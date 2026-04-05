@@ -186,6 +186,10 @@ impl Config {
             warnings.push("APP_BASE_URL should use HTTPS in production");
         }
 
+        if self.cors_allowed_origins.iter().any(|o| o.contains("localhost")) {
+            warnings.push("CORS_ALLOWED_ORIGINS contains localhost origins - should be removed in production");
+        }
+
         if !warnings.is_empty() {
             tracing::error!("Production configuration validation failed:");
             for warning in &warnings {

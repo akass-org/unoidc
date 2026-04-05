@@ -6,6 +6,7 @@ use axum::http::HeaderMap;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::crypto;
 use crate::error::{AppError, Result};
 use crate::model::{Session, User};
 use crate::service::AuthService;
@@ -17,14 +18,15 @@ pub struct AuthUser {
     pub session: Session,
 }
 
-/// 从请求头中提取 session cookie 并验证
+/// 从请求头中提取 session cookie 并验证 HMAC 签名
 ///
 /// 成功返回 AuthUser，失败返回 None（不报错，由调用方决定处理方式）
 pub async fn extract_auth_user(
     pool: &PgPool,
     headers: &HeaderMap,
+    session_secret: &str,
 ) -> Result<Option<AuthUser>> {
-    let session_id = extract_session_cookie(headers);
+    let session_id = extract_session_cookie(headers, session_secret);
     let session_id = match session_id {
         Some(id) => id,
         None => return Ok(None),
@@ -40,24 +42,32 @@ pub async fn extract_auth_user(
 pub async fn require_auth_user(
     pool: &PgPool,
     headers: &HeaderMap,
+    session_secret: &str,
 ) -> Result<AuthUser> {
-    extract_auth_user(pool, headers)
+    extract_auth_user(pool, headers, session_secret)
         .await?
         .ok_or(AppError::Unauthorized {
             reason: Some("Authentication required".to_string()),
         })
 }
 
-/// 从 Cookie 头中提取 unoidc_session
-/// 
-/// 返回 session_id（不包含签名）
-pub fn extract_session_cookie(headers: &HeaderMap) -> Option<String> {
+/// 从 Cookie 头中提取 unoidc_session 并验证 HMAC 签名
+///
+/// Cookie 格式: session_id.signature
+/// 验证签名后只返回 session_id 部分
+pub fn extract_session_cookie(headers: &HeaderMap, session_secret: &str) -> Option<String> {
     let cookie_header = headers.get("cookie")?.to_str().ok()?;
     let cookie_value = extract_cookie_value(cookie_header, "unoidc_session")?;
-    
+
     // Cookie 格式: session_id.signature
-    // 只返回 session_id 部分
-    let (session_id, _signature) = cookie_value.split_once('.')?;
+    let (session_id, signature) = cookie_value.split_once('.')?;
+
+    // 验证 HMAC 签名，防止伪造 session_id
+    if !crypto::verify_session_signature(session_id, signature, session_secret) {
+        tracing::warn!("Invalid session cookie signature");
+        return None;
+    }
+
     Some(session_id.to_string())
 }
 

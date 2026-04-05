@@ -83,8 +83,9 @@ async fn is_user_admin(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool> {
 async fn require_admin(
     pool: &sqlx::PgPool,
     headers: &HeaderMap,
+    session_secret: &str,
 ) -> Result<AuthUser> {
-    let auth_user = require_auth_user(pool, headers).await?;
+    let auth_user = require_auth_user(pool, headers, session_secret).await?;
     
     if is_user_admin(pool, auth_user.user.id).await? {
         return Ok(auth_user);
@@ -169,7 +170,7 @@ pub async fn get_users(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<UserResponse>>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     let users = UserService::list_users(&state.db, 1000, 0).await.map_err(|e| {
         tracing::error!("Database error while listing users: {}", e);
@@ -192,7 +193,7 @@ pub async fn create_user(
     headers: HeaderMap,
     Json(req): Json<CreateUserRequest>,
 ) -> Result<Json<UserResponse>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     req.validate().map_err(|e| AppError::ValidationError {
         field: "request".to_string(),
@@ -249,7 +250,7 @@ pub async fn update_user(
     headers: HeaderMap,
     Json(req): Json<UpdateUserRequest>,
 ) -> Result<Json<UserResponse>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     if let Some(ref email) = req.email {
         if !email.contains('@') {
@@ -343,7 +344,7 @@ pub async fn reset_user_password(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<Json<ResetPasswordResponse>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     let new_password = crypto::generate_secure_token(16).map_err(|e| AppError::InternalServerError {
         error_code: Some(format!("TOKEN_GEN_ERROR: {}", e)),
@@ -410,7 +411,7 @@ pub async fn get_groups(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<GroupResponse>>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     let groups = GroupService::list_groups(&state.db).await.map_err(|e| {
         tracing::error!("Database error while listing groups: {}", e);
@@ -452,7 +453,7 @@ pub async fn create_group(
     headers: HeaderMap,
     Json(req): Json<CreateGroupRequest>,
 ) -> Result<Json<GroupResponse>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     req.validate().map_err(|e| AppError::ValidationError {
         field: "request".to_string(),
@@ -487,7 +488,7 @@ pub async fn update_group(
     headers: HeaderMap,
     Json(req): Json<UpdateGroupRequest>,
 ) -> Result<Json<GroupResponse>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     let update = UpdateGroup {
         name: req.name,
@@ -526,7 +527,24 @@ pub async fn delete_group(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
+
+    // 保护 admin 组不被删除
+    let group = GroupRepo::find_by_id(&state.db, id)
+        .await
+        .map_err(|e| AppError::InternalServerError {
+            error_code: Some(format!("DB_ERROR: {}", e)),
+        })?
+        .ok_or_else(|| AppError::BusinessError {
+            code: "GROUP_NOT_FOUND".to_string(),
+            message: "Group not found".to_string(),
+        })?;
+
+    if group.name == "admin" {
+        return Err(AppError::Forbidden {
+            reason: Some("Cannot delete the admin group".to_string()),
+        });
+    }
 
     GroupService::delete_group(&state.db, id)
         .await
@@ -632,7 +650,7 @@ pub async fn get_clients(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<ClientResponse>>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     let clients = ClientService::list_clients(&state.db).await.map_err(|e| {
         tracing::error!("Database error while listing clients: {}", e);
@@ -655,7 +673,7 @@ pub async fn create_client(
     headers: HeaderMap,
     Json(req): Json<CreateClientRequest>,
 ) -> Result<Json<CreateClientResponse>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     let input = CreateClient {
         client_id: String::new(), // 将由服务生成
@@ -700,7 +718,7 @@ pub async fn update_client(
     headers: HeaderMap,
     Json(req): Json<UpdateClientRequest>,
 ) -> Result<Json<ClientResponse>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     let update = UpdateClient {
         name: req.name,
@@ -736,7 +754,7 @@ pub async fn delete_client(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     ClientService::delete_client(&state.db, id)
         .await
@@ -760,7 +778,7 @@ pub async fn reset_client_secret(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<Json<ResetSecretResponse>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     let secret = ClientService::regenerate_secret(&state.db, id)
         .await
@@ -821,7 +839,7 @@ pub async fn get_audit_logs(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<AuditLogResponse>>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     // 直接查询 JOIN 用户和客户端信息
     let logs = sqlx::query_as::<_, AuditLogRow>(
@@ -921,7 +939,7 @@ pub async fn get_settings(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<SettingsResponse>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
     
     // 从数据库读取设置
     let settings = SettingsRepo::get_all(&state.db).await
@@ -953,7 +971,7 @@ pub async fn update_settings(
     headers: HeaderMap,
     Json(req): Json<UpdateSettingsRequest>,
 ) -> Result<Json<SettingsResponse>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
     
     // 构建要更新的设置列表
     let mut updates: Vec<(String, String)> = Vec::new();
@@ -1000,7 +1018,7 @@ pub async fn rotate_key(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<RotateKeyResponse>> {
-    let _auth_user = require_admin(&state.db, &headers).await?;
+    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     let _new_key = KeyService::rotate_key(&state.db, &state.config.private_key_encryption_key)
         .await

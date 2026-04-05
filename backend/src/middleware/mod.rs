@@ -4,6 +4,7 @@ pub mod csrf;
 pub mod log_redaction;
 pub mod rate_limit;
 pub mod request_context;
+pub mod security_headers;
 
 pub use cors::{CorsConfig, create_cors_layer};
 pub use csrf::{csrf_middleware, extract_csrf_cookie, extract_csrf_header, generate_csrf_cookie};
@@ -15,3 +16,4 @@ pub use rate_limit::{
 pub use request_context::{
     request_context_middleware, RequestContext, CORRELATION_ID_HEADER, REQUEST_ID_HEADER,
 };
+pub use security_headers::security_headers_middleware;
