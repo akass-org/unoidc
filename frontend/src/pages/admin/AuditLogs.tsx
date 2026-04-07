@@ -230,23 +230,23 @@ export function AdminAuditLogs() {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3">
         <Card className="text-center py-4">
-          <p className="text-xl font-medium text-gray-900 dark:text-white">{todayLogs.length}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">{todayLogs.length}</p>
           <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">今日事件</p>
         </Card>
         <Card className="text-center py-4">
-          <p className="text-xl font-medium text-emerald-400">
+          <p className="text-2xl font-bold text-emerald-400">
             {logs.filter(l => l.outcome === 'success').length}
           </p>
           <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">成功</p>
         </Card>
         <Card className="text-center py-4">
-          <p className="text-xl font-medium text-red-400">
+          <p className="text-2xl font-bold text-red-400">
             {logs.filter(l => l.outcome === 'failure').length}
           </p>
           <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">失败</p>
         </Card>
         <Card className="text-center py-4">
-          <p className="text-xl font-medium text-gray-600 dark:text-gray-300">{logs.length}</p>
+          <p className="text-2xl font-bold text-gray-600 dark:text-gray-300">{logs.length}</p>
           <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">总计</p>
         </Card>
       </div>

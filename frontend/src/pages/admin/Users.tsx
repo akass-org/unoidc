@@ -249,17 +249,17 @@ export function AdminUsers() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         <Card className="text-center py-4">
-          <p className="text-xl font-medium text-gray-900 dark:text-white">{users.length}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">{users.length}</p>
           <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">总用户</p>
         </Card>
         <Card className="text-center py-4">
-          <p className="text-xl font-medium text-emerald-600 dark:text-emerald-400">
+          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
             {users.filter(u => u.is_active).length}
           </p>
           <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">活跃用户</p>
         </Card>
         <Card className="text-center py-4">
-          <p className="text-xl font-medium text-gray-600 dark:text-gray-300">
+          <p className="text-2xl font-bold text-gray-600 dark:text-gray-300">
             {users.filter(u => u.is_admin).length}
           </p>
           <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">管理员</p>

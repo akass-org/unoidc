@@ -164,11 +164,11 @@ export function AdminGroups() {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
         <Card className="text-center py-4">
-          <p className="text-xl font-medium text-gray-900 dark:text-white">{groups.length}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">{groups.length}</p>
           <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">用户组</p>
         </Card>
         <Card className="text-center py-4">
-          <p className="text-xl font-medium text-gray-600 dark:text-gray-300">
+          <p className="text-2xl font-bold text-gray-600 dark:text-gray-300">
             {groups.reduce((sum, g) => sum + g.member_count, 0)}
           </p>
           <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">成员关系数</p>
