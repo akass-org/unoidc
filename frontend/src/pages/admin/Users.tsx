@@ -30,6 +30,7 @@ interface User {
   username: string
   email: string
   display_name: string
+  picture?: string
   is_admin: boolean
   is_active: boolean
   created_at: string
@@ -156,7 +157,11 @@ export function AdminUsers() {
       title: '用户',
       render: (user: User) => (
         <div className="flex items-center gap-3">
-          <Avatar name={user.display_name} size="sm" />
+          <Avatar
+            name={user.display_name || user.username}
+            src={user.picture}
+            size="sm"
+          />
           <div>
             <p className="text-sm text-gray-900 dark:text-white">{user.display_name}</p>
             <p className="text-xs text-gray-500 dark:text-gray-600">@{user.username}</p>
