@@ -249,13 +249,15 @@ async fn test_logout_destroys_session() {
     // 生成带签名的 cookie
     let signature = crypto::sign_session(&session.session_id, &state.config.session_secret).unwrap();
     let cookie_value = format!("{}.{}", session.session_id, signature);
+    let csrf = "test-csrf-token";
 
     let response = app.oneshot(
         Request::builder()
             .method("POST")
             .uri("/api/v1/auth/logout")
             .header("content-type", "application/json")
-            .header("cookie", format!("unoidc_session={}", cookie_value))
+            .header("cookie", format!("unoidc_session={}; unoidc_csrf={}", cookie_value, csrf))
+            .header("x-csrf-token", csrf)
             .body(Body::from(json!({}).to_string()))
             .unwrap(),
     ).await.unwrap();

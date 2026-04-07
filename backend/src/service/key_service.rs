@@ -73,7 +73,15 @@ impl KeyService {
         }
         info!("No active key found, generating initial key pair");
         let jwk = Self::generate_key_pair(pool, encryption_key).await?;
-        Self::decrypt_jwk(jwk, encryption_key)
+        JwkRepo::activate(pool, jwk.id)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to activate initial key: {}", e))?;
+
+        let active = JwkRepo::find_active(pool)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Active key not found after activation"))?;
+
+        Self::decrypt_jwk(active, encryption_key)
     }
 
     /// 根据 kid 查找密钥（解密后返回）

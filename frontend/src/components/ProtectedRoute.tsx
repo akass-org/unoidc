@@ -14,20 +14,16 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
 
   useEffect(() => {
     const verify = async () => {
-      if (!user && !checked) {
-        await checkSession()
-        setChecked(true)
-      }
-      // 管理员路由：强制从后端重新验证权限，防止本地状态被篡改
-      if (requireAdmin && !checked) {
+      // 路由进入时总是向后端复核一次会话，避免依赖陈旧本地状态
+      if (!checked) {
         await checkSession()
         setChecked(true)
       }
     }
     verify()
-  }, [user, checked, checkSession, requireAdmin])
+  }, [checked, checkSession])
 
-  if (loading || (!user && !checked)) {
+  if (loading || !checked) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border border-gray-300 dark:border-white/20 border-t-gray-900 dark:border-t-white rounded-full animate-spin" />

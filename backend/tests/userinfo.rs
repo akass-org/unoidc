@@ -92,7 +92,7 @@ async fn create_test_client(state: &AppState, client_id: &str) -> backend::model
 }
 
 /// 创建测试用的 access token
-async fn create_access_token(state: &AppState, user_id: uuid::Uuid, client_id: uuid::Uuid, scope: &str) -> String {
+async fn create_access_token(state: &AppState, user_id: uuid::Uuid, client_id: &str, scope: &str) -> String {
     let jwk = KeyService::get_active_key(&state.db, &state.config.private_key_encryption_key)
         .await
         .expect("Failed to get signing key");
@@ -139,7 +139,7 @@ async fn test_userinfo_all_scopes() {
     let token = create_access_token(
         &state,
         user.id,
-        client.id,
+        &client.client_id,
         "openid profile email groups",
     )
     .await;

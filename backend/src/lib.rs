@@ -17,6 +17,7 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
     use crate::middleware::{
         request_context_middleware, rate_limit_middleware, create_rate_limiter,
         create_cors_layer, CorsConfig, csrf_middleware, security_headers_middleware,
+        ensure_connect_info_middleware,
     };
 
     let rate_limiter = create_rate_limiter(
@@ -89,10 +90,11 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .route("/logout", get(handler::oidc::logout))
 
         // 请求流程（从外到内）：
-        // security_headers → CORS → rate_limit → csrf → request_context → handler
+        // security_headers → CORS → request_context → connect_info → rate_limit → csrf → handler
         .layer(axum::middleware::from_fn(security_headers_middleware))
         .layer(axum::middleware::from_fn(csrf_middleware))
         .layer(axum::middleware::from_fn(rate_limit_middleware))
+        .layer(axum::middleware::from_fn(ensure_connect_info_middleware))
         .layer(axum::Extension(rate_limiter))
         .layer(axum::Extension::<Option<String>>(None))
         .layer(axum::middleware::from_fn(request_context_middleware))

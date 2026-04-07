@@ -6,7 +6,7 @@ use axum::{extract::State, Json};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-use crate::{repo::JwkRepo, AppState};
+use crate::{service::KeyService, AppState};
 
 pub async fn liveness() -> Json<Value> {
     Json(json!({ "status": "alive" }))
@@ -44,9 +44,9 @@ async fn check_database(state: &Arc<AppState>) -> &'static str {
 }
 
 async fn check_keys(state: &Arc<AppState>) -> &'static str {
-    match JwkRepo::find_active(&state.db).await {
-        Ok(Some(jwk)) if !jwk.public_key_jwk.is_null() => "up",
-        Ok(_) => "down",
+    match KeyService::get_active_key(&state.db, &state.config.private_key_encryption_key).await {
+        Ok(jwk) if !jwk.public_key_jwk.is_null() => "up",
         Err(_) => "down",
+        _ => "down",
     }
 }

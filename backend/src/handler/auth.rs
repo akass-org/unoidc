@@ -532,8 +532,22 @@ pub async fn reset_password(
         });
     }
 
-    // 标记令牌已使用（防止重放）
-    let _ = crate::repo::PasswordResetTokenRepo::mark_consumed(&state.db, token.id).await;
+    // 条件标记令牌已使用（防止并发重放）
+    let consumed = crate::repo::PasswordResetTokenRepo::mark_consumed(&state.db, token.id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to consume reset token: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("TOKEN_CONSUME_ERROR".to_string()),
+            }
+        })?;
+
+    if consumed.is_none() {
+        return Err(AppError::BusinessError {
+            code: "INVALID_TOKEN".to_string(),
+            message: "Invalid or expired reset token".to_string(),
+        });
+    }
 
     // 更新密码
     UserService::change_password_raw(&state.db, token.user_id, &req.password)
@@ -651,7 +665,7 @@ pub struct PublicConfigResponse {
 /// 获取公共配置（无需登录，用于登录页）
 pub async fn get_public_config(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<PublicConfigResponse>> {
+) -> Result<Response> {
     // 从数据库读取设置
     let settings = SettingsRepo::get_all(&state.db).await
         .map_err(|e| AppError::InternalServerError {
@@ -666,10 +680,27 @@ pub async fn get_public_config(
         settings_map.get(key).cloned().unwrap_or_else(|| default.to_string())
     };
     
-    Ok(Json(PublicConfigResponse {
+    let body = serde_json::to_string(&PublicConfigResponse {
         brand_name: get_value("brand_name", "UNOIDC"),
         logo_url: get_value("logo_url", ""),
         login_background_url: get_value("login_background_url", ""),
         login_layout: get_value("login_layout", "split-left"),
-    }))
+    }).map_err(|e| AppError::InternalServerError {
+        error_code: Some(format!("JSON_ERROR: {}", e)),
+    })?;
+
+    // 为匿名页面预发 CSRF cookie，支持 register/logout 等接口启用 CSRF 校验
+    let secure = is_secure_context(&state.config.issuer);
+    let csrf_token = crypto::generate_csrf_token()?;
+    let csrf_cookie = generate_csrf_cookie(&csrf_token, secure);
+
+    let response = Response::builder()
+        .header(header::SET_COOKIE, csrf_cookie)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(axum::body::Body::from(body))
+        .map_err(|e| AppError::InternalServerError {
+            error_code: Some(format!("RESPONSE_BUILD_ERROR: {}", e)),
+        })?;
+
+    Ok(response)
 }

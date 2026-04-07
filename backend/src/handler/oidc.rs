@@ -3,7 +3,7 @@
 // 处理 Discovery, JWKS, Authorize, Token, UserInfo 等 OIDC 端点
 
 use axum::{
-    extract::{Query, State},
+    extract::{Form, Query, State},
     http::HeaderMap,
     response::IntoResponse,
     Json,
@@ -11,15 +11,18 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use time::OffsetDateTime;
 use validator::Validate;
 
+use crate::crypto;
 use crate::crypto::jwt;
 use crate::crypto::jwt::AccessTokenClaims;
 use crate::error::{AppError, OidcErrorCode, Result};
+use crate::middleware::auth::{check_user_client_access, extract_auth_user, require_auth_user};
 use crate::metrics;
 use crate::model::Jwk;
-use crate::repo::{GroupRepo, UserRepo};
-use crate::service::{AuditService, AuthService, KeyService, LogoutService};
+use crate::repo::{ClientRepo, GroupRepo, UserRepo};
+use crate::service::{AuthService, ClientService, ConsentService, KeyService, LogoutService, OidcService, TokenService};
 use crate::AppState;
 use std::collections::HashMap;
 
@@ -125,38 +128,364 @@ impl AuthorizeRequest {
 
 /// GET /authorize — Authorization endpoint
 pub async fn authorize_get(
-    State(_state): State<Arc<AppState>>,
-    _headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Query(req): Query<AuthorizeRequest>,
-) -> Result<&'static str> {
+) -> Result<Json<Value>> {
+    metrics::AUTH_REQUESTS_TOTAL.inc();
+
     // 验证请求参数（包括长度限制和合规性检查）
     req.validate_request()?;
 
-    metrics::AUTH_REQUESTS_TOTAL.inc();
-    Err(AppError::OidcError {
-        error: OidcErrorCode::TemporarilyUnavailable,
-        error_description: Some("Authorization endpoint not yet implemented".to_string()),
-    })
+    let client = ClientRepo::find_by_client_id(&state.db, &req.client_id)
+        .await
+        .map_err(|_| AppError::OidcError {
+            error: OidcErrorCode::ServerError,
+            error_description: Some("failed to load client".to_string()),
+        })?
+        .ok_or(AppError::OidcError {
+            error: OidcErrorCode::UnauthorizedClient,
+            error_description: Some("client not found".to_string()),
+        })?;
+
+    if !client.enabled {
+        return Err(AppError::OidcError {
+            error: OidcErrorCode::UnauthorizedClient,
+            error_description: Some("client is disabled".to_string()),
+        });
+    }
+
+    if !client.is_valid_redirect_uri(&req.redirect_uri) {
+        return Err(AppError::OidcError {
+            error: OidcErrorCode::InvalidRequest,
+            error_description: Some("redirect_uri is not registered for this client".to_string()),
+        });
+    }
+
+    if !client.supports_grant_type("authorization_code") {
+        return Err(AppError::OidcError {
+            error: OidcErrorCode::UnauthorizedClient,
+            error_description: Some("client does not support authorization_code grant".to_string()),
+        });
+    }
+
+    let scopes = OidcService::validate_scopes(&req.scope).map_err(|msg| AppError::OidcError {
+        error: OidcErrorCode::InvalidScope,
+        error_description: Some(msg),
+    })?;
+
+    let mut requires_login = true;
+    let mut requires_consent = true;
+    if let Some(auth_user) = extract_auth_user(&state.db, &headers, &state.config.session_secret).await? {
+        requires_login = false;
+        check_user_client_access(&state.db, auth_user.user.id, client.id).await?;
+        requires_consent = !OidcService::check_consent_coverage(
+            &state.db,
+            auth_user.user.id,
+            client.id,
+            &req.scope,
+        )
+        .await
+        .map_err(|_| AppError::OidcError {
+            error: OidcErrorCode::ServerError,
+            error_description: Some("failed to check consent".to_string()),
+        })?;
+    }
+
+    Ok(Json(json!({
+        "client_id": client.client_id,
+        "client_name": client.name,
+        "redirect_uri": req.redirect_uri,
+        "scope": req.scope,
+        "state": req.state,
+        "nonce": req.nonce,
+        "scopes": scopes,
+        "requires_login": requires_login,
+        "requires_consent": requires_consent,
+    })))
 }
 
-/// POST /authorize/consent — 尚未实现
-pub async fn authorize_consent() -> Result<Json<Value>> {
-    Err(AppError::OidcError {
-        error: OidcErrorCode::TemporarilyUnavailable,
-        error_description: Some("Consent endpoint not yet implemented".to_string()),
-    })
+#[derive(Debug, Deserialize, Validate)]
+pub struct ConsentRequest {
+    #[validate(length(min = 1, max = 255, message = "client_id invalid"))]
+    pub client_id: String,
+    #[validate(length(min = 1, max = 2048, message = "redirect_uri invalid"))]
+    pub redirect_uri: String,
+    #[validate(length(max = 1024, message = "state too long"))]
+    pub state: Option<String>,
+    #[validate(length(min = 1, max = 500, message = "code_challenge invalid"))]
+    pub code_challenge: String,
+    #[validate(length(max = 10, message = "code_challenge_method too long"))]
+    pub code_challenge_method: Option<String>,
+    #[validate(length(max = 500, message = "nonce too long"))]
+    pub nonce: Option<String>,
+    pub scopes: Vec<String>,
+    pub approved: bool,
+}
+
+/// POST /authorize/consent
+pub async fn authorize_consent(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<ConsentRequest>,
+) -> Result<Json<Value>> {
+    req.validate().map_err(|e| AppError::ValidationError {
+        field: "request".to_string(),
+        message: e.to_string(),
+    })?;
+
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
+
+    let client = ClientRepo::find_by_client_id(&state.db, &req.client_id)
+        .await
+        .map_err(|_| AppError::OidcError {
+            error: OidcErrorCode::ServerError,
+            error_description: Some("failed to load client".to_string()),
+        })?
+        .ok_or(AppError::OidcError {
+            error: OidcErrorCode::UnauthorizedClient,
+            error_description: Some("client not found".to_string()),
+        })?;
+
+    if !client.enabled {
+        return Err(AppError::OidcError {
+            error: OidcErrorCode::UnauthorizedClient,
+            error_description: Some("client is disabled".to_string()),
+        });
+    }
+
+    if !client.is_valid_redirect_uri(&req.redirect_uri) {
+        return Err(AppError::OidcError {
+            error: OidcErrorCode::InvalidRequest,
+            error_description: Some("redirect_uri is not registered for this client".to_string()),
+        });
+    }
+
+    check_user_client_access(&state.db, auth_user.user.id, client.id).await?;
+
+    if !req.approved {
+        return Err(AppError::OidcError {
+            error: OidcErrorCode::AccessDenied,
+            error_description: Some("resource owner denied the request".to_string()),
+        });
+    }
+
+    let scope = req.scopes.join(" ");
+    let _ = OidcService::validate_scopes(&scope).map_err(|msg| AppError::OidcError {
+        error: OidcErrorCode::InvalidScope,
+        error_description: Some(msg),
+    })?;
+
+    let method = req.code_challenge_method.as_deref().unwrap_or("S256");
+    if method != "S256" {
+        return Err(AppError::OidcError {
+            error: OidcErrorCode::InvalidRequest,
+            error_description: Some("only S256 is supported".to_string()),
+        });
+    }
+
+    ConsentService::grant_consent(&state.db, auth_user.user.id, client.id, scope.clone())
+        .await
+        .map_err(|_| AppError::OidcError {
+            error: OidcErrorCode::ServerError,
+            error_description: Some("failed to persist consent".to_string()),
+        })?;
+
+    let (code, _) = OidcService::issue_authorization_code(
+        &state.db,
+        auth_user.user.id,
+        client.id,
+        &req.redirect_uri,
+        &scope,
+        req.nonce.as_deref(),
+        &req.code_challenge,
+        method,
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .map_err(|_| AppError::OidcError {
+        error: OidcErrorCode::ServerError,
+        error_description: Some("failed to issue authorization code".to_string()),
+    })?;
+
+    Ok(Json(json!({
+        "code": code,
+        "state": req.state,
+        "redirect_uri": req.redirect_uri,
+    })))
 }
 
 // ============================================================
 // Token
 // ============================================================
 
-/// POST /token — 尚未实现
-pub async fn token() -> Result<Json<Value>> {
-    Err(AppError::OidcError {
-        error: OidcErrorCode::TemporarilyUnavailable,
-        error_description: Some("Token endpoint not yet implemented".to_string()),
-    })
+#[derive(Debug, Deserialize, Validate)]
+pub struct TokenRequest {
+    #[validate(length(max = 64, message = "grant_type too long"))]
+    pub grant_type: String,
+    #[validate(length(max = 2048, message = "code too long"))]
+    pub code: Option<String>,
+    #[validate(length(max = 2048, message = "redirect_uri too long"))]
+    pub redirect_uri: Option<String>,
+    #[validate(length(max = 255, message = "client_id too long"))]
+    pub client_id: Option<String>,
+    #[validate(length(max = 255, message = "code_verifier too long"))]
+    pub code_verifier: Option<String>,
+    #[validate(length(max = 2048, message = "refresh_token too long"))]
+    pub refresh_token: Option<String>,
+}
+
+fn parse_basic_auth(headers: &HeaderMap) -> Result<Option<(String, String)>> {
+    use base64::Engine;
+
+    let Some(value) = headers.get("authorization") else {
+        return Ok(None);
+    };
+
+    let auth = value.to_str().map_err(|_| AppError::OidcError {
+        error: OidcErrorCode::InvalidClient,
+        error_description: Some("invalid authorization header".to_string()),
+    })?;
+
+    if !auth.starts_with("Basic ") {
+        return Err(AppError::OidcError {
+            error: OidcErrorCode::InvalidClient,
+            error_description: Some("only Basic authorization is supported".to_string()),
+        });
+    }
+
+    let encoded = &auth[6..];
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|_| AppError::OidcError {
+            error: OidcErrorCode::InvalidClient,
+            error_description: Some("invalid basic credentials".to_string()),
+        })?;
+
+    let decoded = String::from_utf8(decoded).map_err(|_| AppError::OidcError {
+        error: OidcErrorCode::InvalidClient,
+        error_description: Some("invalid basic credentials encoding".to_string()),
+    })?;
+
+    let (client_id, client_secret) = decoded.split_once(':').ok_or(AppError::OidcError {
+        error: OidcErrorCode::InvalidClient,
+        error_description: Some("invalid basic credentials format".to_string()),
+    })?;
+
+    Ok(Some((client_id.to_string(), client_secret.to_string())))
+}
+
+/// POST /token
+pub async fn token(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Form(req): Form<TokenRequest>,
+) -> Result<Json<Value>> {
+    req.validate().map_err(|e| AppError::OidcError {
+        error: OidcErrorCode::InvalidRequest,
+        error_description: Some(e.to_string()),
+    })?;
+
+    let basic = parse_basic_auth(&headers)?;
+    let (client_id, client_secret) = match basic {
+        Some((cid, sec)) => {
+            if let Some(form_cid) = &req.client_id {
+                if *form_cid != cid {
+                    return Err(AppError::OidcError {
+                        error: OidcErrorCode::InvalidRequest,
+                        error_description: Some("client_id mismatch between form and basic auth".to_string()),
+                    });
+                }
+            }
+            (cid, Some(sec))
+        }
+        None => {
+            let cid = req.client_id.clone().ok_or(AppError::OidcError {
+                error: OidcErrorCode::InvalidClient,
+                error_description: Some("missing client_id".to_string()),
+            })?;
+            (cid, None)
+        }
+    };
+
+    let client = ClientService::verify_client(&state.db, &client_id, client_secret.as_deref())
+        .await
+        .map_err(|_| AppError::OidcError {
+            error: OidcErrorCode::InvalidClient,
+            error_description: Some("client authentication failed".to_string()),
+        })?;
+
+    let token_response = match req.grant_type.as_str() {
+        "authorization_code" => {
+            let code = req.code.as_ref().ok_or(AppError::OidcError {
+                error: OidcErrorCode::InvalidRequest,
+                error_description: Some("missing code".to_string()),
+            })?;
+            let redirect_uri = req.redirect_uri.as_ref().ok_or(AppError::OidcError {
+                error: OidcErrorCode::InvalidRequest,
+                error_description: Some("missing redirect_uri".to_string()),
+            })?;
+            let code_verifier = req.code_verifier.as_ref().ok_or(AppError::OidcError {
+                error: OidcErrorCode::InvalidRequest,
+                error_description: Some("missing code_verifier".to_string()),
+            })?;
+
+            let auth_code = OidcService::exchange_authorization_code(&state.db, code)
+                .await
+                .map_err(|_| AppError::OidcError {
+                    error: OidcErrorCode::ServerError,
+                    error_description: Some("failed to consume authorization code".to_string()),
+                })?
+                .ok_or(AppError::OidcError {
+                    error: OidcErrorCode::InvalidGrant,
+                    error_description: Some("authorization code is invalid, expired, or already used".to_string()),
+                })?;
+
+            if auth_code.client_id != client.id || auth_code.redirect_uri != *redirect_uri {
+                return Err(AppError::OidcError {
+                    error: OidcErrorCode::InvalidGrant,
+                    error_description: Some("authorization code does not match client or redirect_uri".to_string()),
+                });
+            }
+
+            if auth_code.code_challenge_method != "S256"
+                || !crypto::verify_pkce_s256(code_verifier, &auth_code.code_challenge)
+            {
+                return Err(AppError::OidcError {
+                    error: OidcErrorCode::InvalidGrant,
+                    error_description: Some("PKCE verification failed".to_string()),
+                });
+            }
+
+            TokenService::issue_tokens_for_auth_code(&state.db, &state.config, &auth_code, &client)
+                .await
+                .map_err(|_| AppError::OidcError {
+                    error: OidcErrorCode::ServerError,
+                    error_description: Some("failed to issue tokens".to_string()),
+                })?
+        }
+        "refresh_token" => {
+            let refresh_token = req.refresh_token.as_ref().ok_or(AppError::OidcError {
+                error: OidcErrorCode::InvalidRequest,
+                error_description: Some("missing refresh_token".to_string()),
+            })?;
+
+            TokenService::issue_tokens_for_refresh(&state.db, &state.config, refresh_token, &client)
+                .await
+                .map_err(|_| AppError::OidcError {
+                    error: OidcErrorCode::InvalidGrant,
+                    error_description: Some("refresh token is invalid or expired".to_string()),
+                })?
+        }
+        _ => {
+            return Err(AppError::OidcError {
+                error: OidcErrorCode::UnsupportedGrantType,
+                error_description: Some("supported grant_type: authorization_code, refresh_token".to_string()),
+            });
+        }
+    };
+
+    Ok(Json(serde_json::to_value(token_response).unwrap_or_else(|_| json!({}))))
 }
 
 // ============================================================
@@ -188,6 +517,22 @@ pub async fn userinfo(
 
     // 尝试用每个公钥验证 token（直到找到匹配的 kid）
     let claims = verify_access_token(&token, &jwks, &state.config.issuer)?;
+
+    // 验证 aud 对应已启用客户端，避免接受无效受众的 access token
+    let client = ClientRepo::find_by_client_id(&state.db, &claims.aud)
+        .await
+        .map_err(|_| AppError::InvalidToken {
+            reason: Some("Failed to validate token audience".to_string()),
+        })?
+        .ok_or(AppError::InvalidToken {
+            reason: Some("Unknown token audience".to_string()),
+        })?;
+
+    if !client.enabled {
+        return Err(AppError::InvalidToken {
+            reason: Some("Token audience client is disabled".to_string()),
+        });
+    }
 
     // 加载用户
     let user_id = uuid::Uuid::parse_str(&claims.sub)

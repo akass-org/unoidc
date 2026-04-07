@@ -47,12 +47,12 @@ impl PasswordResetTokenRepo {
     pub async fn mark_consumed(
         pool: &PgPool,
         token_id: Uuid,
-    ) -> Result<PasswordResetToken, sqlx::Error> {
+    ) -> Result<Option<PasswordResetToken>, sqlx::Error> {
         sqlx::query_as::<_, PasswordResetToken>(
-            "UPDATE password_reset_tokens SET consumed_at = NOW() WHERE id = $1 RETURNING *",
+            "UPDATE password_reset_tokens SET consumed_at = NOW() WHERE id = $1 AND consumed_at IS NULL RETURNING *",
         )
         .bind(token_id)
-        .fetch_one(pool)
+        .fetch_optional(pool)
         .await
     }
 

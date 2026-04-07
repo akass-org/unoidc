@@ -23,12 +23,16 @@ export function LoginPage() {
 
   const rawReturnTo = searchParams.get('return_to') || '/profile'
   const returnTo = (() => {
-    if (rawReturnTo.startsWith('/')) {
-      return rawReturnTo
-    }
-
     try {
-      const url = new URL(rawReturnTo)
+      // 仅允许站内路径或同源绝对 URL，拒绝协议相对 URL（//example.com）
+      const url = rawReturnTo.startsWith('/')
+        ? new URL(rawReturnTo, window.location.origin)
+        : new URL(rawReturnTo)
+
+      if (rawReturnTo.startsWith('//')) {
+        return '/profile'
+      }
+
       if (url.origin === window.location.origin) {
         return `${url.pathname}${url.search}`
       }

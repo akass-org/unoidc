@@ -88,10 +88,18 @@ impl TokenService {
     ) -> Result<TokenResponse> {
         let token_hash = crypto::hash_token(plain_refresh_token);
 
-        // 查找 refresh token（带行锁，防止并发重放）
-        let stored_token = RefreshTokenRepo::find_by_hash_for_update(pool, &token_hash)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Invalid refresh token"))?;
+        let mut tx = pool.begin().await?;
+
+        // 在事务中查找 refresh token 并加行锁，确保锁持有到轮换完成
+        let stored_token = sqlx::query_as::<_, RefreshToken>(
+            r#"
+            SELECT * FROM refresh_tokens WHERE token_hash = $1 FOR UPDATE
+            "#,
+        )
+        .bind(&token_hash)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Invalid refresh token"))?;
 
         // 验证 client
         if stored_token.client_id != client.id {
@@ -106,22 +114,66 @@ impl TokenService {
             );
             // 更新重放检测指标
             metrics::REPLAY_DETECTED_TOTAL.inc();
-            RefreshTokenRepo::revoke_user_client_tokens(
-                pool, stored_token.user_id, client.id,
-            ).await?;
+            sqlx::query(
+                r#"
+                UPDATE refresh_tokens
+                SET revoked_at = $3
+                WHERE user_id = $1 AND client_id = $2 AND revoked_at IS NULL
+                "#,
+            )
+            .bind(stored_token.user_id)
+            .bind(client.id)
+            .bind(OffsetDateTime::now_utc())
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
             return Err(anyhow::anyhow!("Replay detected - tokens revoked"));
         }
 
         // 族检测：递归检查整个 token 链，防止使用多代前的旧 token
-        if RefreshTokenRepo::detect_family_replay(pool, &token_hash).await? {
+        let family_replay: (i64,) = sqlx::query_as(
+            r#"
+            WITH RECURSIVE token_chain AS (
+                SELECT token_hash, parent_token_hash, replaced_by_token_hash, revoked_at
+                FROM refresh_tokens
+                WHERE token_hash = $1
+                UNION ALL
+                SELECT rt.token_hash, rt.parent_token_hash, rt.replaced_by_token_hash, rt.revoked_at
+                FROM refresh_tokens rt
+                INNER JOIN token_chain tc ON rt.token_hash = tc.parent_token_hash
+            )
+            SELECT COUNT(*)
+            FROM token_chain
+            WHERE token_hash != $1
+              AND (
+                    revoked_at IS NOT NULL
+                 OR replaced_by_token_hash IS NOT NULL
+              )
+            "#,
+        )
+        .bind(&token_hash)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        if family_replay.0 > 0 {
             tracing::warn!(
                 "Refresh token family replay detected for user {} client {}",
                 stored_token.user_id, client.id
             );
             metrics::REPLAY_DETECTED_TOTAL.inc();
-            RefreshTokenRepo::revoke_user_client_tokens(
-                pool, stored_token.user_id, client.id,
-            ).await?;
+            sqlx::query(
+                r#"
+                UPDATE refresh_tokens
+                SET revoked_at = $3
+                WHERE user_id = $1 AND client_id = $2 AND revoked_at IS NULL
+                "#,
+            )
+            .bind(stored_token.user_id)
+            .bind(client.id)
+            .bind(OffsetDateTime::now_utc())
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
             return Err(anyhow::anyhow!("Token family replay detected - all tokens revoked"));
         }
 
@@ -157,8 +209,9 @@ impl TokenService {
         let auth_time = stored_token.created_at;
         let id_token = Self::create_id_token_from_refresh(config, &jwk.kid, &jwk.private_key_pem, &user, client, &stored_token.scope, auth_time, &groups)?;
 
-        // 轮换 refresh token
-        let new_refresh_token = Self::rotate_refresh_token(pool, config, &stored_token).await?;
+        // 在同一事务内轮换 refresh token
+        let new_refresh_token = Self::rotate_refresh_token(&mut tx, config, &stored_token).await?;
+        tx.commit().await?;
 
         // 更新 token 刷新指标
         metrics::TOKEN_REFRESH_TOTAL.inc();
@@ -297,27 +350,51 @@ impl TokenService {
 
     /// 轮换 refresh token
     async fn rotate_refresh_token(
-        pool: &PgPool,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         config: &Config,
         old_token: &RefreshToken,
     ) -> Result<String> {
         let plain_token = crypto::generate_refresh_token()?;
         let new_hash = crypto::hash_token(&plain_token);
         let expires_at = OffsetDateTime::now_utc() + time::Duration::seconds(config.refresh_token_ttl);
+        let now = OffsetDateTime::now_utc();
 
         // 创建新 token
-        RefreshTokenRepo::create(pool, CreateRefreshToken {
-            token_hash: new_hash.clone(),
-            parent_token_hash: Some(old_token.token_hash.clone()),
-            user_id: old_token.user_id,
-            client_id: old_token.client_id,
-            scope: old_token.scope.clone(),
-            expires_at,
-        }).await?;
+        sqlx::query(
+            r#"
+            INSERT INTO refresh_tokens (
+                id, token_hash, parent_token_hash, user_id, client_id, scope,
+                expires_at, created_at, last_used_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            "#,
+        )
+        .bind(uuid::Uuid::new_v4())
+        .bind(&new_hash)
+        .bind(&old_token.token_hash)
+        .bind(old_token.user_id)
+        .bind(old_token.client_id)
+        .bind(&old_token.scope)
+        .bind(expires_at)
+        .bind(now)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
 
         // 标记旧 token 已替换
-        RefreshTokenRepo::mark_replaced(pool, &old_token.token_hash, &new_hash).await?;
-        RefreshTokenRepo::update_last_used(pool, &old_token.token_hash).await?;
+        sqlx::query(
+            r#"
+            UPDATE refresh_tokens
+            SET replaced_by_token_hash = $2,
+                last_used_at = $3
+            WHERE token_hash = $1
+            "#,
+        )
+        .bind(&old_token.token_hash)
+        .bind(&new_hash)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
 
         Ok(plain_token)
     }

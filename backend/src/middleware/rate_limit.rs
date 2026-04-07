@@ -1,4 +1,5 @@
 use axum::{
+    extract::ConnectInfo,
     extract::Request,
     http::{HeaderValue, StatusCode},
     middleware::Next,
@@ -9,6 +10,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use std::net::SocketAddr;
 use tokio::sync::RwLock;
 
 #[derive(Debug, Clone)]
@@ -179,12 +181,27 @@ pub fn extract_client_ip(
 
 pub async fn rate_limit_middleware(
     axum::Extension(limiter): axum::Extension<Arc<RateLimiter>>,
-    axum::Extension(remote_addr): axum::Extension<Option<String>>,
     request: Request,
     next: Next,
 ) -> Response {
     let path = request.uri().path().to_string();
-    let ip = extract_client_ip(request.headers(), remote_addr.as_deref(), &limiter.trusted_proxy_ips);
+    // 优先读取测试注入的 Option<String>，否则回退到真实 ConnectInfo<SocketAddr>
+    let remote_addr_from_ext = request
+        .extensions()
+        .get::<Option<String>>()
+        .and_then(|v| v.clone());
+    let remote_addr = remote_addr_from_ext.or_else(|| {
+        request
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|c| c.0.to_string())
+    });
+
+    let ip = extract_client_ip(
+        request.headers(),
+        remote_addr.as_deref(),
+        &limiter.trusted_proxy_ips,
+    );
 
     let tier = RateLimitTier::from_path(&path);
 
