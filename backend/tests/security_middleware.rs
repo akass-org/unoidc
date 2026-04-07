@@ -21,14 +21,14 @@ fn test_pool(config: &Config) -> sqlx::PgPool {
 
 fn test_app(config: Config) -> axum::Router {
     let pool = test_pool(&config);
-    let state = AppState::new(config, pool);
+    let state = AppState::new(config, pool, None);
     build_app_with_state(state)
 }
 
 fn test_app_with_remote_addr(config: Config, remote_addr: Option<String>) -> axum::Router {
     use axum::Extension;
     let pool = test_pool(&config);
-    let state = AppState::new(config.clone(), pool);
+    let state = AppState::new(config.clone(), pool, None);
     let rate_limiter = backend::middleware::create_rate_limiter(
         config.rate_limit_max_requests,
         config.rate_limit_window_secs,

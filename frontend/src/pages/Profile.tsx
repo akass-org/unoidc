@@ -88,7 +88,19 @@ export function ProfilePage() {
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    
+
+    // 前端预检查：限制 1MB，避免大图上传超时
+    if (file.size > 1024 * 1024) {
+      addToast({
+        type: 'error',
+        title: '图片过大',
+        message: `文件大小 ${(file.size / 1024).toFixed(0)}KB，请选择小于 1MB 的图片`,
+      })
+      // 重置 input，允许重复选择同一文件
+      e.target.value = ''
+      return
+    }
+
     try {
       const result = await meApi.uploadAvatar(file)
       setUser(result as { id: string; username: string; email: string; display_name: string; picture?: string; is_admin: boolean })

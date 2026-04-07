@@ -22,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
     db::run_migrations(&pool).await?;
 
     let config = Config::default();
-    let state = Arc::new(AppState { config, db: pool });
+    let state = Arc::new(AppState { config, db: pool, email_service: None });
 
     // 清理数据
     sqlx::query("DELETE FROM user_sessions").execute(&state.db).await.ok();

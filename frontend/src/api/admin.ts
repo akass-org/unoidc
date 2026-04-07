@@ -1,6 +1,4 @@
 import { api } from './client'
-
-// TODO: 实现管理后台 API
 export const adminApi = {
   getUsers: () => api.get('api/v1/admin/users').json(),
   createUser: (data: Record<string, unknown>) => api.post('api/v1/admin/users', { json: data }).json(),

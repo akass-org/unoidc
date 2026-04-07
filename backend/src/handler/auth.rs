@@ -12,7 +12,7 @@ use validator::Validate;
 
 use crate::{
     crypto,
-    error::{AppError, OidcErrorCode, Result},
+    error::{AppError, Result},
     metrics,
     middleware::{csrf::generate_csrf_cookie, request_context::RequestContext},
     repo::SettingsRepo,
@@ -413,11 +413,152 @@ pub async fn register(
     }
 }
 
-pub async fn forgot_password() -> Result<Json<LoginResponse>> {
-    Err(AppError::OidcError {
-        error: OidcErrorCode::TemporarilyUnavailable,
-        error_description: Some("Password reset not yet implemented".to_string()),
-    })
+#[derive(Debug, Deserialize)]
+pub struct ForgotPasswordRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    #[validate(length(min = 8, max = 128, message = "password must be 8-128 characters"))]
+    pub password: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ResetPasswordResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+const PASSWORD_RESET_TTL_MINUTES: i64 = 30;
+
+/// 忘记密码 - 发送重置链接
+pub async fn forgot_password(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ForgotPasswordRequest>,
+) -> Result<Json<LoginResponse>> {
+    // 无论用户是否存在，都返回相同响应（防止邮箱枚举）
+    if let Ok(Some(user)) = crate::repo::UserRepo::find_by_email(&state.db, &req.email).await {
+        // 撤销该用户之前的所有重置令牌
+        let _ =
+            crate::repo::PasswordResetTokenRepo::revoke_all_for_user(&state.db, user.id).await;
+
+        // 生成新令牌
+        let plain_token = crypto::generate_secure_token(32).map_err(|e| {
+            tracing::error!("Failed to generate password reset token: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("TOKEN_GENERATION_ERROR".to_string()),
+            }
+        })?;
+        let token_hash = crypto::hash_token(&plain_token);
+
+        let expires_at = time::OffsetDateTime::now_utc()
+            + time::Duration::minutes(PASSWORD_RESET_TTL_MINUTES);
+
+        let _ = crate::repo::PasswordResetTokenRepo::create(
+            &state.db,
+            crate::model::CreatePasswordResetToken {
+                user_id: user.id,
+                token_hash,
+                expires_at,
+            },
+        )
+        .await;
+
+        // 尝试发送邮件
+        if let Some(email_svc) = &state.email_service {
+            let reset_url = format!(
+                "{}/reset-password?token={}",
+                state.config.app_base_url, plain_token
+            );
+            if let Err(e) = email_svc
+                .send_password_reset(&req.email, &user.username, &reset_url)
+                .await
+            {
+                tracing::error!("Failed to send password reset email: {}", e);
+            }
+        } else {
+            tracing::info!(
+                "Password reset token for {}: {}*** (expires in {}min)",
+                user.username,
+                &plain_token[..8],
+                PASSWORD_RESET_TTL_MINUTES
+            );
+        }
+
+        tracing::info!(email = %req.email, "Password reset requested");
+    } else {
+        // 用户不存在，同样记录日志但不泄露信息
+        tracing::info!(email = %req.email, "Password reset requested for unknown email");
+    }
+
+    Ok(Json(LoginResponse {
+        success: true,
+        message: "If the email is registered, a reset link has been sent".to_string(),
+    }))
+}
+
+/// 重置密码 - 通过令牌验证并更新密码
+pub async fn reset_password(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ResetPasswordRequest>,
+) -> Result<Json<ResetPasswordResponse>> {
+    req.validate().map_err(|e| AppError::ValidationError {
+        field: "request".to_string(),
+        message: e.to_string(),
+    })?;
+
+    // 查找令牌
+    let token_hash = crypto::hash_token(&req.token);
+    let token = crate::repo::PasswordResetTokenRepo::find_by_hash(&state.db, &token_hash)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error while finding reset token: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("TOKEN_LOOKUP_ERROR".to_string()),
+            }
+        })?
+        .ok_or(AppError::BusinessError {
+            code: "INVALID_TOKEN".to_string(),
+            message: "Invalid or expired reset token".to_string(),
+        })?;
+
+    // 验证令牌有效性
+    if !token.is_valid() {
+        return Err(AppError::BusinessError {
+            code: "TOKEN_EXPIRED".to_string(),
+            message: "Reset token has expired".to_string(),
+        });
+    }
+
+    // 标记令牌已使用（防止重放）
+    let _ = crate::repo::PasswordResetTokenRepo::mark_consumed(&state.db, token.id).await;
+
+    // 更新密码
+    UserService::change_password_raw(&state.db, token.user_id, &req.password)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to update password: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("PASSWORD_UPDATE_ERROR".to_string()),
+            }
+        })?;
+
+    // 撤销所有会话和刷新令牌
+    AuthService::logout_all_sessions(&state.db, token.user_id)
+        .await
+        .ok();
+    crate::repo::RefreshTokenRepo::revoke_all_for_user(&state.db, token.user_id)
+        .await
+        .ok();
+
+    tracing::info!(user_id = %token.user_id, "Password reset successfully");
+
+    Ok(Json(ResetPasswordResponse {
+        success: true,
+        message: "Password has been reset successfully".to_string(),
+    }))
 }
 
 /// 获取当前会话信息

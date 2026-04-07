@@ -3,11 +3,12 @@
 // 用户自助 API 接口（当前登录用户）
 
 use axum::{
-    extract::{Path, State},
+    extract::{Multipart, Path, State},
     http::HeaderMap,
     response::IntoResponse,
     Json,
 };
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -203,34 +204,118 @@ pub async fn change_password(
 // 头像上传
 // ============================================================================
 
-#[derive(Debug, Deserialize)]
-pub struct UploadAvatarRequest {
-    // 在实际实现中，这里应该处理 multipart/form-data
-    // 为简化，先使用 base64 编码的图片数据
-    pub avatar: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct UploadAvatarResponse {
-    pub picture: String,
-}
-
 /// 上传用户头像
 pub async fn upload_avatar(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(_req): Json<UploadAvatarRequest>,
+    mut multipart: Multipart,
 ) -> Result<Json<ProfileResponse>> {
     let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
 
-    // TODO: 实现头像上传逻辑
-    // 1. 验证图片格式和大小
-    // 2. 保存图片到存储（本地或云存储）
-    // 3. 更新用户 picture 字段
+    // 提取 avatar 字段
+    let field: axum::extract::multipart::Field = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError::InvalidRequest("Failed to parse upload".to_string()))?
+        .ok_or_else(|| AppError::InvalidRequest("No avatar file provided".to_string()))?;
 
-    // 暂时返回当前用户信息
+    let content_type = field
+        .content_type()
+        .unwrap_or("application/octet-stream")
+        .to_string();
+
+    let data: Vec<u8> = field
+        .bytes()
+        .await
+        .map_err(|_| AppError::InvalidRequest("Failed to read file data".to_string()))?
+        .to_vec();
+
+    // 验证大小（最大 1MB）
+    const MAX_SIZE: usize = 1024 * 1024;
+    if data.len() > MAX_SIZE {
+        tracing::warn!(
+            user = %auth_user.user.username,
+            size_kb = data.len() / 1024,
+            ct = %content_type,
+            "Avatar upload rejected: image too large"
+        );
+        return Err(AppError::ValidationError {
+            field: "avatar".to_string(),
+            message: format!("图片过大 ({}KB)，请选择小于 1MB 的图片", data.len() / 1024),
+        });
+    }
+
+    // 验证格式
+    let valid_types = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if !valid_types.contains(&content_type.as_str()) {
+        return Err(AppError::ValidationError {
+            field: "avatar".to_string(),
+            message: "仅支持 JPEG、PNG、WebP、GIF 格式".to_string(),
+        });
+    }
+
+    // 解码、缩放至 256x256、重新编码为 JPEG
+    let picture = {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let img = image::load_from_memory(&data).map_err(|_| {
+                AppError::ValidationError {
+                    field: "avatar".to_string(),
+                    message: "无效的图片文件".to_string(),
+                }
+            })?;
+
+            let resized = img.resize(256, 256, image::imageops::FilterType::Lanczos3);
+            let mut buffer = Vec::new();
+            resized
+                .write_to(
+                    &mut std::io::Cursor::new(&mut buffer),
+                    image::ImageFormat::Jpeg,
+                )
+                .map_err(|e| AppError::InternalServerError {
+                    error_code: Some(format!("IMAGE_ENCODE_ERROR: {}", e)),
+                })?;
+
+            let b64_data = base64::engine::general_purpose::STANDARD.encode(&buffer);
+            Ok::<_, AppError>(format!("data:image/jpeg;base64,{}", b64_data))
+        }))
+    };
+
+    let picture = match picture {
+        Ok(Ok(pic)) => pic,
+        Ok(Err(e)) => return Err(e),
+        Err(_) => {
+            return Err(AppError::ValidationError {
+                field: "avatar".to_string(),
+                message: "图片处理失败，可能是文件损坏".to_string(),
+            });
+        }
+    };
+
+    // 更新用户记录
+    crate::repo::UserRepo::update_picture(&state.db, auth_user.user.id, &picture)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to update avatar: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("AVATAR_UPDATE_ERROR".to_string()),
+            }
+        })?;
+
+    // 返回更新后的用户信息
+    let updated_user = crate::repo::UserRepo::find_by_id(&state.db, auth_user.user.id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to fetch updated user: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("USER_FETCH_ERROR".to_string()),
+            }
+        })?
+        .ok_or(AppError::UserNotFound {
+            identifier: Some(auth_user.user.id.to_string()),
+        })?;
+
     let is_admin = check_is_admin(&state.db, &auth_user).await?;
-    Ok(Json(ProfileResponse::from((auth_user.user, is_admin))))
+    Ok(Json(ProfileResponse::from((updated_user, is_admin))))
 }
 
 // ============================================================================
@@ -580,16 +665,31 @@ pub async fn request_email_change(
         message: e.to_string(),
     })?;
 
-    // TODO: 发送验证邮件到新邮箱
-    // 应该包含链接：/api/v1/me/email/verify?token={plain_token}
-    // 或在前端向 /api/v1/me/email/verify POST 请求中包含 token
-
-    // 暂时在日志中打印 token（开发用）
-    tracing::info!(
-        "Email verification token for user {}: {}*** (expires in 24 hours)",
-        auth_user.user.username,
-        &plain_token[..8]
-    );
+    // 发送验证邮件到新邮箱
+    if let Some(email_svc) = &state.email_service {
+        let verify_url = format!(
+            "{}/profile?email_verify_token={}",
+            state.config.app_base_url, plain_token
+        );
+        if let Err(e) = email_svc
+            .send_email_change_verification(
+                &req.new_email,
+                &auth_user.user.username,
+                &verify_url,
+            )
+            .await
+        {
+            tracing::error!("Failed to send email verification: {}", e);
+            // 仍然返回成功，避免泄露邮箱是否存在的信息
+        }
+    } else {
+        // SMTP 未配置时，降级为日志打印（开发用）
+        tracing::info!(
+            "Email verification token for user {}: {}*** (expires in 24 hours)",
+            auth_user.user.username,
+            &plain_token[..8]
+        );
+    }
 
     Ok(Json(RequestEmailChangeResponse {
         success: true,

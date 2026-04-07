@@ -82,9 +82,6 @@ function getCookie(name: string): string | undefined {
 export const api = ky.create({
   prefixUrl: '/',
   credentials: 'include',
-  headers: {
-    'Content-Type': 'application/json',
-  },
   hooks: {
     beforeRequest: [
       (request) => {

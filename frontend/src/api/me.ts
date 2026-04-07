@@ -1,6 +1,4 @@
 import { api } from './client'
-
-// TODO: 实现用户自助 API
 export const meApi = {
   getProfile: () => api.get('api/v1/me').json(),
   updateProfile: (data: Record<string, unknown>) => api.patch('api/v1/me', { json: data }).json(),

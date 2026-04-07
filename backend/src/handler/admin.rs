@@ -643,7 +643,7 @@ impl From<crate::model::Client> for ClientResponse {
             allowed_groups: Vec::new(),
             is_active: client.enabled,
             created_at: client.created_at.to_string(),
-            last_used: None, // TODO: 从使用记录获取
+            last_used: None, // 由 client_to_response 填充
         }
     }
 }
@@ -674,6 +674,17 @@ async fn client_to_response(pool: &sqlx::PgPool, client: crate::model::Client) -
         response.allowed_group_ids = group_ids.iter().map(|group_id| group_id.to_string()).collect();
         response.allowed_groups = group_names;
     }
+
+    // 填充客户端最近使用时间
+    let last_used = crate::repo::RefreshTokenRepo::find_client_last_used(pool, client.id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error while fetching client last_used: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("CLIENT_LAST_USED_FETCH_ERROR".to_string()),
+            }
+        })?;
+    response.last_used = last_used.map(|dt| dt.format(&Rfc3339).unwrap_or_else(|_| dt.to_string()));
 
     Ok(response)
 }

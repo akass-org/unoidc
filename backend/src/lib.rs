@@ -44,6 +44,7 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .route("/api/v1/auth/logout", post(handler::auth::logout))
         .route("/api/v1/auth/register", post(handler::auth::register))
         .route("/api/v1/auth/forgot-password", post(handler::auth::forgot_password))
+        .route("/api/v1/auth/reset-password", post(handler::auth::reset_password))
         .route("/api/v1/auth/session", get(handler::auth::get_session))
 
         // Me (User Self-Service)
@@ -96,6 +97,8 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .layer(axum::Extension::<Option<String>>(None))
         .layer(axum::middleware::from_fn(request_context_middleware))
         .layer(cors_layer)
+        // 全局 body limit 5MB（默认 2MB，头像上传需要更大；handler 内部再做精确限制）
+        .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024))
 
         .with_state(state)
 }
@@ -103,10 +106,15 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
 pub struct AppState {
     pub config: config::Config,
     pub db: sqlx::PgPool,
+    pub email_service: Option<service::EmailService>,
 }
 
 impl AppState {
-    pub fn new(config: config::Config, db: sqlx::PgPool) -> Arc<Self> {
-        Arc::new(Self { config, db })
+    pub fn new(
+        config: config::Config,
+        db: sqlx::PgPool,
+        email_service: Option<service::EmailService>,
+    ) -> Arc<Self> {
+        Arc::new(Self { config, db, email_service })
     }
 }

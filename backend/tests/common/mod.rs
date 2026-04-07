@@ -22,5 +22,5 @@ pub async fn get_test_db() -> Arc<AppState> {
     backend::metrics::init();
 
     let config = Config::default();
-    Arc::new(AppState { config, db: pool })
+    Arc::new(AppState { config, db: pool, email_service: None })
 }

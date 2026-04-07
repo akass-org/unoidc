@@ -22,6 +22,30 @@ pub struct Config {
     pub rate_limit_token_window_secs: u64,
     pub cors_allowed_origins: Vec<String>,
     pub trusted_proxy_ips: Vec<String>,
+    pub smtp: SmtpConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SmtpConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: String,
+    pub from_address: String,
+    pub tls: bool,
+}
+
+impl Default for SmtpConfig {
+    fn default() -> Self {
+        Self {
+            host: String::new(),
+            port: 587,
+            username: String::new(),
+            password: String::new(),
+            from_address: String::new(),
+            tls: true,
+        }
+    }
 }
 
 impl Default for Config {
@@ -49,6 +73,7 @@ impl Default for Config {
                 "http://localhost:3000".to_string(),
             ],
             trusted_proxy_ips: vec![],
+            smtp: SmtpConfig::default(),
         }
     }
 }
@@ -117,6 +142,20 @@ impl Config {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect(),
+            smtp: SmtpConfig {
+                host: env::var("SMTP_HOST").unwrap_or_default(),
+                port: env::var("SMTP_PORT")
+                    .unwrap_or_else(|_| "587".to_string())
+                    .parse()
+                    .unwrap_or(587),
+                username: env::var("SMTP_USERNAME").unwrap_or_default(),
+                password: env::var("SMTP_PASSWORD").unwrap_or_default(),
+                from_address: env::var("SMTP_FROM_ADDRESS").unwrap_or_default(),
+                tls: env::var("SMTP_TLS")
+                    .unwrap_or_else(|_| "true".to_string())
+                    .parse()
+                    .unwrap_or(true),
+            },
         };
 
         // 生产环境配置验证

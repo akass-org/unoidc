@@ -128,6 +128,25 @@ impl UserService {
         Ok(())
     }
 
+    /// 直接设置新密码（用于密码重置，不需要旧密码）
+    pub async fn change_password_raw(
+        pool: &PgPool,
+        user_id: Uuid,
+        new_password: &str,
+    ) -> Result<(), anyhow::Error> {
+        if new_password.len() < 8 {
+            return Err(anyhow::anyhow!("Password must be at least 8 characters"));
+        }
+
+        let new_hash = crypto::hash_password(new_password)?;
+
+        UserRepo::update_password(pool, user_id, &new_hash)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to update password: {}", e))?;
+
+        Ok(())
+    }
+
     /// 获取所有用户
     pub async fn list_users(pool: &PgPool, limit: i32, offset: i32) -> Result<Vec<User>, anyhow::Error> {
         UserRepo::find_all(pool, limit, offset)

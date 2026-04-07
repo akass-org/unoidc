@@ -231,4 +231,22 @@ impl RefreshTokenRepo {
 
         Ok(result.rows_affected())
     }
+
+    /// 查询客户端最近使用时间（基于刷新令牌的 last_used_at）
+    pub async fn find_client_last_used(
+        pool: &PgPool,
+        client_id: Uuid,
+    ) -> Result<Option<time::OffsetDateTime>, sqlx::Error> {
+        let result: Option<(Option<time::OffsetDateTime>,)> = sqlx::query_as(
+            r#"
+            SELECT MAX(last_used_at) FROM refresh_tokens
+            WHERE client_id = $1 AND last_used_at IS NOT NULL
+            "#,
+        )
+        .bind(client_id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(result.and_then(|r| r.0))
+    }
 }

@@ -67,6 +67,7 @@ export function LayoutHeader({ isAdminPortal }: LayoutHeaderProps) {
               <div className="flex items-center gap-2">
                 <Avatar
                   name={user?.display_name || user?.username || '?'}
+                  src={user?.picture}
                   size="sm"
                 />
                 <span className="hidden sm:block text-xs text-gray-500 dark:text-gray-400 max-w-[100px] truncate">

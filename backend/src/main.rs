@@ -45,7 +45,21 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // 构建应用（注入配置和数据库连接）
-    let state = AppState::new(config, db);
+    let email_service = if !config.smtp.host.is_empty() {
+        Some(backend::service::EmailService::new(
+            config.smtp.host.clone(),
+            config.smtp.port,
+            config.smtp.username.clone(),
+            config.smtp.password.clone(),
+            config.smtp.from_address.clone(),
+            config.smtp.tls,
+        ))
+    } else {
+        tracing::info!("SMTP not configured, email features will be disabled");
+        None
+    };
+
+    let state = AppState::new(config, db, email_service);
     let app = build_app_with_state(state);
 
     // 启动服务器

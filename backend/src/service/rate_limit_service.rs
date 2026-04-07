@@ -1,9 +1,10 @@
 // Rate limit service
 //
-// Provides distributed rate limiting capabilities
+// 基于 PostgreSQL 的固定窗口限流实现
 
 use anyhow::Result;
 use sqlx::PgPool;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 /// Rate limit key types
@@ -75,47 +76,86 @@ impl RateLimitTier {
 pub struct RateLimitService;
 
 impl RateLimitService {
-    /// Check if a request is allowed under the rate limit
+    /// 检查是否在限额内（固定窗口算法）
     ///
+    /// 使用 INSERT ... ON CONFLICT 原子地递增计数器
     /// Returns (allowed, remaining_requests, reset_time_secs)
     pub async fn check_rate_limit(
-        _pool: &PgPool,
+        pool: &PgPool,
         key: &RateLimitKey,
         tier: &RateLimitTier,
     ) -> Result<(bool, u32, u64)> {
         let key_str = key.as_string();
-        
-        // TODO: Use Redis or other cache for distributed rate limiting
-        // For now, this is a placeholder for single-instance in-memory implementation via middleware
-        // Production should use Redis for distributed deployments
+        let now = OffsetDateTime::now_utc();
 
-        // In single-instance deployment, the middleware layer handles this
-        // This service is here for future Redis integration
+        // 计算当前窗口起始时间（对齐到窗口边界）
+        let unix_now = now.unix_timestamp();
+        let window_start_unix = unix_now - (unix_now % tier.window_secs as i64);
+        let window_start = OffsetDateTime::from_unix_timestamp(window_start_unix)?;
+
+        // 原子操作：插入或更新，返回当前请求数
+        let result: (i64,) = sqlx::query_as(
+            r#"
+            INSERT INTO rate_limits (key, window_start, request_count)
+            VALUES ($1, $2, 1)
+            ON CONFLICT (key) DO UPDATE SET
+                request_count = CASE
+                    WHEN rate_limits.window_start = $2 THEN rate_limits.request_count + 1
+                    ELSE 1
+                END,
+                window_start = $2
+            RETURNING request_count
+            "#,
+        )
+        .bind(&key_str)
+        .bind(window_start)
+        .fetch_one(pool)
+        .await?;
+
+        let count = result.0 as u32;
+        let allowed = count <= tier.max_requests;
+        let remaining = if count >= tier.max_requests {
+            0
+        } else {
+            tier.max_requests - count
+        };
+        let elapsed = (now.unix_timestamp() - window_start_unix).max(0) as u64;
+        let reset_secs = tier.window_secs.saturating_sub(elapsed);
 
         tracing::debug!(
-            "Rate limit check: key={}, tier={}, max={}, window={}s",
-            key_str, tier.name, tier.max_requests, tier.window_secs
+            key = %key_str,
+            tier = tier.name,
+            count = count,
+            max = tier.max_requests,
+            allowed = allowed,
+            "Rate limit check"
         );
-
-        let allowed = true; // Middleware handles actual enforcement
-        let remaining = tier.max_requests;
-        let reset_secs = tier.window_secs;
 
         Ok((allowed, remaining, reset_secs))
     }
 
-    /// Reset rate limit for a key (admin operation)
-    pub async fn reset_limit(
-        _pool: &PgPool,
-        key: &RateLimitKey,
-    ) -> Result<()> {
+    /// 重置某个 key 的限流（管理操作）
+    pub async fn reset_limit(pool: &PgPool, key: &RateLimitKey) -> Result<()> {
         let key_str = key.as_string();
+        sqlx::query("DELETE FROM rate_limits WHERE key = $1")
+            .bind(&key_str)
+            .execute(pool)
+            .await?;
         tracing::info!("Rate limit reset for key: {}", key_str);
-        // TODO: Clear from Redis when Redis integration is added
         Ok(())
     }
 
-    /// Get current rate limit status
+    /// 清理过期的限流记录（应由后台任务调用）
+    pub async fn cleanup_expired(pool: &PgPool) -> Result<u64> {
+        let result = sqlx::query(
+            "DELETE FROM rate_limits WHERE window_start < NOW() - INTERVAL '1 hour'",
+        )
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
+    /// 获取当前限流状态
     pub async fn get_status(
         pool: &PgPool,
         key: &RateLimitKey,
@@ -142,4 +182,47 @@ pub struct RateLimitStatus {
     pub max_requests: u32,
     pub remaining: u32,
     pub reset_in_secs: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rate_limit_key_formats() {
+        let uid = Uuid::new_v4();
+        assert_eq!(
+            RateLimitKey::UserId(uid).as_string(),
+            format!("uid:{}", uid)
+        );
+        assert_eq!(
+            RateLimitKey::IpAddress("1.2.3.4".to_string()).as_string(),
+            "ip:1.2.3.4"
+        );
+        let cid = Uuid::new_v4();
+        assert_eq!(
+            RateLimitKey::ClientId(cid).as_string(),
+            format!("client:{}", cid)
+        );
+        assert_eq!(
+            RateLimitKey::Custom("my-key".to_string()).as_string(),
+            "custom:my-key"
+        );
+    }
+
+    #[test]
+    fn test_tier_defaults() {
+        let g = RateLimitTier::global();
+        assert_eq!(g.name, "global");
+        assert_eq!(g.max_requests, 1000);
+        assert_eq!(g.window_secs, 60);
+
+        let l = RateLimitTier::login();
+        assert_eq!(l.name, "login");
+        assert_eq!(l.max_requests, 10);
+
+        let t = RateLimitTier::token();
+        assert_eq!(t.name, "token");
+        assert_eq!(t.max_requests, 30);
+    }
 }

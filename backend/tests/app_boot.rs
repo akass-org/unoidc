@@ -11,6 +11,6 @@ async fn app_builds_router() {
         .connect_lazy(&config.database_url)
         .expect("Failed to create pool");
 
-    let state = AppState::new(config, pool);
+    let state = AppState::new(config, pool, None);
     let _app = build_app_with_state(state);
 }

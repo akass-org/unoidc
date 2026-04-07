@@ -1,6 +1,4 @@
 import { api } from './client'
-
-// TODO: 实现认证 API
 export const authApi = {
   login: (username: string, password: string) =>
     api.post('api/v1/auth/login', { json: { username, password } }).json(),
