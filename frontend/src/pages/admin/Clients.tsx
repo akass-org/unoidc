@@ -166,22 +166,30 @@ function JsonTree({ value }: { value: unknown }) {
   return <span className="text-xs text-gray-700 dark:text-gray-300 break-all">{formatJsonValue(value)}</span>
 }
 
-function buildOidcPreview(user: OidcPreviewUser, scopes: OidcScope[]): OidcPreviewPayload {
+function buildOidcPreview(
+  user: OidcPreviewUser,
+  scopes: OidcScope[],
+  clientId: string,
+  issuer: string,
+): OidcPreviewPayload {
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + 60 * 60 * 1000)
+
   const idTokenBase = {
-    aud: ['d4d7cd9e-d7e6-41bb-aa2e-c6b0f8b9589a'],
-    exp: '2026-04-02T10:28:20.122145659Z',
-    iat: '2026-04-02T09:28:20.122145659Z',
-    iss: 'https://sso.akass.cn',
-    jti: 'c4fd4554-e1da-4903-9c01-890e5a290c78',
+    aud: [clientId],
+    exp: expiresAt.toISOString(),
+    iat: now.toISOString(),
+    iss: issuer,
+    jti: crypto.randomUUID(),
     sub: user.sub,
   }
 
   const accessTokenBase = {
-    aud: ['d4d7cd9e-d7e6-41bb-aa2e-c6b0f8b9589a'],
-    exp: '2026-04-02T10:28:20.122154566Z',
-    iat: '2026-04-02T09:28:20.122154566Z',
-    iss: 'https://sso.akass.cn',
-    jti: '45b29f4c-6a7d-44b2-93f8-23c00b4744ce',
+    aud: [clientId],
+    exp: expiresAt.toISOString(),
+    iat: now.toISOString(),
+    iss: issuer,
+    jti: crypto.randomUUID(),
     sub: user.sub,
   }
 
@@ -768,7 +776,14 @@ export function AdminClients() {
                     {(() => {
                       const eligibleUsers = getEligibleUsers(client)
                       const previewUser = eligibleUsers.find((user) => user.id === selectedUserId) ?? eligibleUsers[0]
-                      const previewData = previewUser ? buildOidcPreview(toOidcPreviewUser(previewUser), selectedScopes) : null
+                      const previewData = previewUser
+                        ? buildOidcPreview(
+                          toOidcPreviewUser(previewUser),
+                          selectedScopes,
+                          client.client_id,
+                          getOidcEndpoints().issuer,
+                        )
+                        : null
 
                       return (
                         <div className="mt-5 rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-black/20 p-4 lg:p-5">
