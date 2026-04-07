@@ -722,7 +722,7 @@ pub async fn logout(
     let _session_cleared = if let Some(session_id) = extract_session_from_headers(&headers, &state.config.session_secret) {
         match AuthService::logout(&state.db, &session_id).await {
             Ok(()) => {
-                tracing::info!("OIDC logout: session destroyed for {}", &session_id[..8.min(session_id.len())]);
+                tracing::info!(session_id = %session_id, "OIDC logout: session destroyed");
                 true
             }
             Err(e) => {

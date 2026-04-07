@@ -132,7 +132,7 @@ impl AuthService {
                 AppError::InternalServerError { error_code: None }
             })?;
 
-        info!("User logged in successfully: {}", username);
+        info!(username = %username, user_id = %user.id, "User logged in successfully");
 
         let session_input = CreateSession::new(user.id, ip_address, user_agent);
         let session = SessionRepo::create(pool, session_input)
@@ -142,7 +142,12 @@ impl AuthService {
                 AppError::InternalServerError { error_code: None }
             })?;
 
-        info!("Session created for user {}: {}***", username, &session.session_id[..8.min(session.session_id.len())]);
+        info!(
+            username = %username,
+            user_id = %user.id,
+            session_id = %session.session_id,
+            "Session created"
+        );
 
         Ok((user, session))
     }
@@ -158,7 +163,7 @@ impl AuthService {
                 AppError::InternalServerError { error_code: None }
             })?;
 
-        info!("Session logged out: {}***", &session_id[..8.min(session_id.len())]);
+        info!(session_id = %session_id, "Session logged out");
 
         Ok(())
     }
@@ -172,7 +177,7 @@ impl AuthService {
             Ok(Some(s)) if s.is_valid() => s,
             Ok(Some(_)) => {
                 // 会话已过期，删除它
-                warn!("Session expired: {}", session_id);
+                warn!(session_id = %session_id, "Session expired");
                 let _ = SessionRepo::delete(pool, session_id).await;
                 return Ok(None);
             }
@@ -196,7 +201,7 @@ impl AuthService {
             }
             Ok(None) => {
                 // 用户不存在
-                warn!("User not found for session: {}", session_id);
+                warn!(session_id = %session_id, "User not found for session");
                 return Ok(None);
             }
             Err(e) => {

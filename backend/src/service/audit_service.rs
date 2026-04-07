@@ -37,10 +37,7 @@ impl AuditService {
         }));
 
         let log = AuditLogRepo::create(pool, create_log).await?;
-        info!(
-            "Audit log: login success for user {} (session: {})",
-            user_id, session_id
-        );
+        info!(user_id = %user_id, session_id = %session_id, "Audit log: login success");
         Ok(log)
     }
 
@@ -98,10 +95,7 @@ impl AuditService {
         }
 
         let log = AuditLogRepo::create(pool, create_log).await?;
-        info!(
-            "Audit log: logout for session {} (user: {:?})",
-            session_id, user_id
-        );
+        info!(session_id = %session_id, user_id = ?user_id, "Audit log: logout");
         Ok(log)
     }
 

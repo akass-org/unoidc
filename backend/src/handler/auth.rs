@@ -209,7 +209,11 @@ pub async fn login(
             if let Some(old_session_id) = extract_session_cookie(&headers, &state.config.session_secret) {
                 if old_session_id != session.session_id {
                     let _ = AuthService::logout(&state.db, &old_session_id).await;
-                    tracing::info!("Invalidated old session {} during login for user {}", old_session_id, user.id);
+                    tracing::info!(
+                        old_session_id = %old_session_id,
+                        user_id = %user.id,
+                        "Invalidated old session during login"
+                    );
                 }
             }
 

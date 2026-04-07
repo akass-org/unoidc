@@ -5,10 +5,11 @@
 
 use axum::{
     body::Body,
-    extract::Request,
+    extract::{ConnectInfo, Request},
     http::{HeaderValue, Response},
     middleware::Next,
 };
+use std::{net::SocketAddr, time::Instant};
 use tracing::field;
 use uuid::Uuid;
 
@@ -67,8 +68,17 @@ pub async fn request_context_middleware(
     req: Request,
     next: Next,
 ) -> Response<Body> {
+    let started_at = Instant::now();
+
     // Extract or create request context
     let ctx = RequestContext::from_request(&req);
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let remote_addr = req
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|connect_info| connect_info.0.to_string())
+        .unwrap_or_else(|| "-".to_string());
 
     // 将请求 ID 添加到 tracing span
     let span = tracing::info_span!(
@@ -105,6 +115,36 @@ pub async fn request_context_middleware(
                 .headers_mut()
                 .insert(CORRELATION_ID_HEADER, header_value);
         }
+    }
+
+    let status = response.status();
+    let elapsed_ms = started_at.elapsed().as_millis();
+    let correlation_id = ctx.correlation_id.as_deref().unwrap_or("-");
+
+    if status.is_server_error() {
+        tracing::warn!(
+            target: "http.access",
+            request_id = %ctx.request_id,
+            correlation_id = %correlation_id,
+            method = %method,
+            uri = %uri,
+            status = status.as_u16(),
+            elapsed_ms = elapsed_ms,
+            remote_addr = %remote_addr,
+            "request completed"
+        );
+    } else {
+        tracing::info!(
+            target: "http.access",
+            request_id = %ctx.request_id,
+            correlation_id = %correlation_id,
+            method = %method,
+            uri = %uri,
+            status = status.as_u16(),
+            elapsed_ms = elapsed_ms,
+            remote_addr = %remote_addr,
+            "request completed"
+        );
     }
 
     response

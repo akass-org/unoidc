@@ -1,19 +1,29 @@
 use backend::{
     build_app_with_state, AppState, config::Config, db, metrics,
-    middleware::LogRedactionLayer,
 };
-use std::net::SocketAddr;
+use std::{io::IsTerminal, net::SocketAddr};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 初始化日志（LogRedactionLayer 替代 fmt::layer()，自带格式化和脱敏）
+    let ansi = if let Ok(value) = std::env::var("UNOIDC_LOG_COLOR") {
+        let v = value.trim().to_ascii_lowercase();
+        matches!(v.as_str(), "1" | "true" | "yes" | "on")
+    } else {
+        std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal()
+    };
+
+    // 初始化日志（使用 tracing-subscriber fmt 原生输出）
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "backend=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "backend=info,sqlx=warn,tower_http=warn".into()),
         )
-        .with(LogRedactionLayer)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(ansi)
+                .with_target(true),
+        )
         .init();
 
     // 加载配置

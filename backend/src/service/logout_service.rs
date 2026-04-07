@@ -24,7 +24,7 @@ impl LogoutService {
                 AppError::InternalServerError { error_code: None }
             })?;
 
-        info!("Session logged out via session_id: {}", session_id);
+        info!(session_id = %session_id, "Session logged out via session_id");
         Ok(())
     }
 
