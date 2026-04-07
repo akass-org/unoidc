@@ -18,9 +18,14 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
         await checkSession()
         setChecked(true)
       }
+      // 管理员路由：强制从后端重新验证权限，防止本地状态被篡改
+      if (requireAdmin && !checked) {
+        await checkSession()
+        setChecked(true)
+      }
     }
     verify()
-  }, [user, checked, checkSession])
+  }, [user, checked, checkSession, requireAdmin])
 
   if (loading || (!user && !checked)) {
     return (

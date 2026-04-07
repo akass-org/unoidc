@@ -3,11 +3,12 @@
 // 管理后台 API 接口
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, State, ConnectInfo},
     http::HeaderMap,
     response::IntoResponse,
     Json,
 };
+use std::net::SocketAddr;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use time::format_description::well_known::Rfc3339;
@@ -335,16 +336,17 @@ pub async fn update_user(
 
 #[derive(Debug, Serialize)]
 pub struct ResetPasswordResponse {
-    pub password: String,
+    pub message: String,
 }
 
 /// 重置用户密码
 pub async fn reset_user_password(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> Result<Json<ResetPasswordResponse>> {
-    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
+    let auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
     let new_password = crypto::generate_secure_token(16).map_err(|e| AppError::InternalServerError {
         error_code: Some(format!("TOKEN_GEN_ERROR: {}", e)),
@@ -374,10 +376,41 @@ pub async fn reset_user_password(
             error_code: Some("TOKEN_REVOKE_FAILED".to_string()),
         })?;
 
-    // 记录审计日志
-    let _ = AuditService::log_password_reset(&state.db, id, None, None, None).await;
+    // 安全提取客户端 IP（带受信代理检查）
+    let remote_ip = addr.ip().to_string();
+    let is_trusted = state.config.trusted_proxy_ips.contains(&remote_ip);
+    let ip_address = if is_trusted {
+        headers
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.split(',').next().map(|ip| ip.trim().to_string()))
+            .filter(|s| !s.is_empty())
+            .or_else(|| headers
+                .get("x-real-ip")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+            )
+            .unwrap_or(remote_ip)
+    } else {
+        remote_ip
+    };
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
-    Ok(Json(ResetPasswordResponse { password: new_password }))
+    // 记录审计日志（包含操作者信息）
+    let _ = AuditService::log_password_reset(
+        &state.db, id,
+        Some(auth_user.user.id.to_string()),
+        Some(ip_address),
+        user_agent,
+    ).await;
+
+    Ok(Json(ResetPasswordResponse {
+        message: "Password has been reset successfully".to_string(),
+    }))
 }
 
 // ============================================================================

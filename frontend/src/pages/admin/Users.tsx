@@ -42,7 +42,7 @@ export function AdminUsers() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null)
-  const [newPassword, setNewPassword] = useState('')
+  const [resetPasswordSuccess, setResetPasswordSuccess] = useState(false)
   const { addToast } = useToast()
 
   // Form states
@@ -108,8 +108,8 @@ export function AdminUsers() {
   const { loading: resetting, execute: resetPassword } = useApi(
     (id: string) => adminApi.resetUserPassword(id),
     {
-      onSuccess: (data) => {
-        setNewPassword((data as { password: string }).password)
+      onSuccess: () => {
+        setResetPasswordSuccess(true)
         loadUsers()
       }
     }
@@ -407,15 +407,15 @@ export function AdminUsers() {
           isOpen={!!resetPasswordUser}
           onClose={() => {
             setResetPasswordUser(null)
-            setNewPassword('')
+            setResetPasswordSuccess(false)
           }}
           title="重置密码"
           description={`为 ${resetPasswordUser.display_name} 重置密码`}
           footer={
-            newPassword ? (
+            resetPasswordSuccess ? (
               <Button onClick={() => {
                 setResetPasswordUser(null)
-                setNewPassword('')
+                setResetPasswordSuccess(false)
               }}>
                 完成
               </Button>
@@ -435,16 +435,13 @@ export function AdminUsers() {
             )
           }
         >
-          {newPassword ? (
+          {resetPasswordSuccess ? (
             <div className="space-y-4">
               <div className="p-4 bg-emerald-50 dark:bg-emerald-500/[0.08] border border-emerald-200 dark:border-emerald-500/[0.16] rounded-lg">
-                <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-2">新密码已生成</p>
-                <code className="block p-3 bg-gray-100 dark:bg-black rounded text-sm font-mono text-gray-700 dark:text-gray-300 break-all border border-gray-200 dark:border-white/[0.06]">
-                  {newPassword}
-                </code>
+                <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">密码已成功重置</p>
               </div>
               <p className="text-sm text-gray-500 dark:text-gray-600">
-                请复制并安全保存此密码。关闭后将无法再次查看。
+                用户需要使用新密码登录。如用户忘记密码，可通过管理员再次重置。
               </p>
             </div>
           ) : (

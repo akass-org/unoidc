@@ -137,6 +137,44 @@ fn is_secure_context(issuer: &str) -> bool {
     issuer.starts_with("https://")
 }
 
+/// 安全提取客户端 IP（带受信代理检查）
+///
+/// 只有当连接来自受信代理时才读取 X-Forwarded-For / X-Real-IP，
+/// 否则使用 socket 地址，防止 IP 伪造
+fn extract_client_ip_secure(
+    headers: &HeaderMap,
+    remote_addr: &SocketAddr,
+    trusted_proxy_ips: &[String],
+) -> Option<String> {
+    let remote_ip = remote_addr.ip().to_string();
+    let is_trusted = trusted_proxy_ips.contains(&remote_ip);
+
+    if is_trusted {
+        if let Some(xff) = headers
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+        {
+            if let Some(first_ip) = xff.split(',').next() {
+                let ip = first_ip.trim();
+                if !ip.is_empty() {
+                    return Some(ip.to_string());
+                }
+            }
+        }
+        if let Some(real_ip) = headers
+            .get("x-real-ip")
+            .and_then(|v| v.to_str().ok())
+        {
+            let ip = real_ip.trim();
+            if !ip.is_empty() {
+                return Some(ip.to_string());
+            }
+        }
+    }
+
+    Some(remote_ip)
+}
+
 pub async fn login(
     State(state): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -149,13 +187,8 @@ pub async fn login(
         message: e.to_string(),
     })?;
 
-    // Try to get IP from proxy headers first, fallback to socket address
-    let ip_address = headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("x-real-ip"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .or_else(|| Some(addr.ip().to_string()));
+    // 安全提取客户端 IP（带受信代理检查）
+    let ip_address = extract_client_ip_secure(&headers, &addr, &state.config.trusted_proxy_ips);
     let user_agent = headers
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
@@ -172,6 +205,14 @@ pub async fn login(
 
     match result {
         Ok((user, session)) => {
+            // 防止会话固定攻击：如果存在旧 session，先销毁再创建新的
+            if let Some(old_session_id) = extract_session_cookie(&headers, &state.config.session_secret) {
+                if old_session_id != session.session_id {
+                    let _ = AuthService::logout(&state.db, &old_session_id).await;
+                    tracing::info!("Invalidated old session {} during login for user {}", old_session_id, user.id);
+                }
+            }
+
             let _ = AuditService::log_login_success(
                 &state.db,
                 user.id,
@@ -246,13 +287,8 @@ pub async fn logout(
             reason: Some("No valid session cookie".to_string()),
         })?;
 
-    // Try to get IP from proxy headers first, fallback to socket address
-    let ip_address = headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("x-real-ip"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .or_else(|| Some(addr.ip().to_string()));
+    // 安全提取客户端 IP（带受信代理检查）
+    let ip_address = extract_client_ip_secure(&headers, &addr, &state.config.trusted_proxy_ips);
     let user_agent = headers
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
@@ -314,13 +350,8 @@ pub async fn register(
         message: e.to_string(),
     })?;
 
-    // Try to get IP from proxy headers first, fallback to socket address
-    let ip_address = headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("x-real-ip"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .or_else(|| Some(addr.ip().to_string()));
+    // 安全提取客户端 IP（带受信代理检查）
+    let ip_address = extract_client_ip_secure(&headers, &addr, &state.config.trusted_proxy_ips);
     let user_agent = headers
         .get("user-agent")
         .and_then(|v| v.to_str().ok())

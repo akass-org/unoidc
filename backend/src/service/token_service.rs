@@ -88,8 +88,8 @@ impl TokenService {
     ) -> Result<TokenResponse> {
         let token_hash = crypto::hash_token(plain_refresh_token);
 
-        // 查找 refresh token
-        let stored_token = RefreshTokenRepo::find_by_hash(pool, &token_hash)
+        // 查找 refresh token（带行锁，防止并发重放）
+        let stored_token = RefreshTokenRepo::find_by_hash_for_update(pool, &token_hash)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Invalid refresh token"))?;
 
