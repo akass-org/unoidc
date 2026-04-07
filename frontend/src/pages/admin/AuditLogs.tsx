@@ -30,6 +30,7 @@ interface AuditLog {
   event_type: string
   user_id?: string
   username?: string
+  attempted_username?: string
   client_id?: string
   client_name?: string
   ip_address: string
@@ -56,7 +57,10 @@ export function AdminAuditLogs() {
   const [filteredLogs, setFilteredLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'success' | 'failure'>('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const { addToast } = useToast()
 
   // Load logs
@@ -64,15 +68,24 @@ export function AdminAuditLogs() {
     loadLogs()
   }, [])
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim().toLowerCase())
+    }, 200)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
   // Filter logs
   useEffect(() => {
     let filtered = logs
     
-    if (search) {
+    if (debouncedSearch) {
       filtered = filtered.filter(log =>
-        log.username?.toLowerCase().includes(search.toLowerCase()) ||
-        log.event_type.toLowerCase().includes(search.toLowerCase()) ||
-        log.ip_address.includes(search)
+        log.username?.toLowerCase().includes(debouncedSearch) ||
+        log.attempted_username?.toLowerCase().includes(debouncedSearch) ||
+        log.client_name?.toLowerCase().includes(debouncedSearch) ||
+        log.event_type.toLowerCase().includes(debouncedSearch) ||
+        log.ip_address.includes(debouncedSearch)
       )
     }
     
@@ -81,7 +94,8 @@ export function AdminAuditLogs() {
     }
     
     setFilteredLogs(filtered)
-  }, [logs, search, filter])
+    setCurrentPage(1)
+  }, [logs, debouncedSearch, filter])
 
   const loadLogs = async () => {
     try {
@@ -142,6 +156,7 @@ export function AdminAuditLogs() {
     {
       key: 'event',
       title: '事件',
+      width: '180px',
       render: (log: AuditLog) => {
         const config = eventTypeConfig[log.event_type] || { 
           label: log.event_type, 
@@ -152,7 +167,7 @@ export function AdminAuditLogs() {
         return (
           <div className="flex items-center gap-2">
             <Icon className={`w-4 h-4 ${config.color}`} />
-            <span className="text-sm text-gray-900 dark:text-white">{config.label}</span>
+            <span className="text-sm text-gray-900 dark:text-white whitespace-nowrap">{config.label}</span>
           </div>
         )
       },
@@ -160,43 +175,65 @@ export function AdminAuditLogs() {
     {
       key: 'user',
       title: '用户',
+      width: '300px',
       render: (log: AuditLog) => (
-        <span className="text-sm text-gray-500">{log.username || '-'}</span>
+        <span
+          className="block max-w-[300px] truncate whitespace-nowrap text-sm text-gray-500"
+          title={log.username || log.attempted_username || '-'}
+        >
+          {log.username || log.attempted_username || '-'}
+        </span>
       ),
     },
     {
       key: 'client',
       title: '应用',
+      width: '200px',
       render: (log: AuditLog) => (
-        <span className="text-xs text-gray-600">{log.client_name || '-'}</span>
+        <span className="block max-w-[200px] truncate whitespace-nowrap text-xs text-gray-600" title={log.client_name || '-'}>
+          {log.client_name || '-'}
+        </span>
       ),
     },
     {
       key: 'ip',
       title: 'IP 地址',
+      width: '170px',
       render: (log: AuditLog) => (
-        <code className="text-[11px] text-gray-600 font-mono">{log.ip_address}</code>
+        <code className="block max-w-[170px] truncate whitespace-nowrap text-[11px] text-gray-600 font-mono" title={log.ip_address}>{log.ip_address}</code>
       ),
     },
     {
       key: 'outcome',
       title: '结果',
+      width: '112px',
       render: (log: AuditLog) => (
         log.outcome === 'success' ? (
-          <Badge variant="success">成功</Badge>
+          <Badge variant="success" size="md">成功</Badge>
         ) : (
-          <Badge variant="error">失败</Badge>
+          <Badge variant="error" size="md">失败</Badge>
         )
       ),
     },
     {
       key: 'time',
       title: '时间',
+      width: '168px',
       render: (log: AuditLog) => (
-        <span className="text-xs text-gray-600">{formatDate(log.created_at)}</span>
+        <span className="text-xs text-gray-600 whitespace-nowrap">{formatDate(log.created_at)}</span>
       ),
     },
   ]
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize))
+  const pageStart = (currentPage - 1) * pageSize
+  const pagedLogs = filteredLogs.slice(pageStart, pageStart + pageSize)
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
 
   const todayLogs = logs.filter(l => {
     const logDate = parseDate(l.created_at)
@@ -281,12 +318,24 @@ export function AdminAuditLogs() {
             </button>
           ))}
         </div>
+
+        <Card padding="none" className="h-9 px-2">
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="h-9 bg-transparent px-2 text-xs text-gray-700 dark:text-gray-200 focus:outline-none"
+          >
+            <option value={20}>20/页</option>
+            <option value={50}>50/页</option>
+            <option value={100}>100/页</option>
+          </select>
+        </Card>
       </div>
 
       {/* Table */}
       <Card padding="none">
         <Table
-          data={filteredLogs}
+          data={pagedLogs}
           columns={columns}
           keyExtractor={(log) => log.id}
           loading={loading}
@@ -302,15 +351,28 @@ export function AdminAuditLogs() {
 
       {/* Pagination placeholder */}
       {filteredLogs.length > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-xs text-gray-600">
-            显示 {filteredLogs.length} 条记录
+            显示 {pageStart + 1}-{Math.min(pageStart + pageSize, filteredLogs.length)} 条，共 {filteredLogs.length} 条
           </p>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" disabled>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            >
               上一页
             </Button>
-            <Button variant="ghost" size="sm" disabled>
+            <span className="px-2 py-1 text-xs text-gray-500 whitespace-nowrap">
+              第 {currentPage}/{totalPages} 页
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            >
               下一页
             </Button>
           </div>

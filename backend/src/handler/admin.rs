@@ -853,6 +853,7 @@ struct AuditLogRow {
     id: uuid::Uuid,
     actor_user_id: Option<uuid::Uuid>,
     username: Option<String>,
+    attempted_username: Option<String>,
     client_id: Option<uuid::Uuid>,
     client_name: Option<String>,
     action: String,
@@ -869,6 +870,7 @@ pub struct AuditLogResponse {
     pub event_type: String,
     pub user_id: Option<String>,
     pub username: Option<String>,
+    pub attempted_username: Option<String>,
     pub client_id: Option<String>,
     pub client_name: Option<String>,
     pub ip_address: String,
@@ -892,6 +894,11 @@ pub async fn get_audit_logs(
             al.id,
             al.actor_user_id,
             u.username,
+            CASE
+                WHEN al.action = 'login' AND al.outcome = 'failure'
+                THEN COALESCE(al.metadata->>'username', NULLIF(al.target_id, ''))
+                ELSE NULL
+            END as attempted_username,
             al.client_id,
             c.name as client_name,
             al.action,
@@ -940,6 +947,7 @@ pub async fn get_audit_logs(
                 event_type,
                 user_id: row.actor_user_id.map(|id| id.to_string()),
                 username: row.username,
+                attempted_username: row.attempted_username,
                 client_id: row.client_id.map(|id| id.to_string()),
                 client_name: row.client_name,
                 ip_address: row.ip_address.unwrap_or_else(|| "unknown".to_string()),

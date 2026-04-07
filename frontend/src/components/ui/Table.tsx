@@ -6,6 +6,7 @@ interface TableProps<T> {
   keyExtractor: (item: T) => string
   emptyState?: ReactNode
   loading?: boolean
+  tableMinWidth?: string
 }
 
 interface Column<T> {
@@ -21,6 +22,7 @@ export function Table<T>({
   keyExtractor,
   emptyState,
   loading,
+  tableMinWidth,
 }: TableProps<T>) {
   if (loading) {
     return (
@@ -36,7 +38,7 @@ export function Table<T>({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full">
+      <table className="w-full" style={tableMinWidth ? { minWidth: tableMinWidth } : undefined}>
         <thead>
           <tr className="border-b border-gray-200 dark:border-white/[0.06]">
             {columns.map((col) => (

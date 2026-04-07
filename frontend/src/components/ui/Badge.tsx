@@ -20,12 +20,15 @@ export function Badge({ children, variant = 'default', size = 'sm' }: BadgeProps
     md: 'px-2.5 py-1 text-xs',
   }
 
+  const compactStatus = variant === 'success' || variant === 'error'
+
   return (
     <span
       className={`
-        inline-flex items-center gap-1.5 font-medium rounded-full border
+        inline-flex items-center gap-1.5 font-medium rounded-full border whitespace-nowrap leading-none
         ${variants[variant]}
         ${sizes[size]}
+        ${compactStatus ? 'min-w-[3.5rem] justify-center' : ''}
       `}
     >
       {variant === 'success' && <span className="w-1 h-1 rounded-full bg-emerald-400" />}
