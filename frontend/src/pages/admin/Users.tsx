@@ -137,7 +137,17 @@ export function AdminUsers() {
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('zh-CN')
+    if (!dateStr || typeof dateStr !== 'string') return '-'
+
+    let normalized = dateStr.trim()
+    if (normalized.includes(' ') && !normalized.includes('T')) {
+      normalized = normalized.replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T')
+    }
+    normalized = normalized.replace(/(\d{2}:\d{2}:\d{2})\.(\d{6})\d+/, '$1.$2')
+
+    const date = new Date(normalized)
+    if (Number.isNaN(date.getTime())) return '-'
+    return date.toLocaleDateString('zh-CN')
   }
 
   const columns = [

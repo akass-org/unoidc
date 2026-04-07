@@ -162,7 +162,10 @@ async fn user_to_response(pool: &sqlx::PgPool, user: crate::model::User) -> Resu
         groups,
         is_admin,
         is_active: user.enabled,
-        created_at: user.created_at.to_string(),
+        created_at: user
+            .created_at
+            .format(&Rfc3339)
+            .unwrap_or_else(|_| user.created_at.to_string()),
     })
 }
 
