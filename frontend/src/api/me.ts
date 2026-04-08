@@ -13,4 +13,8 @@ export const meApi = {
   getAuditLogs: () => api.get('api/v1/me/audit-logs').json(),
   getConsents: () => api.get('api/v1/me/consents').json(),
   revokeConsent: (clientId: string) => api.delete(`api/v1/me/consents/${clientId}`).json(),
+  requestEmailChange: (data: { new_email: string }) =>
+    api.post('api/v1/me/email/change-request', { json: data }).json(),
+  verifyEmailChange: (data: { token: string }) =>
+    api.post('api/v1/me/email/verify', { json: data }).json(),
 }

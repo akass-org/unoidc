@@ -90,6 +90,16 @@ pub async fn update_profile(
         message: e.to_string(),
     })?;
 
+    // 如果请求包含 email 且与当前邮箱不同，拒绝并提示走验证流程
+    if let Some(ref new_email) = req.email {
+        if new_email.to_lowercase() != auth_user.user.email.to_lowercase() {
+            return Err(AppError::BusinessError {
+                code: "EMAIL_CHANGE_REQUIRES_VERIFICATION".to_string(),
+                message: "邮箱修改需要通过验证流程，请使用邮箱修改功能".to_string(),
+            });
+        }
+    }
+
     let update = UpdateUser {
         display_name: req.display_name,
         given_name: None,
@@ -105,8 +115,6 @@ pub async fn update_profile(
             code: "PROFILE_UPDATE_FAILED".to_string(),
             message: e.to_string(),
         })?;
-
-    // TODO: 更新邮箱（需要验证流程）
 
     let is_admin = check_is_admin(&state.db, &auth_user).await?;
     Ok(Json(ProfileResponse::from((user, is_admin))))

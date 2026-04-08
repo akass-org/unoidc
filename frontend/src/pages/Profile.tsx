@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Camera } from 'lucide-react'
+import { Camera, Mail } from 'lucide-react'
 import { useSessionStore } from '#src/stores/session'
 import { meApi } from '#src/api/me'
 import { useApi } from '#src/hooks'
@@ -9,7 +9,8 @@ import {
   Input, 
   Button, 
   Avatar,
-  useToast 
+  useToast,
+  Modal,
 } from '#src/components/ui'
 import { getErrorMessage } from '#src/api/client'
 
@@ -20,7 +21,11 @@ export function ProfilePage() {
   // Profile form state
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
-  
+
+  // Email change modal state
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
+  const [newEmail, setNewEmail] = useState('')
+
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -50,6 +55,18 @@ export function ProfilePage() {
     }
   )
 
+  // Request email change API
+  const { loading: requestingEmailChange, execute: requestEmailChange } = useApi(
+    meApi.requestEmailChange,
+    {
+      successMessage: '验证链接已发送',
+      onSuccess: () => {
+        setNewEmail('')
+        setIsEmailModalOpen(false)
+      }
+    }
+  )
+
   // Load user data
   useEffect(() => {
     if (user) {
@@ -60,7 +77,12 @@ export function ProfilePage() {
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    await updateProfile({ display_name: displayName, email })
+    await updateProfile({ display_name: displayName })
+  }
+
+  const handleEmailChangeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await requestEmailChange({ new_email: newEmail })
   }
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -176,13 +198,26 @@ export function ProfilePage() {
               placeholder="您的显示名称"
             />
           </div>
-          <Input
-            label="邮箱地址"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="your@email.com"
-          />
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Input
+                label="邮箱地址"
+                type="email"
+                value={email}
+                disabled
+                helper="邮箱修改需要通过验证流程"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsEmailModalOpen(true)}
+            >
+              <Mail className="w-4 h-4 mr-1.5" />
+              修改邮箱
+            </Button>
+          </div>
           <div className="flex justify-end pt-1">
             <Button 
               type="submit" 
@@ -238,6 +273,44 @@ export function ProfilePage() {
           </div>
         </form>
       </Card>
+
+      {/* Email Change Modal */}
+      <Modal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        title="修改邮箱地址"
+        description="验证链接将发送到新邮箱，请在 24 小时内点击链接完成验证"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setIsEmailModalOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={handleEmailChangeSubmit}
+              loading={requestingEmailChange}
+              disabled={!newEmail || newEmail === email}
+            >
+              发送验证链接
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="当前邮箱"
+            value={email}
+            disabled
+          />
+          <Input
+            label="新邮箱地址"
+            type="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            placeholder="new-email@example.com"
+            required
+          />
+        </div>
+      </Modal>
     </div>
   )
 }

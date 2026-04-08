@@ -57,6 +57,8 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
         .route("/api/v1/me/audit-logs", get(handler::me::get_audit_logs))
         .route("/api/v1/me/consents", get(handler::me::get_consents))
         .route("/api/v1/me/consents/{client_id}", delete(handler::me::revoke_consent))
+        .route("/api/v1/me/email/change-request", post(handler::me::request_email_change))
+        .route("/api/v1/me/email/verify", post(handler::me::verify_email_change))
 
         // Admin
         .route("/api/v1/admin/users", get(handler::admin::get_users))
