@@ -3,7 +3,7 @@
 // 用户自助 API 接口（当前登录用户）
 
 use axum::{
-    extract::{Multipart, Path, State},
+    extract::{ConnectInfo, Multipart, Path, State},
     http::HeaderMap,
     response::IntoResponse,
     Json,
@@ -11,6 +11,7 @@ use axum::{
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
@@ -141,6 +142,7 @@ pub struct ChangePasswordResponse {
 /// 修改当前用户密码
 pub async fn change_password(
     State(state): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(req): Json<ChangePasswordRequest>,
 ) -> Result<Json<ChangePasswordResponse>> {
@@ -183,11 +185,7 @@ pub async fn change_password(
         })?;
 
     // 记录审计日志
-    let ip_address = headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("x-real-ip"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
+    let ip_address = extract_audit_ip(&headers, &addr, &state.config.trusted_proxy_ips);
     let user_agent = headers
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
@@ -578,6 +576,7 @@ pub async fn get_consents(
 /// 撤销对某个客户端的授权
 pub async fn revoke_consent(
     State(state): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(client_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse> {
@@ -607,11 +606,7 @@ pub async fn revoke_consent(
         })?;
 
     // 记录审计日志
-    let ip_address = headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("x-real-ip"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
+    let ip_address = extract_audit_ip(&headers, &addr, &state.config.trusted_proxy_ips);
     let user_agent = headers
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
@@ -728,6 +723,7 @@ pub struct VerifyEmailChangeResponse {
 /// 验证邮箱修改 - 确认邮箱变更
 pub async fn verify_email_change(
     State(state): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(req): Json<VerifyEmailChangeRequest>,
 ) -> Result<Json<VerifyEmailChangeResponse>> {
@@ -752,11 +748,7 @@ pub async fn verify_email_change(
         })?;
 
     // 记录审计日志
-    let ip_address = headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("x-real-ip"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
+    let ip_address = extract_audit_ip(&headers, &addr, &state.config.trusted_proxy_ips);
     let user_agent = headers
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
@@ -782,6 +774,19 @@ pub async fn verify_email_change(
 // ============================================================================
 // 辅助函数
 // ============================================================================
+
+fn extract_audit_ip(
+    headers: &HeaderMap,
+    remote_addr: &SocketAddr,
+    trusted_proxy_ips: &[String],
+) -> Option<String> {
+    let remote = remote_addr.to_string();
+    Some(crate::middleware::rate_limit::extract_client_ip(
+        headers,
+        Some(remote.as_str()),
+        trusted_proxy_ips,
+    ))
+}
 
 /// 检查用户是否为管理员
 async fn check_is_admin(pool: &sqlx::PgPool, auth_user: &AuthUser) -> Result<bool> {

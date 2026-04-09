@@ -307,3 +307,125 @@ async fn test_oidc_authorize_rejects_invalid_redirect_uri() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     cleanup_test_data(&state).await;
 }
+
+#[tokio::test]
+#[serial]
+async fn test_oidc_logout_accepts_id_token_hint_with_string_audience() {
+    let state = common::get_test_db().await;
+    cleanup_test_data(&state).await;
+
+    let username = format!("oidc_logout_user_{}", Uuid::new_v4().as_simple());
+    let client_id = format!("oidc-client-{}", Uuid::new_v4().as_simple());
+    let user_group = GroupRepo::create(
+        &state.db,
+        CreateGroup {
+            name: format!("oidc-logout-group-{}", Uuid::new_v4().as_simple()),
+            description: Some("OIDC logout test group".to_string()),
+        },
+    )
+    .await
+    .unwrap();
+
+    let (user, session) = create_logged_in_app_user(&state, &username).await;
+    GroupRepo::add_user_to_group(&state.db, user.id, user_group.id)
+        .await
+        .unwrap();
+
+    let client = create_test_client(&state, &client_id).await;
+    ClientRepo::add_client_to_group(&state.db, client.id, user_group.id)
+        .await
+        .unwrap();
+
+    let verifier = crypto::generate_pkce_code_verifier().unwrap();
+    let challenge = crypto::hash_token(&verifier);
+    let csrf = crypto::generate_csrf_token().unwrap();
+    let cookie_value = session_cookie_value(&session.session_id, &state.config.session_secret);
+    let app = build_app_with_state(state.clone());
+
+    let consent_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/authorize/consent")
+                .header("content-type", "application/json")
+                .header(
+                    "cookie",
+                    format!("unoidc_session={}; unoidc_csrf={}", cookie_value, csrf),
+                )
+                .header("x-csrf-token", csrf)
+                .body(Body::from(
+                    serde_json::json!({
+                        "client_id": client.client_id,
+                        "redirect_uri": "http://localhost:5173/callback",
+                        "state": "logout-state",
+                        "code_challenge": challenge,
+                        "code_challenge_method": "S256",
+                        "nonce": "logout-nonce",
+                        "scopes": ["openid", "profile", "offline_access"],
+                        "approved": true
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(consent_response.status(), StatusCode::OK);
+    let consent_body = consent_response.into_body().collect().await.unwrap().to_bytes();
+    let consent_json: Value = serde_json::from_slice(&consent_body).unwrap();
+    let code = consent_json["code"].as_str().unwrap().to_string();
+
+    let basic = STANDARD.encode(format!("{}:{}", client.client_id, "secret123"));
+    let token_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/token")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("authorization", format!("Basic {}", basic))
+                .body(Body::from(format!(
+                    "grant_type=authorization_code&code={}&redirect_uri={}&code_verifier={}",
+                    urlencoding::encode(&code),
+                    urlencoding::encode("http://localhost:5173/callback"),
+                    urlencoding::encode(&verifier),
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(token_response.status(), StatusCode::OK);
+    let token_body = token_response.into_body().collect().await.unwrap().to_bytes();
+    let token_json: Value = serde_json::from_slice(&token_body).unwrap();
+    let id_token = token_json["id_token"].as_str().unwrap().to_string();
+
+    let logout_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/logout?id_token_hint={}&post_logout_redirect_uri={}&state={}",
+                    urlencoding::encode(&id_token),
+                    urlencoding::encode("http://localhost:5173/logout"),
+                    urlencoding::encode("logout-state"),
+                ))
+                .header("cookie", format!("unoidc_session={}", cookie_value))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(logout_response.status(), StatusCode::FOUND);
+    let location = logout_response
+        .headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert_eq!(location, "http://localhost:5173/logout?state=logout-state");
+
+    cleanup_test_data(&state).await;
+}

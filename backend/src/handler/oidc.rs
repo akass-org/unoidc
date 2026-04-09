@@ -787,8 +787,10 @@ pub async fn logout(
                 )
                 .await {
                     if let Some(aud) = claims.get("aud").and_then(|v| v.as_str()) {
-                        if let Ok(client_id) = uuid::Uuid::parse_str(aud) {
-                            validated = LogoutService::validate_post_logout_redirect(&state.db, &client_id, redirect).await.is_ok();
+                        // OIDC token 的 aud 使用 client.client_id（字符串），
+                        // 这里应按 client_id 查找客户端，再用内部 UUID 做白名单校验。
+                        if let Ok(Some(client)) = ClientRepo::find_by_client_id(&state.db, aud).await {
+                            validated = LogoutService::validate_post_logout_redirect(&state.db, &client.id, redirect).await.is_ok();
                         }
                     }
                 }

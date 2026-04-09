@@ -167,6 +167,21 @@ pub enum OidcErrorCode {
     InvalidToken,
 }
 
+fn sanitize_public_error_code(raw: Option<&String>) -> String {
+    match raw {
+        Some(code) => {
+            // 仅暴露稳定前缀（如 DB_ERROR），丢弃冒号后的内部细节。
+            let head = code.split(':').next().unwrap_or("INTERNAL_ERROR").trim();
+            if head.is_empty() {
+                "INTERNAL_ERROR".to_string()
+            } else {
+                head.to_string()
+            }
+        }
+        None => "INTERNAL_ERROR".to_string(),
+    }
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message, error_code, details) = match &self {
@@ -330,7 +345,7 @@ impl IntoResponse for AppError {
             AppError::InternalServerError { error_code } => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal server error".to_string(),
-                Some(error_code.clone().unwrap_or_else(|| "INTERNAL_ERROR".to_string())),
+                Some(sanitize_public_error_code(error_code.as_ref())),
                 None,
             ),
 
@@ -356,3 +371,24 @@ impl IntoResponse for AppError {
 }
 
 pub type Result<T> = std::result::Result<T, AppError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+
+    #[tokio::test]
+    async fn internal_server_error_strips_sensitive_error_details() {
+        let response = AppError::InternalServerError {
+            error_code: Some("DB_ERROR: relation users does not exist".to_string()),
+        }
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(payload["error_code"], "DB_ERROR");
+        assert_eq!(payload["error"], "Internal server error");
+    }
+}

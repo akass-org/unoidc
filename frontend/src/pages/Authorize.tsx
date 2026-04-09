@@ -23,6 +23,18 @@ interface ConsentRequest {
   redirect_uri: string
 }
 
+interface AuthorizePreviewResponse {
+  client_id: string
+  client_name: string
+  redirect_uri: string
+  scope: string
+  state: string
+  nonce?: string
+  scopes: string[]
+  requires_login: boolean
+  requires_consent: boolean
+}
+
 interface ConsentResponse {
   code?: string
   redirect_uri?: string
@@ -88,8 +100,9 @@ export function AuthorizePage() {
 
   const clientId = searchParams.get('client_id')
   const redirectUri = searchParams.get('redirect_uri')
-  const state = searchParams.get('state')
+  const authState = searchParams.get('state')
   const codeChallenge = searchParams.get('code_challenge')
+  const codeChallengeMethod = searchParams.get('code_challenge_method') || 'S256'
   const nonce = searchParams.get('nonce')
   const scopeParam = searchParams.get('scope')
 
@@ -104,28 +117,44 @@ export function AuthorizePage() {
     }
 
     // Validate required parameters
-    if (!clientId || !redirectUri || !codeChallenge) {
+    if (!clientId || !redirectUri || !codeChallenge || !authState) {
       setError('授权请求参数不完整')
       setLoading(false)
       return
     }
 
     // Load client information from backend
-    loadClientInfo()
-  }, [user, sessionLoading, clientId, redirectUri, codeChallenge, navigate])
+    void loadClientInfo()
+  }, [user, sessionLoading, clientId, redirectUri, codeChallenge, authState, navigate])
 
   const loadClientInfo = async () => {
     try {
-      const requestedScopes = scopeParam?.split(' ') || ['openid', 'profile']
-      
+      const requestedScope = scopeParam || 'openid profile'
+      const preview = await api.get('authorize', {
+        searchParams: {
+          response_type: 'code',
+          client_id: clientId!,
+          redirect_uri: redirectUri!,
+          scope: requestedScope,
+          state: authState!,
+          code_challenge: codeChallenge!,
+          code_challenge_method: codeChallengeMethod,
+          ...(nonce ? { nonce } : {}),
+        },
+      }).json<AuthorizePreviewResponse>()
+
+      const scopes = preview.scopes.length > 0
+        ? preview.scopes
+        : preview.scope.split(' ').filter(Boolean)
+
       setConsentRequest({
-        client_id: clientId!,
-        client_name: '示例应用',
+        client_id: preview.client_id,
+        client_name: preview.client_name,
         client_description: '正在请求访问您的账户信息',
-        scopes: requestedScopes,
-        redirect_uri: redirectUri!,
+        scopes,
+        redirect_uri: preview.redirect_uri,
       })
-      setSelectedScopes(requestedScopes)
+      setSelectedScopes(scopes)
     } catch (err) {
       setError('无法获取应用信息')
     } finally {
@@ -134,22 +163,27 @@ export function AuthorizePage() {
   }
 
   const handleApprove = async () => {
+    if (!consentRequest || !codeChallenge || !authState) {
+      setError('授权请求参数不完整')
+      return
+    }
+
     setProcessing(true)
     try {
       const data = await api.post('authorize/consent', {
         json: {
-          client_id: clientId,
-          redirect_uri: redirectUri,
-          state,
+          client_id: consentRequest.client_id,
+          redirect_uri: consentRequest.redirect_uri,
+          state: authState,
           code_challenge: codeChallenge,
-            code_challenge_method: 'S256',
+          code_challenge_method: codeChallengeMethod,
           nonce,
           scopes: selectedScopes,
           approved: true,
         },
       }).json<ConsentResponse>()
 
-      const approvedRedirect = parseSafeRedirectUri(data.redirect_uri || redirectUri)
+      const approvedRedirect = parseSafeRedirectUri(data.redirect_uri || consentRequest.redirect_uri)
       if (!approvedRedirect) {
         throw new Error('无效的回调地址')
       }
@@ -159,7 +193,7 @@ export function AuthorizePage() {
         throw new Error('授权响应缺少 code')
       }
       params.set('code', data.code)
-      if (state) params.set('state', state)
+      if (authState) params.set('state', authState)
       approvedRedirect.search = params.toString()
       window.location.href = approvedRedirect.toString()
     } catch (err) {
@@ -182,7 +216,7 @@ export function AuthorizePage() {
     const params = new URLSearchParams()
     params.set('error', 'access_denied')
     params.set('error_description', '用户拒绝了授权请求')
-    if (state) params.set('state', state)
+    if (authState) params.set('state', authState)
     deniedRedirect.search = params.toString()
     window.location.href = deniedRedirect.toString()
   }
