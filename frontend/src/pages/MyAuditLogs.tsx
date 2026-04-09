@@ -7,8 +7,6 @@ import { Badge, Button, Card, EmptyState, Table, useToast } from '#src/component
 interface AuditLog {
   id: string
   event_type: string
-  user_id?: string
-  username?: string
   client_id?: string
   client_name?: string
   ip_address: string
@@ -22,6 +20,7 @@ const eventTypeConfig: Record<string, { label: string; icon: typeof CheckCircle;
   login_success: { label: '登录成功', icon: CheckCircle, color: 'text-emerald-400' },
   login_failure: { label: '登录失败', icon: XCircle, color: 'text-red-400' },
   logout: { label: '登出', icon: LogOut, color: 'text-gray-500' },
+  password_change: { label: '修改密码', icon: Lock, color: 'text-orange-400' },
   token_issued: { label: '令牌发放', icon: Key, color: 'text-blue-400' },
   token_refresh: { label: '令牌刷新', icon: RefreshCw, color: 'text-cyan-400' },
   consent_granted: { label: '授权同意', icon: CheckCircle, color: 'text-emerald-400' },
@@ -86,9 +85,7 @@ export function MyAuditLogsPage() {
       filtered = filtered.filter((log) => {
         return (
           log.event_type.toLowerCase().includes(keyword) ||
-          log.username?.toLowerCase().includes(keyword) ||
           log.client_name?.toLowerCase().includes(keyword) ||
-          log.reason?.toLowerCase().includes(keyword) ||
           log.ip_address.includes(keyword)
         )
       })
@@ -139,24 +136,11 @@ export function MyAuditLogsPage() {
       },
     },
     {
-      key: 'user',
-      title: '账号',
-      width: '240px',
-      render: (log: AuditLog) => (
-        <span className="block max-w-[240px] truncate whitespace-nowrap text-sm text-gray-500" title={log.username || '-'}>
-          {log.username || '-'}
-        </span>
-      ),
-    },
-    {
       key: 'client',
       title: '应用',
       width: '240px',
       render: (log: AuditLog) => (
-        <div className="space-y-0.5">
-          <span className="block max-w-[240px] truncate whitespace-nowrap text-sm text-gray-500" title={log.client_name || '-'}>{log.client_name || '-'}</span>
-          {log.reason && <p className="text-[11px] text-gray-400">{log.reason}</p>}
-        </div>
+        <span className="block max-w-[240px] truncate whitespace-nowrap text-sm text-gray-500" title={log.client_name || '-'}>{log.client_name || '-'}</span>
       ),
     },
     {
