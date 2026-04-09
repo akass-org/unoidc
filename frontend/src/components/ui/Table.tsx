@@ -7,6 +7,8 @@ interface TableProps<T> {
   emptyState?: ReactNode
   loading?: boolean
   tableMinWidth?: string
+  disableRowTransition?: boolean
+  disableRowDivider?: boolean
 }
 
 interface Column<T> {
@@ -23,6 +25,8 @@ export function Table<T>({
   emptyState,
   loading,
   tableMinWidth,
+  disableRowTransition = false,
+  disableRowDivider = false,
 }: TableProps<T>) {
   if (loading) {
     return (
@@ -52,11 +56,11 @@ export function Table<T>({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200 dark:divide-white/[0.04]">
+        <tbody className={disableRowDivider ? '' : 'divide-y divide-gray-200 dark:divide-white/[0.04]'}>
           {data.map((item) => (
             <tr
               key={keyExtractor(item)}
-              className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
+              className={`hover:bg-gray-50 dark:hover:bg-white/[0.02] ${disableRowTransition ? '' : 'transition-colors'}`}
             >
               {columns.map((col) => (
                 <td key={col.key} className="py-3.5 px-4">

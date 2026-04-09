@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { 
   ClipboardList, 
   Search, 
@@ -20,10 +20,6 @@ import {
   Table
 } from '#src/components/ui'
 import { getErrorMessage } from '#src/api/client'
-
-// Animation keyframes
-const fadeIn = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`
-const slideUp = `@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`
 
 interface AuditLog {
   id: string
@@ -55,7 +51,6 @@ const eventTypeConfig: Record<string, { label: string; icon: typeof CheckCircle;
 
 export function AdminAuditLogs() {
   const [logs, setLogs] = useState<AuditLog[]>([])
-  const [filteredLogs, setFilteredLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -76,10 +71,9 @@ export function AdminAuditLogs() {
     return () => window.clearTimeout(timer)
   }, [search])
 
-  // Filter logs
-  useEffect(() => {
+  const filteredLogs = useMemo(() => {
     let filtered = logs
-    
+
     if (debouncedSearch) {
       filtered = filtered.filter(log =>
         log.username?.toLowerCase().includes(debouncedSearch) ||
@@ -89,14 +83,17 @@ export function AdminAuditLogs() {
         log.ip_address.includes(debouncedSearch)
       )
     }
-    
+
     if (filter !== 'all') {
       filtered = filtered.filter(log => log.outcome === filter)
     }
-    
-    setFilteredLogs(filtered)
-    setCurrentPage(1)
+
+    return filtered
   }, [logs, debouncedSearch, filter])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearch, filter])
 
   const loadLogs = async () => {
     try {
@@ -248,8 +245,7 @@ export function AdminAuditLogs() {
   })
 
   return (
-    <div className="space-y-5" style={{ animation: 'slideUp 0.3s ease-out' }}>
-      <style>{fadeIn}{slideUp}</style>
+    <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">审计日志</h1>
@@ -334,12 +330,14 @@ export function AdminAuditLogs() {
       </div>
 
       {/* Table */}
-      <Card padding="none">
+      <Card padding="none" className="min-h-[260px]">
         <Table
           data={pagedLogs}
           columns={columns}
           keyExtractor={(log) => log.id}
           loading={loading}
+          disableRowTransition
+          disableRowDivider
           emptyState={
             <EmptyState
               icon={<ClipboardList className="w-6 h-6" />}
