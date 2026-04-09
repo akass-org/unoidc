@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ClipboardList, CheckCircle, XCircle, RefreshCw, Key, LogOut, UserPlus, Lock, Search } from 'lucide-react'
 import { meApi } from '#src/api/me'
 import { getErrorMessage } from '#src/api/client'
@@ -57,7 +57,6 @@ const formatDate = (dateStr: string) => {
 
 export function MyAuditLogsPage() {
   const [logs, setLogs] = useState<AuditLog[]>([])
-  const [filteredLogs, setFilteredLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -77,7 +76,7 @@ export function MyAuditLogsPage() {
     return () => window.clearTimeout(timer)
   }, [search])
 
-  useEffect(() => {
+  const filteredLogs = useMemo(() => {
     let filtered = logs
 
     if (debouncedSearch) {
@@ -95,9 +94,12 @@ export function MyAuditLogsPage() {
       filtered = filtered.filter((log) => log.outcome === filter)
     }
 
-    setFilteredLogs(filtered)
-    setCurrentPage(1)
+    return filtered
   }, [logs, debouncedSearch, filter])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearch, filter])
 
   const loadLogs = async () => {
     try {
@@ -234,12 +236,14 @@ export function MyAuditLogsPage() {
         </Card>
       </div>
 
-      <Card padding="none">
+      <Card padding="none" className="min-h-[260px]">
         <Table
           data={pagedLogs}
           columns={columns}
           keyExtractor={(log) => log.id}
           loading={loading}
+          disableRowTransition
+          disableRowDivider
           emptyState={
             <EmptyState
               icon={<ClipboardList className="w-6 h-6" />}
