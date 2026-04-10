@@ -233,9 +233,9 @@ export function AuthorizePage() {
 
   if (loading || sessionLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black page-content">
         <div className="text-center">
-          <div className="w-6 h-6 border border-gray-300 dark:border-white/20 border-t-gray-900 dark:border-t-white rounded-full animate-spin mx-auto mb-3" />
+          <div className="w-6 h-6 border border-gray-300 dark:border-white/20 border-t-gray-900 dark:border-t-white rounded-full spinner-smooth mx-auto mb-3" />
           <p className="text-sm text-gray-500 dark:text-gray-600">加载中...</p>
         </div>
       </div>
@@ -244,12 +244,12 @@ export function AuthorizePage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black p-4 page-content">
         <Card className="max-w-sm w-full text-center">
           <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-500/[0.08] flex items-center justify-center border border-red-500/[0.16]">
             <X className="w-6 h-6 text-red-400" />
           </div>
-          <h1 className="text-base font-medium text-gray-900 dark:text-white mb-1">授权请求错误</h1>
+          <h1 className="text-lg font-bold text-gray-900 dark:text-white mb-1">授权请求错误</h1>
           <p className="text-sm text-gray-500 mb-5">{error}</p>
           <Button onClick={() => navigate('/login')} size="sm">
             返回登录
@@ -260,7 +260,7 @@ export function AuthorizePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black p-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-black p-4 page-content">
       <div className="max-w-md mx-auto">
         {/* Header */}
         <div className="flex justify-end py-3">
@@ -282,7 +282,7 @@ export function AuthorizePage() {
                 <Shield className="w-8 h-8 text-gray-400" />
               )}
             </div>
-            <h1 className="text-base font-medium text-gray-900 dark:text-white mb-0.5">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white mb-0.5">
               {consentRequest?.client_name}
             </h1>
             <p className="text-sm text-gray-500">
@@ -320,7 +320,7 @@ export function AuthorizePage() {
 
           {/* Scopes */}
           <div className="p-5">
-            <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
+            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
               该应用请求访问以下信息：
             </h2>
             <div className="space-y-2">

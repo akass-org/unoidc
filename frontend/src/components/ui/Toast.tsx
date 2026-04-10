@@ -90,7 +90,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
     >
       <Icon className="w-5 h-5 flex-shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm">{toast.title}</p>
+        <p className="font-bold text-sm">{toast.title}</p>
         {toast.message && (
           <p className="text-sm opacity-70 mt-0.5">{toast.message}</p>
         )}

@@ -66,7 +66,7 @@ export function RegisterPage() {
           <div className="flex items-center justify-center w-8 h-8 rounded-md bg-black dark:bg-white">
             <Shield className="w-4 h-4 text-white dark:text-black" />
           </div>
-          <span className="text-sm font-medium text-gray-900 dark:text-white">
+          <span className="text-sm font-bold text-gray-900 dark:text-white">
             {brandName}
           </span>
         </div>
@@ -75,7 +75,7 @@ export function RegisterPage() {
 
       {/* Title */}
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
           创建账户
         </h1>
         <p className="text-sm text-gray-500 dark:text-gray-500">
@@ -152,7 +152,7 @@ export function RegisterPage() {
           type="submit"
           disabled={loading}
           style={{ backgroundColor: '#ffffff', color: '#000000' }}
-          className="w-full py-3 px-4 font-medium text-sm rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-white"
+          className="w-full py-3 px-4 font-bold text-sm rounded-md hover:bg-gray-100 btn-transition disabled:opacity-50 disabled:cursor-not-allowed border border-white"
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">

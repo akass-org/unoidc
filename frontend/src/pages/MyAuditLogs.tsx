@@ -182,10 +182,10 @@ export function MyAuditLogsPage() {
   }, [currentPage, totalPages])
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 page-content">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-medium text-gray-900 dark:text-white">我的审计日志</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">我的审计日志</h1>
           <p className="text-sm text-gray-500 mt-0.5">这里只显示与你账号相关的安全事件和操作记录</p>
         </div>
         <Button variant="secondary" size="sm" onClick={loadLogs} loading={loading}>

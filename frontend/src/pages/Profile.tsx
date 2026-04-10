@@ -140,9 +140,9 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 page-content">
       <div>
-        <h1 className="text-lg font-medium text-gray-900 dark:text-white">个人资料</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">个人资料</h1>
         <p className="text-sm text-gray-500 mt-0.5">管理您的账户信息和安全设置</p>
       </div>
 
@@ -166,7 +166,7 @@ export function ProfilePage() {
             </label>
           </div>
           <div className="text-center sm:text-left">
-            <h2 className="text-base font-medium text-gray-900 dark:text-white">
+            <h2 className="text-base font-bold text-gray-900 dark:text-white">
               {user?.display_name || user?.username}
             </h2>
             <p className="text-sm text-gray-500">@{user?.username}</p>
@@ -180,7 +180,7 @@ export function ProfilePage() {
       {/* Profile Form */}
       <Card>
         <CardHeader 
-          title="基本信息" 
+          title={<span className="font-bold">基本信息</span>}
           subtitle="更新您的显示名称和邮箱地址"
         />
         <form onSubmit={handleProfileSubmit} className="space-y-4">
@@ -233,7 +233,7 @@ export function ProfilePage() {
       {/* Password Form */}
       <Card>
         <CardHeader 
-          title="修改密码" 
+          title={<span className="font-bold">修改密码</span>}
           subtitle="定期更改密码可以提高账户安全性"
         />
         <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-md">

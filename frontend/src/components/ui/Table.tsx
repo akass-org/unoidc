@@ -48,7 +48,7 @@ export function Table<T>({
             {columns.map((col) => (
               <th
                 key={col.key}
-                className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider"
+                className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider"
                 style={{ width: col.width }}
               >
                 {col.title}
@@ -91,7 +91,7 @@ export function EmptyState({
       <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-gray-100 dark:bg-white/[0.04] flex items-center justify-center text-gray-500 dark:text-gray-600 border border-gray-200 dark:border-white/[0.06]">
         {icon}
       </div>
-      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{title}</h3>
+      <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">{title}</h3>
       <p className="text-sm text-gray-500 dark:text-gray-600 mb-4">{description}</p>
       {action}
     </div>

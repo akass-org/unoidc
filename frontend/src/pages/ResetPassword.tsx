@@ -31,11 +31,11 @@ export function ResetPasswordPage() {
   if (!token) {
     return (
       <LoginPageWrapper>
-        <div className="text-center py-6">
+        <div className="text-center py-6 page-content">
           <div className="inline-flex items-center justify-center w-12 h-12 mb-4 rounded-full bg-red-500/[0.08] text-red-400 border border-red-500/[0.16]">
             <Lock className="w-6 h-6" />
           </div>
-          <h2 className="text-base font-medium text-gray-900 dark:text-white mb-1">无效的链接</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">无效的链接</h2>
           <p className="text-sm text-gray-500 mb-5">
             重置密码链接无效或已过期，请重新申请。
           </p>
@@ -77,11 +77,11 @@ export function ResetPasswordPage() {
   if (success) {
     return (
       <LoginPageWrapper>
-        <div className="text-center py-6">
+        <div className="text-center py-6 page-content">
           <div className="inline-flex items-center justify-center w-12 h-12 mb-4 rounded-full bg-emerald-500/[0.08] text-emerald-400 border border-emerald-500/[0.16]">
             <CheckCircle className="w-6 h-6" />
           </div>
-          <h2 className="text-base font-medium text-gray-900 dark:text-white mb-1">密码重置成功</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">密码重置成功</h2>
           <p className="text-sm text-gray-500 mb-5">
             您的密码已成功重置，请使用新密码登录。
           </p>
@@ -103,7 +103,7 @@ export function ResetPasswordPage() {
           <div className="flex items-center justify-center w-8 h-8 rounded-md bg-black dark:bg-white">
             <Shield className="w-4 h-4 text-white dark:text-black" />
           </div>
-          <span className="text-sm font-medium text-gray-900 dark:text-white">
+          <span className="text-sm font-bold text-gray-900 dark:text-white">
             {brandName}
           </span>
         </div>
@@ -112,7 +112,7 @@ export function ResetPasswordPage() {
 
       {/* Title */}
       <div className="mb-5">
-        <h1 className="text-lg font-medium text-gray-900 dark:text-white mb-0.5">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-0.5">
           重置密码
         </h1>
         <p className="text-sm text-gray-500 dark:text-gray-500">
@@ -161,7 +161,7 @@ export function ResetPasswordPage() {
           type="submit"
           disabled={loading}
           style={{ backgroundColor: '#ffffff', color: '#000000' }}
-          className="w-full py-3 px-4 font-medium text-sm rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-white"
+          className="w-full py-3 px-4 font-bold text-sm rounded-md hover:bg-gray-100 btn-transition disabled:opacity-50 disabled:cursor-not-allowed border border-white"
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">

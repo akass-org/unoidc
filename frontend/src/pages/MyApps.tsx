@@ -102,9 +102,9 @@ export function MyAppsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 page-content">
       <div>
-        <h1 className="text-lg font-medium text-gray-900 dark:text-white">我的应用</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">我的应用</h1>
         <p className="text-sm text-gray-500 mt-0.5">已授权的应用可撤销，指派的应用由管理员管理</p>
       </div>
 
@@ -118,15 +118,15 @@ export function MyAppsPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {apps.map((app) => (
-            <Card key={app.client_id} hover>
+          {apps.map((app, index) => (
+            <Card key={app.client_id} hover className="stagger-item" style={{ animationDelay: `${index * 0.05}s` }}>
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div className="flex items-start gap-4">
                   <div className="w-11 h-11 rounded-lg bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06] flex items-center justify-center flex-shrink-0">
                     <AppWindow className="w-5 h-5 text-gray-400" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">
                       {app.client_name}
                     </h3>
                     <p className="text-xs text-gray-500 dark:text-gray-600 font-mono mt-0.5">
@@ -202,11 +202,11 @@ export function MyAppsPage() {
 
       {/* Info Card - Only show if there are consented apps */}
       {apps.some((app) => app.access_source === 'consent') && (
-        <Card className="bg-blue-50 dark:bg-blue-500/[0.02] border-blue-200 dark:border-blue-500/[0.08]">
+        <Card className="bg-blue-50 dark:bg-blue-500/[0.02] border-blue-200 dark:border-blue-500/[0.08] card-hover">
           <div className="flex items-start gap-3">
             <Shield className="w-4 h-4 text-blue-500 dark:text-blue-400 mt-0.5 flex-shrink-0" />
             <div>
-              <h4 className="text-sm font-medium text-blue-600 dark:text-blue-400">关于应用授权</h4>
+              <h4 className="text-sm font-bold text-blue-600 dark:text-blue-400">关于应用授权</h4>
               <ul className="text-sm text-blue-600/70 dark:text-blue-400/70 mt-2 space-y-1 list-disc list-inside">
                 <li>您可以随时撤销对已授权应用的访问权限</li>
                 <li>撤销授权后，该应用将无法再访问您的账户信息</li>

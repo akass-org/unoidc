@@ -69,7 +69,7 @@ export function Modal({
       >
         <div className="flex items-start justify-between p-5 border-b border-gray-200 dark:border-white/[0.06]">
           <div>
-            <h2 className="text-base font-medium text-gray-900 dark:text-white">{title}</h2>
+            <h2 className="text-base font-bold text-gray-900 dark:text-white">{title}</h2>
             {description && (
               <p className="text-sm text-gray-500 mt-1">{description}</p>
             )}

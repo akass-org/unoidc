@@ -73,13 +73,13 @@ function GeometricPattern() {
 // Brand content for sidebar
 function BrandContent({ brandName }: { brandName: string }) {
   return (
-    <div className="relative z-10 flex flex-col justify-center h-full px-10 py-12 lg:px-16 xl:px-20 text-white">
+    <div className="relative z-10 flex flex-col justify-center h-full px-10 py-12 lg:px-16 xl:px-20 text-white page-content">
       <div className="max-w-sm">
         <div className="mb-8">
         <div className="inline-flex items-center justify-center w-14 h-14 mb-6 rounded-xl bg-white/[0.06] backdrop-blur-sm ring-1 ring-white/[0.08]">
           <Shield className="w-7 h-7 text-white" />
         </div>
-        <h1 className="text-3xl font-semibold tracking-tight mb-3">{brandName}</h1>
+        <h1 className="text-3xl font-bold tracking-tight mb-3">{brandName}</h1>
         <p className="text-base text-white/50 max-w-sm leading-relaxed">
           安全、可靠的统一身份认证解决方案
         </p>
@@ -91,7 +91,7 @@ function BrandContent({ brandName }: { brandName: string }) {
           { icon: Lock, text: '企业级安全防护' },
           { icon: KeyRound, text: 'OIDC 标准协议' },
         ].map(({ icon: Icon, text }, i) => (
-          <div key={i} className="flex items-center gap-3 text-white/40">
+          <div key={i} className="flex items-center gap-3 text-white/40 stagger-item" style={{ animationDelay: `${0.2 + i * 0.1}s` }}>
             <Icon className="w-4 h-4" />
             <span className="text-sm">{text}</span>
           </div>
@@ -149,7 +149,7 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
   }
 
   const formSection = (
-    <div className="relative flex h-full items-center justify-center overflow-hidden bg-gray-50 dark:bg-black px-6 py-10 lg:px-10">
+    <div className="relative flex h-full items-center justify-center overflow-hidden bg-gray-50 dark:bg-black px-6 py-10 lg:px-10 page-content">
       <div className="absolute inset-0 opacity-60">
         <div className="absolute -right-24 top-1/4 h-72 w-72 rounded-full bg-black/[0.04] blur-3xl dark:bg-white/[0.04]" />
         <div className="absolute -left-16 bottom-0 h-56 w-56 rounded-full bg-black/[0.03] blur-3xl dark:bg-white/[0.03]" />
@@ -196,7 +196,7 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
 
     case 'centered':
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black p-4">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black p-4 page-content">
           <div className="w-full max-w-[420px]">
             <div className="bg-white dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.06] rounded-2xl p-8 shadow-sm dark:shadow-none">
               {children}
@@ -207,7 +207,7 @@ export function LoginPageWrapper({ children }: LoginPageWrapperProps) {
 
     case 'fullscreen':
       return (
-        <div className="min-h-screen relative overflow-hidden bg-gray-950 dark:bg-black">
+        <div className="min-h-screen relative overflow-hidden bg-gray-950 dark:bg-black page-content">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.14),_transparent_36%),radial-gradient(circle_at_bottom_right,_rgba(255,255,255,0.08),_transparent_32%)]" />
           {loginBackgroundUrl ? (
             <>

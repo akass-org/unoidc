@@ -16,7 +16,7 @@ export function UserLayout() {
   const location = useLocation()
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black">
+    <div className="min-h-screen bg-gray-50 dark:bg-black page-content">
       <LayoutHeader isAdminPortal={false} />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
@@ -33,9 +33,9 @@ export function UserLayout() {
                     key={item.path}
                     to={item.path}
                     className={`
-                      flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all
+                      flex items-center gap-2.5 px-3 py-2 rounded-md text-sm nav-item
                       ${isActive
-                        ? 'bg-black text-white dark:bg-white dark:text-black font-medium'
+                        ? 'bg-black text-white dark:bg-white dark:text-black font-bold'
                         : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04]'
                       }
                     `}
@@ -49,7 +49,7 @@ export function UserLayout() {
           </aside>
 
           {/* Main Content */}
-          <main className="flex-1 min-w-0">
+          <main className="flex-1 min-w-0 page-content">
             <Outlet />
           </main>
         </div>

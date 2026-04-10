@@ -31,10 +31,10 @@ export function LayoutHeader({ isAdminPortal }: LayoutHeaderProps) {
                 <LayoutDashboard className="w-4 h-4 text-white dark:text-black" />
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-medium text-sm text-gray-900 dark:text-white">
+                <span className="font-bold text-sm text-gray-900 dark:text-white">
                   {brandName}
                 </span>
-                <span className="text-[10px] text-gray-500 dark:text-gray-600 px-1.5 py-0.5 bg-gray-100 dark:bg-white/[0.04] rounded">
+                <span className="text-[10px] font-bold text-gray-500 dark:text-gray-600 px-1.5 py-0.5 bg-gray-100 dark:bg-white/[0.04] rounded">
                   管理
                 </span>
               </div>
@@ -44,7 +44,7 @@ export function LayoutHeader({ isAdminPortal }: LayoutHeaderProps) {
               <div className="w-7 h-7 rounded-md bg-black dark:bg-white flex items-center justify-center">
                 <Settings className="w-4 h-4 text-white dark:text-black" />
               </div>
-              <span className="font-medium text-sm text-gray-900 dark:text-white">
+              <span className="font-bold text-sm text-gray-900 dark:text-white">
                 {brandName}
               </span>
             </Link>
