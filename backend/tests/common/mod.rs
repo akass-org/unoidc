@@ -1,4 +1,4 @@
-use backend::{config::Config, db, AppState};
+use backend::{config::Config, db, service::KeyService, AppState};
 use std::sync::Arc;
 
 pub async fn get_test_db() -> Arc<AppState> {
@@ -22,5 +22,23 @@ pub async fn get_test_db() -> Arc<AppState> {
     backend::metrics::init();
 
     let config = Config::default();
+
+    // Tests can run against a reused dev database. If the active key was encrypted
+    // with a different PRIVATE_KEY_ENCRYPTION_KEY in the past, key decryption fails
+    // and many tests become flaky. Reset JWKs and recreate an active key in that case.
+    if KeyService::get_active_key(&pool, &config.private_key_encryption_key)
+        .await
+        .is_err()
+    {
+        sqlx::query("DELETE FROM jwks")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        KeyService::get_active_key(&pool, &config.private_key_encryption_key)
+            .await
+            .unwrap();
+    }
+
     Arc::new(AppState { config, db: pool, email_service: None })
 }

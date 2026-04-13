@@ -119,15 +119,19 @@ async fn test_userinfo_all_scopes() {
     let state = common::get_test_db().await;
     cleanup_test_data(&state).await;
 
-    let user = create_test_user(&state, "testuser", "test@example.com").await;
+    let suffix = uuid::Uuid::new_v4().as_simple().to_string();
+    let username = format!("testuser_{}", suffix);
+    let email = format!("{}@example.com", username);
+
+    let user = create_test_user(&state, &username, &email).await;
     let client = create_test_client(&state, "test-client").await;
 
     // 创建组并加入用户
     let group = GroupRepo::create(
         &state.db,
         CreateGroup {
-            name: "admins".to_string(),
-            description: Some("Admin team".to_string()),
+            name: format!("test-group-{}", uuid::Uuid::new_v4().as_simple()),
+            description: Some("UserInfo test group".to_string()),
         },
     )
     .await
@@ -156,4 +160,7 @@ async fn test_userinfo_all_scopes() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
+
+    // Clean up to avoid leaking test artifacts into the shared dev database.
+    cleanup_test_data(&state).await;
 }
