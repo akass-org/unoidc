@@ -69,7 +69,17 @@ impl KeyService {
     /// 获取当前激活的密钥，不存在则自动生成
     pub async fn get_active_key(pool: &PgPool, encryption_key: &str) -> Result<Jwk> {
         if let Some(jwk) = JwkRepo::find_active(pool).await? {
-            return Self::decrypt_jwk(jwk, encryption_key);
+            match Self::decrypt_jwk(jwk, encryption_key) {
+                Ok(decrypted) => return Ok(decrypted),
+                Err(err) => {
+                    tracing::warn!(
+                        "Active key could not be decrypted with current encryption key, regenerating: {}",
+                        err
+                    );
+                    let rotated = Self::rotate_key(pool, encryption_key).await?;
+                    return Self::decrypt_jwk(rotated, encryption_key);
+                }
+            }
         }
         info!("No active key found, generating initial key pair");
         let jwk = Self::generate_key_pair(pool, encryption_key).await?;

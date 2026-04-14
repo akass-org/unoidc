@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom'
 import { Eye, EyeOff, Shield } from 'lucide-react'
 import { useSessionStore } from '#src/stores/session'
 import { useUIConfigStore } from '#src/stores/theme'
@@ -11,6 +11,7 @@ import { Input } from '#src/components/ui'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   const { brandName } = useUIConfigStore()
   const { setUser } = useSessionStore()
@@ -21,7 +22,14 @@ export function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const rawReturnTo = searchParams.get('return_to') || '/profile'
+  const fromState = (() => {
+    const state = location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null
+    const from = state?.from
+    if (!from?.pathname) return null
+    return `${from.pathname}${from.search || ''}${from.hash || ''}`
+  })()
+
+  const rawReturnTo = searchParams.get('return_to') || fromState || '/profile'
   const returnTo = (() => {
     try {
       // 仅允许站内路径或同源绝对 URL，拒绝协议相对 URL（//example.com）

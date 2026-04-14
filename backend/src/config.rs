@@ -5,6 +5,7 @@ use std::env;
 pub struct Config {
     pub database_url: String,
     pub app_base_url: String,
+    pub frontend_base_url: Option<String>,
     pub issuer: String,
     pub session_secret: String,
     pub cookie_domain: Option<String>,
@@ -53,6 +54,7 @@ impl Default for Config {
         Config {
             database_url: "postgres://localhost/oidc_provider".to_string(),
             app_base_url: "http://localhost:3000".to_string(),
+            frontend_base_url: None,
             issuer: "http://localhost:3000".to_string(),
             session_secret: "dev-secret-key-change-in-production".to_string(),
             cookie_domain: None,
@@ -93,6 +95,7 @@ impl Config {
                 .unwrap_or_else(|_| "postgres://localhost/oidc_provider".to_string()),
             app_base_url: env::var("APP_BASE_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
+            frontend_base_url: env::var("FRONTEND_BASE_URL").ok(),
             issuer: env::var("ISSUER").unwrap_or_else(|_| "http://localhost:3000".to_string()),
             session_secret: env::var("SESSION_SECRET")
                 .unwrap_or_else(|_| "dev-secret-key-change-in-production".to_string()),

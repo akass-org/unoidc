@@ -106,6 +106,40 @@ export function AuthorizePage() {
   const nonce = searchParams.get('nonce')
   const scopeParam = searchParams.get('scope')
 
+  const submitApprovedAuthorization = async (
+    clientId: string,
+    redirectUri: string,
+    scopes: string[],
+  ) => {
+    const data = await api.post('authorize/consent', {
+      json: {
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        state: authState,
+        code_challenge: codeChallenge,
+        code_challenge_method: codeChallengeMethod,
+        nonce,
+        scopes,
+        approved: true,
+      },
+    }).json<ConsentResponse>()
+
+    const approvedRedirect = parseSafeRedirectUri(data.redirect_uri || redirectUri)
+    if (!approvedRedirect) {
+      throw new Error('无效的回调地址')
+    }
+
+    if (!data.code) {
+      throw new Error('授权响应缺少 code')
+    }
+
+    const params = new URLSearchParams()
+    params.set('code', data.code)
+    if (authState) params.set('state', authState)
+    approvedRedirect.search = params.toString()
+    window.location.href = approvedRedirect.toString()
+  }
+
   // Check login status and load client info
   useEffect(() => {
     if (sessionLoading) return
@@ -170,32 +204,7 @@ export function AuthorizePage() {
 
     setProcessing(true)
     try {
-      const data = await api.post('authorize/consent', {
-        json: {
-          client_id: consentRequest.client_id,
-          redirect_uri: consentRequest.redirect_uri,
-          state: authState,
-          code_challenge: codeChallenge,
-          code_challenge_method: codeChallengeMethod,
-          nonce,
-          scopes: selectedScopes,
-          approved: true,
-        },
-      }).json<ConsentResponse>()
-
-      const approvedRedirect = parseSafeRedirectUri(data.redirect_uri || consentRequest.redirect_uri)
-      if (!approvedRedirect) {
-        throw new Error('无效的回调地址')
-      }
-      
-      const params = new URLSearchParams()
-      if (!data.code) {
-        throw new Error('授权响应缺少 code')
-      }
-      params.set('code', data.code)
-      if (authState) params.set('state', authState)
-      approvedRedirect.search = params.toString()
-      window.location.href = approvedRedirect.toString()
+      await submitApprovedAuthorization(consentRequest.client_id, consentRequest.redirect_uri, selectedScopes)
     } catch (err) {
       addToast({
         type: 'error',

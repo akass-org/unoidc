@@ -19,39 +19,51 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 async fn cleanup_test_data(state: &AppState) {
-    sqlx::query("DELETE FROM user_groups")
+    sqlx::query(
+        "DELETE FROM user_groups WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'oidc_user_%' OR username LIKE 'oidc_logout_user_%') OR group_id IN (SELECT id FROM groups WHERE name LIKE 'oidc-group-%' OR name LIKE 'oidc-logout-group-%')",
+    )
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM client_groups")
+    sqlx::query(
+        "DELETE FROM client_groups WHERE client_id IN (SELECT id FROM clients WHERE client_id LIKE 'oidc-client-%') OR group_id IN (SELECT id FROM groups WHERE name LIKE 'oidc-group-%' OR name LIKE 'oidc-logout-group-%')",
+    )
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM user_consents")
+    sqlx::query(
+        "DELETE FROM user_consents WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'oidc_user_%' OR username LIKE 'oidc_logout_user_%') OR client_id IN (SELECT id FROM clients WHERE client_id LIKE 'oidc-client-%')",
+    )
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM refresh_tokens")
+    sqlx::query(
+        "DELETE FROM refresh_tokens WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'oidc_user_%' OR username LIKE 'oidc_logout_user_%') OR client_id IN (SELECT id FROM clients WHERE client_id LIKE 'oidc-client-%')",
+    )
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM authorization_codes")
+    sqlx::query(
+        "DELETE FROM authorization_codes WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'oidc_user_%' OR username LIKE 'oidc_logout_user_%') OR client_id IN (SELECT id FROM clients WHERE client_id LIKE 'oidc-client-%')",
+    )
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM user_sessions")
+    sqlx::query(
+        "DELETE FROM user_sessions WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'oidc_user_%' OR username LIKE 'oidc_logout_user_%')",
+    )
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM clients")
+    sqlx::query("DELETE FROM clients WHERE client_id LIKE 'oidc-client-%'")
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM groups")
+    sqlx::query("DELETE FROM groups WHERE name LIKE 'oidc-group-%' OR name LIKE 'oidc-logout-group-%'")
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM users")
+    sqlx::query("DELETE FROM users WHERE username LIKE 'oidc_user_%' OR username LIKE 'oidc_logout_user_%'")
         .execute(&state.db)
         .await
         .ok();

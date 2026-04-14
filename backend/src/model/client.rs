@@ -26,6 +26,7 @@ pub struct Client {
     pub token_endpoint_auth_method: String,
     pub id_token_signed_response_alg: String,
     pub enabled: bool,
+    pub enable_silent_authorize: bool,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
 }
@@ -103,4 +104,5 @@ pub struct UpdateClient {
     pub redirect_uris: Option<Vec<String>>,
     pub post_logout_redirect_uris: Option<Vec<String>>,
     pub enabled: Option<bool>,
+    pub enable_silent_authorize: Option<bool>,
 }

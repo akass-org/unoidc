@@ -5,7 +5,7 @@
 use axum::{
     extract::{Form, Query, State},
     http::HeaderMap,
-    response::IntoResponse,
+    response::{IntoResponse, Redirect},
     Json,
 };
 use serde::Deserialize;
@@ -126,12 +126,60 @@ impl AuthorizeRequest {
     }
 }
 
+fn is_browser_navigation(headers: &HeaderMap) -> bool {
+    let accepts_html = headers
+        .get("accept")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.to_ascii_lowercase().contains("text/html"))
+        .unwrap_or(false);
+
+    let fetch_navigate = headers
+        .get("sec-fetch-mode")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.eq_ignore_ascii_case("navigate"))
+        .unwrap_or(false);
+
+    accepts_html || fetch_navigate
+}
+
+fn build_frontend_authorize_url(frontend_base_url: &str, req: &AuthorizeRequest) -> String {
+    let mut redirect = format!(
+        "{}/oauth/authorize?response_type={}&client_id={}&redirect_uri={}&scope={}&state={}&code_challenge={}&code_challenge_method={}",
+        frontend_base_url.trim_end_matches('/'),
+        urlencoding::encode(&req.response_type),
+        urlencoding::encode(&req.client_id),
+        urlencoding::encode(&req.redirect_uri),
+        urlencoding::encode(&req.scope),
+        urlencoding::encode(&req.state),
+        urlencoding::encode(&req.code_challenge),
+        urlencoding::encode(&req.code_challenge_method),
+    );
+
+    if let Some(nonce) = &req.nonce {
+        redirect.push_str("&nonce=");
+        redirect.push_str(&urlencoding::encode(nonce));
+    }
+
+    redirect
+}
+
+fn build_callback_redirect_url(redirect_uri: &str, code: &str, state: &str) -> String {
+    let separator = if redirect_uri.contains('?') { '&' } else { '?' };
+    format!(
+        "{}{}code={}&state={}",
+        redirect_uri,
+        separator,
+        urlencoding::encode(code),
+        urlencoding::encode(state),
+    )
+}
+
 /// GET /authorize — Authorization endpoint
 pub async fn authorize_get(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Query(req): Query<AuthorizeRequest>,
-) -> Result<Json<Value>> {
+) -> Result<impl IntoResponse> {
     metrics::AUTH_REQUESTS_TOTAL.inc();
 
     // 验证请求参数（包括长度限制和合规性检查）
@@ -174,9 +222,11 @@ pub async fn authorize_get(
         error_description: Some(msg),
     })?;
 
+    let auth_user = extract_auth_user(&state.db, &headers, &state.config.session_secret).await?;
+
     let mut requires_login = true;
     let mut requires_consent = true;
-    if let Some(auth_user) = extract_auth_user(&state.db, &headers, &state.config.session_secret).await? {
+    if let Some(auth_user) = auth_user.as_ref() {
         requires_login = false;
         check_user_client_access(&state.db, auth_user.user.id, client.id).await?;
         requires_consent = !OidcService::check_consent_coverage(
@@ -192,6 +242,42 @@ pub async fn authorize_get(
         })?;
     }
 
+    if is_browser_navigation(&headers) {
+        // Browser flow directs to authorization page for explicit user consent.
+        // If client has enable_silent_authorize=true, skip authorization page when user already consented.
+        if client.enable_silent_authorize && !requires_login && !requires_consent {
+            let auth_user = auth_user.ok_or(AppError::Unauthorized {
+                reason: Some("Authentication required".to_string()),
+            })?;
+
+            let (code, _) = OidcService::issue_authorization_code(
+                &state.db,
+                auth_user.user.id,
+                client.id,
+                &req.redirect_uri,
+                &req.scope,
+                req.nonce.as_deref(),
+                &req.code_challenge,
+                &req.code_challenge_method,
+                OffsetDateTime::now_utc(),
+            )
+            .await
+            .map_err(|_| AppError::OidcError {
+                error: OidcErrorCode::ServerError,
+                error_description: Some("failed to issue authorization code".to_string()),
+            })?;
+
+            let callback_url = build_callback_redirect_url(&req.redirect_uri, &code, &req.state);
+            return Ok(Redirect::to(&callback_url).into_response());
+        }
+
+        // Default: always show authorization page for user to explicitly approve
+        if let Some(frontend_base_url) = &state.config.frontend_base_url {
+            let redirect_url = build_frontend_authorize_url(frontend_base_url, &req);
+            return Ok(Redirect::to(&redirect_url).into_response());
+        }
+    }
+
     Ok(Json(json!({
         "client_id": client.client_id,
         "client_name": client.name,
@@ -202,7 +288,8 @@ pub async fn authorize_get(
         "scopes": scopes,
         "requires_login": requires_login,
         "requires_consent": requires_consent,
-    })))
+    }))
+    .into_response())
 }
 
 #[derive(Debug, Deserialize, Validate)]

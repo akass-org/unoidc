@@ -128,6 +128,9 @@ impl ClientRepo {
         if let Some(enabled) = input.enabled {
             client.enabled = enabled;
         }
+        if let Some(enable_silent_authorize) = input.enable_silent_authorize {
+            client.enable_silent_authorize = enable_silent_authorize;
+        }
         client.updated_at = now;
 
         sqlx::query_as::<_, Client>(
@@ -140,7 +143,8 @@ impl ClientRepo {
                 redirect_uris = $5,
                 post_logout_redirect_uris = $6,
                 enabled = $7,
-                updated_at = $8
+                enable_silent_authorize = $8,
+                updated_at = $9
             WHERE id = $1
             RETURNING *
             "#,
@@ -152,6 +156,7 @@ impl ClientRepo {
         .bind(&client.redirect_uris)
         .bind(&client.post_logout_redirect_uris)
         .bind(client.enabled)
+        .bind(client.enable_silent_authorize)
         .bind(now)
         .fetch_one(pool)
         .await
@@ -311,5 +316,23 @@ impl ClientRepo {
         .await?;
 
         Ok(result.0 > 0)
+    }
+
+    /// 设置客户端的无感授权选项
+    pub async fn set_silent_authorize(pool: &PgPool, client_id: Uuid, enable: bool) -> Result<Client, sqlx::Error> {
+        let now = time::OffsetDateTime::now_utc();
+        sqlx::query_as::<_, Client>(
+            r#"
+            UPDATE clients
+            SET enable_silent_authorize = $2, updated_at = $3
+            WHERE id = $1
+            RETURNING *
+            "#,
+        )
+        .bind(client_id)
+        .bind(enable)
+        .bind(now)
+        .fetch_one(pool)
+        .await
     }
 }

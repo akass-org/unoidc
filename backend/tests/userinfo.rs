@@ -20,31 +20,37 @@ use serial_test::serial;
 use tower::ServiceExt;
 
 async fn cleanup_test_data(state: &AppState) {
-    sqlx::query("DELETE FROM user_groups")
+    sqlx::query(
+        "DELETE FROM user_groups WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%') OR group_id IN (SELECT id FROM groups WHERE name LIKE 'test-group-%')",
+    )
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM groups")
+    sqlx::query("DELETE FROM groups WHERE name LIKE 'test-group-%'")
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM refresh_tokens")
+    sqlx::query(
+        "DELETE FROM refresh_tokens WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%') OR client_id IN (SELECT id FROM clients WHERE client_id LIKE 'test-client-%' OR client_id = 'test-client')",
+    )
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM authorization_codes")
+    sqlx::query(
+        "DELETE FROM authorization_codes WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%') OR client_id IN (SELECT id FROM clients WHERE client_id LIKE 'test-client-%' OR client_id = 'test-client')",
+    )
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM clients")
+    sqlx::query("DELETE FROM clients WHERE client_id LIKE 'test-client-%' OR client_id = 'test-client'")
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM user_sessions")
+    sqlx::query("DELETE FROM user_sessions WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%')")
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM users")
+    sqlx::query("DELETE FROM users WHERE username LIKE 'testuser_%'")
         .execute(&state.db)
         .await
         .ok();
@@ -124,7 +130,7 @@ async fn test_userinfo_all_scopes() {
     let email = format!("{}@example.com", username);
 
     let user = create_test_user(&state, &username, &email).await;
-    let client = create_test_client(&state, "test-client").await;
+    let client = create_test_client(&state, &format!("test-client-{}", suffix)).await;
 
     // 创建组并加入用户
     let group = GroupRepo::create(

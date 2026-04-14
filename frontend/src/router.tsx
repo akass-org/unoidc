@@ -36,6 +36,14 @@ export const routes: RouteObject[] = [
       </ProtectedRoute>
     ) 
   },
+  {
+    path: '/oauth/authorize',
+    element: (
+      <ProtectedRoute>
+        <AuthorizePage />
+      </ProtectedRoute>
+    )
+  },
 
   // 用户自助（需要登录）
   {

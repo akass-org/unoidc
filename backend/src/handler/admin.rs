@@ -606,6 +606,7 @@ pub struct ClientResponse {
     pub allowed_group_ids: Vec<String>,
     pub allowed_groups: Vec<String>,
     pub is_active: bool,
+    pub enable_silent_authorize: bool,
     pub created_at: String,
     pub last_used: Option<String>,
 }
@@ -631,6 +632,7 @@ pub struct UpdateClientRequest {
     pub redirect_uris: Option<Vec<String>>,
     pub is_active: Option<bool>,
     pub allowed_group_ids: Option<Vec<Uuid>>,
+    pub enable_silent_authorize: Option<bool>,
 }
 
 impl From<crate::model::Client> for ClientResponse {
@@ -645,6 +647,7 @@ impl From<crate::model::Client> for ClientResponse {
             allowed_group_ids: Vec::new(),
             allowed_groups: Vec::new(),
             is_active: client.enabled,
+            enable_silent_authorize: client.enable_silent_authorize,
             created_at: client.created_at.to_string(),
             last_used: None, // 由 client_to_response 填充
         }
@@ -774,6 +777,7 @@ pub async fn update_client(
         redirect_uris: req.redirect_uris,
         post_logout_redirect_uris: None,
         enabled: req.is_active,
+        enable_silent_authorize: req.enable_silent_authorize,
     };
 
     let client = ClientService::update_client(&state.db, id, update)

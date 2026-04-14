@@ -83,6 +83,7 @@ interface Client {
   allowed_group_ids?: string[]
   allowed_groups?: string[]
   is_active: boolean
+  enable_silent_authorize: boolean
   created_at: string
   last_used?: string
 }
@@ -268,6 +269,7 @@ export function AdminClients() {
     redirect_uris: [''],
     post_logout_redirect_uris: [''],
     allowed_group_ids: [] as string[],
+    enable_silent_authorize: false,
   })
 
   // Load clients
@@ -341,7 +343,7 @@ export function AdminClients() {
         const result = data as { client: Client; client_secret: string }
         setNewClientSecret({ client: result.client, secret: result.client_secret })
         setShowCreateModal(false)
-        setFormData({ name: '', description: '', redirect_uris: [''], post_logout_redirect_uris: [''], allowed_group_ids: [] })
+        setFormData({ name: '', description: '', redirect_uris: [''], post_logout_redirect_uris: [''], allowed_group_ids: [], enable_silent_authorize: false })
         loadClients()
       }
     }
@@ -392,6 +394,7 @@ export function AdminClients() {
         ? formData.post_logout_redirect_uris.filter(Boolean) 
         : undefined,
       allowed_group_ids: formData.allowed_group_ids,
+      enable_silent_authorize: formData.enable_silent_authorize,
     })
   }
 
@@ -405,6 +408,7 @@ export function AdminClients() {
       post_logout_redirect_uris: editingClient.post_logout_redirect_uris,
       is_active: editingClient.is_active,
       allowed_group_ids: editingClient.allowed_group_ids ?? [],
+      enable_silent_authorize: editingClient.enable_silent_authorize,
     })
   }
 
@@ -593,7 +597,7 @@ export function AdminClients() {
         </div>
         <Button
           onClick={() => {
-            setFormData({ name: '', description: '', redirect_uris: [''], post_logout_redirect_uris: [''], allowed_group_ids: [] })
+              setFormData({ name: '', description: '', redirect_uris: [''], post_logout_redirect_uris: [''], allowed_group_ids: [], enable_silent_authorize: false })
             setShowCreateModal(true)
           }}
           size="sm"
@@ -700,6 +704,10 @@ export function AdminClients() {
                       {client.allowed_groups && client.allowed_groups.length > 0 && (
                         <span>{client.allowed_groups.length} 个用户组</span>
                       )}
+                      <span className="text-gray-400">·</span>
+                      <span className={client.enable_silent_authorize ? 'text-emerald-500' : 'text-gray-400'}>
+                        {client.enable_silent_authorize ? '无感登录开启' : '无感登录关闭'}
+                      </span>
                     </div>
                   </div>
 
@@ -963,7 +971,7 @@ export function AdminClients() {
         isOpen={showCreateModal}
         onClose={() => {
           setShowCreateModal(false)
-          setFormData({ name: '', description: '', redirect_uris: [''], post_logout_redirect_uris: [''], allowed_group_ids: [] })
+          setFormData({ name: '', description: '', redirect_uris: [''], post_logout_redirect_uris: [''], allowed_group_ids: [], enable_silent_authorize: false })
         }}
         title="创建应用"
         description="注册新的 OIDC 客户端"
@@ -1068,6 +1076,19 @@ export function AdminClients() {
           </div>
 
           {renderGroupSelector(formData.allowed_group_ids, toggleCreateGroup, '暂无可选用户组，请先创建用户组')}
+
+          <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.03] px-3 py-3">
+            <input
+              type="checkbox"
+              checked={formData.enable_silent_authorize}
+              onChange={(e) => setFormData({ ...formData, enable_silent_authorize: e.target.checked })}
+              className="mt-0.5 w-4 h-4 rounded border-gray-200 dark:border-white/[0.12] bg-gray-50 dark:bg-white/[0.04] text-white focus:ring-white/20"
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">启用无感授权</span>
+              <span className="block text-xs text-gray-500 dark:text-gray-500 mt-0.5">已登录且已同意过的用户，可直接返回 code，不再显示授权页</span>
+            </span>
+          </label>
         </form>
       </Modal>
 
@@ -1185,6 +1206,19 @@ export function AdminClients() {
               />
               <span className="text-sm text-gray-600 dark:text-gray-400">启用应用</span>
             </label>
+
+            <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.03] px-3 py-3">
+              <input
+                type="checkbox"
+                checked={editingClient.enable_silent_authorize}
+                onChange={(e) => setEditingClient({ ...editingClient, enable_silent_authorize: e.target.checked })}
+                className="mt-0.5 w-4 h-4 rounded border-gray-200 dark:border-white/[0.12] bg-gray-50 dark:bg-white/[0.04] text-white focus:ring-white/20"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">启用无感授权</span>
+                <span className="block text-xs text-gray-500 dark:text-gray-500 mt-0.5">已登录且已同意过的用户，可直接返回 code，不再显示授权页</span>
+              </span>
+            </label>
           </form>
         </Modal>
       )}
@@ -1234,23 +1268,38 @@ export function AdminClients() {
         <Modal
           isOpen={!!newClientSecret}
           onClose={() => setNewClientSecret(null)}
-          title="Client Secret"
-          description={`${newClientSecret.client.name} 的密钥`}
+          title="新建客户端密钥"
+          description={`${newClientSecret.client.name} · 仅展示一次`}
           size="xl"
-          footer={<Button onClick={() => setNewClientSecret(null)}>我已保存</Button>}
+          footer={<Button onClick={() => setNewClientSecret(null)}>我已复制并保存</Button>}
         >
           <div className="space-y-4">
-            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.08] p-4">
-              <p className="text-sm text-amber-300 font-medium mb-1">请立即复制并保存此密钥</p>
-              <p className="text-xs text-amber-300/70">密钥只显示一次，关闭后将无法再次查看。</p>
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.08] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm text-amber-300 font-semibold mb-1">请立即复制并保存</p>
+                  <p className="text-xs text-amber-300/80">密钥只显示一次，关闭后无法再次查看原文。</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(
+                    `CLIENT_ID=${newClientSecret.client.client_id}\nCLIENT_SECRET=${newClientSecret.secret}`,
+                    'secret-bundle',
+                  )}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-amber-400/30 px-2.5 py-1.5 text-xs text-amber-200 hover:text-amber-100 hover:bg-amber-400/10 transition-colors"
+                >
+                  {copiedField === 'secret-bundle' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  复制全部
+                </button>
+              </div>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-black/20 p-4">
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Client ID</p>
-                    <p className="text-[11px] text-gray-500 mt-1">创建后即可用于 OIDC 配置</p>
+                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Client ID</p>
+                    <p className="text-[11px] text-gray-500 mt-1">公开标识，可用于 OIDC 配置</p>
                   </div>
                   <button
                     type="button"
@@ -1269,8 +1318,8 @@ export function AdminClients() {
               <div className="rounded-2xl border border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-black/20 p-4">
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Client Secret</p>
-                    <p className="text-[11px] text-gray-500 mt-1">只有这一处能复制到原始密钥</p>
+                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Client Secret</p>
+                    <p className="text-[11px] text-gray-500 mt-1">敏感信息，仅此处可复制原始值</p>
                   </div>
                   <button
                     type="button"
