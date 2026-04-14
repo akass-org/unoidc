@@ -101,6 +101,26 @@ impl ConsentRepo {
         Ok(())
     }
 
+    /// 查找用户和客户端的授权记录（包括已撤销的最新记录）
+    pub async fn find_revoked_consent(
+        pool: &PgPool,
+        user_id: Uuid,
+        client_id: Uuid,
+    ) -> Result<Option<Consent>, sqlx::Error> {
+        sqlx::query_as::<_, Consent>(
+            r#"
+            SELECT * FROM user_consents
+            WHERE user_id = $1 AND client_id = $2
+            ORDER BY updated_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(user_id)
+        .bind(client_id)
+        .fetch_optional(pool)
+        .await
+    }
+
     /// 检查用户是否已授权客户端
     pub async fn is_authorized(
         pool: &PgPool,

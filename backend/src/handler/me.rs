@@ -22,7 +22,7 @@ use crate::{
     middleware::auth::{require_auth_user, AuthUser},
     model::UpdateUser,
     repo::RefreshTokenRepo,
-    service::{AuditService, AuthService, EmailVerificationService, UserService},
+    service::{AuditService, AuthService, ConsentService, EmailVerificationService, UserService},
     AppState,
 };
 
@@ -338,6 +338,10 @@ pub struct AppResponse {
     pub access_source: String,
 }
 
+fn format_time_rfc3339(dt: time::OffsetDateTime) -> String {
+    dt.format(&Rfc3339).unwrap_or_else(|_| dt.to_string())
+}
+
 /// 获取当前用户已授权的应用列表
 pub async fn get_apps(
     State(state): State<Arc<AppState>>,
@@ -345,19 +349,26 @@ pub async fn get_apps(
 ) -> Result<Json<Vec<AppResponse>>> {
     let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
 
-    // 获取用户的所有同意记录
-    let consents = crate::repo::ConsentRepo::find_user_consents(&state.db, auth_user.user.id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error while fetching user apps consents: {}", e);
-            AppError::InternalServerError {
-                error_code: Some("CONSENTS_FETCH_ERROR".to_string()),
-            }
-        })?;
+    // 获取用户当前有效的同意记录
+    let active_consents = sqlx::query_as::<_, crate::model::Consent>(
+        r#"
+        SELECT * FROM user_consents WHERE user_id = $1 AND revoked_at IS NULL
+        ORDER BY granted_at DESC
+        "#,
+    )
+    .bind(auth_user.user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Database error while fetching user apps consents: {}", e);
+        AppError::InternalServerError {
+            error_code: Some("CONSENTS_FETCH_ERROR".to_string()),
+        }
+    })?;
 
     let mut apps_by_client_id: HashMap<String, AppResponse> = HashMap::new();
 
-    for consent in consents {
+    for consent in active_consents {
         // 获取客户端信息
         if let Ok(Some(client)) =
             crate::repo::ClientRepo::find_by_id(&state.db, consent.client_id).await
@@ -367,7 +378,7 @@ pub async fn get_apps(
                 client_id: client.client_id,
                 client_name: client.name,
                 description: client.description,
-                granted_at: Some(consent.granted_at.to_string()),
+                granted_at: Some(format_time_rfc3339(consent.granted_at)),
                 scopes,
                 access_source: "consent".to_string(),
             });
@@ -401,6 +412,50 @@ pub async fn get_apps(
         (None, Some(_)) => std::cmp::Ordering::Greater,
         (None, None) => left.client_name.cmp(&right.client_name),
     });
+
+    Ok(Json(apps))
+}
+
+/// 获取当前用户已撤销的应用列表
+pub async fn get_revoked_apps(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<AppResponse>>> {
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
+
+    // 获取用户已撤销的同意记录
+    let revoked_consents = sqlx::query_as::<_, crate::model::Consent>(
+        r#"
+        SELECT * FROM user_consents WHERE user_id = $1 AND revoked_at IS NOT NULL
+        ORDER BY revoked_at DESC
+        "#,
+    )
+    .bind(auth_user.user.id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Database error while fetching revoked consents: {}", e);
+        AppError::InternalServerError {
+            error_code: Some("REVOKED_CONSENTS_FETCH_ERROR".to_string()),
+        }
+    })?;
+
+    let mut apps: Vec<AppResponse> = Vec::new();
+    for consent in revoked_consents {
+        if let Ok(Some(client)) =
+            crate::repo::ClientRepo::find_by_id(&state.db, consent.client_id).await
+        {
+            let scopes: Vec<String> = consent.scope.split_whitespace().map(|s| s.to_string()).collect();
+            apps.push(AppResponse {
+                client_id: client.client_id,
+                client_name: client.name,
+                description: client.description,
+                granted_at: Some(format_time_rfc3339(consent.granted_at)),
+                scopes,
+                access_source: "consent".to_string(),
+            });
+        }
+    }
 
     Ok(Json(apps))
 }
@@ -565,7 +620,7 @@ pub async fn get_consents(
                 client_id: client.client_id,
                 client_name: client.name,
                 scopes,
-                granted_at: consent.granted_at.to_string(),
+                granted_at: format_time_rfc3339(consent.granted_at),
             });
         }
     }
@@ -595,13 +650,23 @@ pub async fn revoke_consent(
             client_id: Some(client_id),
         })?;
 
-    // 删除同意记录
+    // Step 1: 删除同意记录
     crate::repo::ConsentRepo::revoke(&state.db, auth_user.user.id, client.id)
         .await
         .map_err(|e| {
             tracing::error!("Database error while revoking consent: {}", e);
             AppError::InternalServerError {
                 error_code: Some("CONSENT_REVOKE_ERROR".to_string()),
+            }
+        })?;
+
+    // Step 2: 吊销该用户对该客户端的所有 refresh token（立即生效）
+    crate::repo::RefreshTokenRepo::revoke_user_client_tokens(&state.db, auth_user.user.id, client.id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error while revoking tokens: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("TOKEN_REVOKE_ERROR".to_string()),
             }
         })?;
 
@@ -616,6 +681,76 @@ pub async fn revoke_consent(
         &state.db,
         auth_user.user.id,
         client.id,
+        None, // correlation_id
+        ip_address,
+        user_agent,
+    )
+    .await;
+
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
+/// 恢复对某个客户端的授权（反悔撤销）
+pub async fn restore_consent(
+    State(state): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Path(client_id): Path<String>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse> {
+    let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
+
+    // 查找客户端
+    let client = crate::repo::ClientRepo::find_by_client_id(&state.db, &client_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error while finding client by client_id: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("CLIENT_FETCH_ERROR".to_string()),
+            }
+        })?
+        .ok_or(AppError::ClientNotFound {
+            client_id: Some(client_id.clone()),
+        })?;
+
+    // 查找该用户之前对该客户端的授权记录（可能已撤销）
+    let previous_consent = crate::repo::ConsentRepo::find_revoked_consent(&state.db, auth_user.user.id, client.id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error while finding previous consent: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("CONSENT_FETCH_ERROR".to_string()),
+            }
+        })?;
+
+    // 用之前的 scope 重新授权，如果没有历史记录则用默认 scope
+    let scope = previous_consent
+        .map(|c| c.scope)
+        .unwrap_or_else(|| "openid profile email".to_string());
+
+    let scopes: Vec<String> = scope.split_whitespace().map(|s| s.to_string()).collect();
+
+    ConsentService::grant_consent(&state.db, auth_user.user.id, client.id, scope)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to restore consent: {}", e);
+            AppError::BusinessError {
+                code: "CONSENT_RESTORE_FAILED".to_string(),
+                message: "恢复授权失败".to_string(),
+            }
+        })?;
+
+    // 记录审计日志（如果需要）
+    let ip_address = extract_audit_ip(&headers, &addr, &state.config.trusted_proxy_ips);
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let _ = AuditService::log_consent_granted(
+        &state.db,
+        auth_user.user.id,
+        client.id,
+        &scopes,
         None, // correlation_id
         ip_address,
         user_agent,

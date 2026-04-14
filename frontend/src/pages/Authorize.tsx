@@ -184,7 +184,7 @@ export function AuthorizePage() {
       setConsentRequest({
         client_id: preview.client_id,
         client_name: preview.client_name,
-        client_description: '正在请求访问您的账户信息',
+        client_description: '正在请求你对账户信息的授权',
         scopes,
         redirect_uri: preview.redirect_uri,
       })
