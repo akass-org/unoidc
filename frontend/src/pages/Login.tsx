@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom'
-import { Eye, EyeOff, Shield } from 'lucide-react'
+import { Eye, EyeOff, Fingerprint, Shield } from 'lucide-react'
 import { useSessionStore } from '#src/stores/session'
 import { useUIConfigStore } from '#src/stores/theme'
 import { getErrorMessage } from '#src/api/client'
 import { authApi } from '#src/api/auth'
+import { passkeyApi } from '#src/api/passkey'
 import { LoginPageWrapper } from '#src/components/LoginLayout'
 import { ThemeToggle } from '#src/components/ThemeToggle'
-import { Input } from '#src/components/ui'
+import { Button, Input } from '#src/components/ui'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -21,6 +22,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [passkeyLoading, setPasskeyLoading] = useState(false)
 
   const fromState = (() => {
     const state = location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null
@@ -65,6 +67,78 @@ export function LoginPage() {
       setError(getErrorMessage(err, 'login'))
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handlePasskeyLogin() {
+    setError('')
+    setPasskeyLoading(true)
+
+    try {
+      const options = await passkeyApi.loginStart() as PublicKeyCredentialRequestOptions
+
+      const credential = await navigator.credentials.get({ publicKey: options }) as AuthenticationPublicKeyCredential | null
+      if (!credential) {
+        setError('操作已取消')
+        setPasskeyLoading(false)
+        return
+      }
+
+      const response = credential.response as AuthenticatorAssertionResponse
+
+      const finishPayload = {
+        id: credential.id,
+        rawId: btoa(String.fromCharCode(...new Uint8Array(credential.rawId as ArrayBuffer)))
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=/g, ''),
+        type: credential.type,
+        response: {
+          clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(response.clientDataJSON)))
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=/g, ''),
+          authenticatorData: btoa(String.fromCharCode(...new Uint8Array(response.authenticatorData)))
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=/g, ''),
+          signature: btoa(String.fromCharCode(...new Uint8Array(response.signature)))
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=/g, ''),
+          userHandle: response.userHandle
+            ? btoa(String.fromCharCode(...new Uint8Array(response.userHandle)))
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=/g, '')
+            : undefined,
+        },
+        clientExtensionResults: (credential as unknown as { getClientExtensionResults?: () => Record<string, unknown> }).getClientExtensionResults?.() || {},
+      }
+
+      await passkeyApi.loginFinish(finishPayload)
+      const session = await authApi.getSession() as { user: { id: string; username: string; email: string; display_name: string; picture?: string; is_admin: boolean } }
+      setUser(session.user)
+      navigate(returnTo)
+    } catch (err: unknown) {
+      let message = 'Passkey 登录失败，请尝试密码登录'
+      if (err instanceof Error && err.name === 'NotAllowedError') {
+        message = '操作已取消'
+      } else if (err instanceof Error && err.message.includes('security')) {
+        message = '检测到安全异常，请尝试密码登录'
+      } else {
+        // Try to map backend error codes from ApiError
+        const apiErr = err as { responseData?: { error_code?: string; error?: string } }
+        const code = apiErr.responseData?.error_code
+        if (code === 'AUTHENTICATION_FAILED' || apiErr.responseData?.error?.includes('安全异常')) {
+          message = '检测到安全异常，请尝试密码登录'
+        } else if (code === 'INVALID_REQUEST' || apiErr.responseData?.error?.includes('凭据')) {
+          message = '未找到匹配的凭据，请尝试密码登录'
+        }
+      }
+      setError(message)
+    } finally {
+      setPasskeyLoading(false)
     }
   }
 
@@ -164,6 +238,19 @@ export function LoginPage() {
             '登录'
           )}
         </button>
+
+        <Button
+          type="button"
+          variant="secondary"
+          size="lg"
+          className="w-full"
+          loading={passkeyLoading}
+          disabled={loading || passkeyLoading}
+          icon={<Fingerprint className="w-4 h-4" />}
+          onClick={handlePasskeyLogin}
+        >
+          使用 passkey 登录
+        </Button>
       </form>
 
       {/* Footer */}
