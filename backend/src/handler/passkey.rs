@@ -26,6 +26,7 @@ use crate::{
     service::PasskeyService,
     AppState,
 };
+use tracing::{info, warn};
 
 /// 列出当前用户的所有 passkey
 pub async fn list_passkeys(
@@ -43,6 +44,7 @@ pub async fn start_register(
     headers: HeaderMap,
 ) -> Result<impl IntoResponse> {
     let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
+    info!(user_id = %auth_user.user.id, "Starting passkey registration");
     let display_name = auth_user
         .user
         .display_name
@@ -56,6 +58,7 @@ pub async fn start_register(
         &display_name,
     )
     .await?;
+    info!(user_id = %auth_user.user.id, "Passkey registration started successfully");
     Ok(Json(ccr))
 }
 
@@ -88,8 +91,16 @@ pub async fn finish_register(
         type_: req.type_,
     };
 
-    PasskeyService::finish_registration(&state, auth_user.user.id, &reg).await?;
-    Ok(Json(serde_json::json!({ "success": true })))
+    match PasskeyService::finish_registration(&state, auth_user.user.id, &reg).await {
+        Ok(()) => {
+            info!(user_id = %auth_user.user.id, "Passkey registration finished successfully");
+            Ok(Json(serde_json::json!({ "success": true })))
+        }
+        Err(e) => {
+            warn!(user_id = %auth_user.user.id, error = %e, "Passkey registration failed");
+            Err(e)
+        }
+    }
 }
 
 /// 完成 passkey 登录的请求体
@@ -109,7 +120,9 @@ pub struct FinishLoginRequest {
 pub async fn start_login(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse> {
+    info!("Starting passkey authentication");
     let rcr = PasskeyService::start_authentication(&state).await?;
+    info!("Passkey authentication started successfully");
     Ok(Json(rcr))
 }
 
@@ -137,6 +150,7 @@ pub async fn finish_login(
 
     match PasskeyService::finish_authentication(&state, &auth).await {
         Ok((user, _counter)) => {
+            info!(user_id = %user.id, username = %user.username, "Passkey login succeeded");
             let session_input = crate::model::CreateSession::new(
                 user.id,
                 ip_address.clone(),
@@ -162,6 +176,7 @@ pub async fn finish_login(
             Ok(response)
         }
         Err(e) => {
+            warn!(error = %e, credential_id = %auth.id, "Passkey login failed");
             let reason_code = match &e {
                 AppError::AuthenticationFailed { .. } => "passkey_auth_failed",
                 AppError::InvalidRequest(_) => "passkey_invalid_request",
@@ -220,6 +235,7 @@ pub async fn start_register_anon(
     } else {
         req.display_name
     };
+    info!(username = %req.username, "Starting anonymous passkey registration");
     let ccr = PasskeyService::start_anon_registration(
         &state,
         temp_user_id,
@@ -227,6 +243,7 @@ pub async fn start_register_anon(
         &display_name,
     )
     .await?;
+    info!(username = %req.username, "Anonymous passkey registration started successfully");
     Ok(Json(AnonRegisterStartResponse {
         options: ccr,
         temp_user_id: temp_user_id.to_string(),
@@ -274,15 +291,24 @@ pub async fn finish_register_anon(
         type_: req.type_,
     };
 
-    PasskeyService::finish_anon_registration(
+    match PasskeyService::finish_anon_registration(
         &state,
         &reg,
-        req.username,
-        req.email,
-        req.display_name,
+        req.username.clone(),
+        req.email.clone(),
+        req.display_name.clone(),
     )
-    .await?;
-    Ok(Json(serde_json::json!({ "success": true })))
+    .await
+    {
+        Ok(()) => {
+            info!(username = %req.username, "Anonymous passkey registration finished successfully");
+            Ok(Json(serde_json::json!({ "success": true })))
+        }
+        Err(e) => {
+            warn!(username = %req.username, error = %e, "Anonymous passkey registration failed");
+            Err(e)
+        }
+    }
 }
 
 /// 删除 passkey
@@ -292,6 +318,8 @@ pub async fn delete_passkey(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse> {
     let auth_user = require_auth_user(&state.db, &headers, &state.config.session_secret).await?;
+    info!(user_id = %auth_user.user.id, credential_id = %id, "Deleting passkey");
     PasskeyService::delete_credential(&state, &id, auth_user.user.id).await?;
+    info!(user_id = %auth_user.user.id, credential_id = %id, "Passkey deleted successfully");
     Ok(Json(serde_json::json!({ "success": true })))
 }

@@ -1,6 +1,4 @@
-use backend::{
-    build_app_with_state, AppState, config::Config, db, metrics,
-};
+use backend::{build_app_with_state, config::Config, db, metrics, AppState};
 use std::{io::IsTerminal, net::SocketAddr};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -17,7 +15,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "backend=info,sqlx=warn,tower_http=warn".into()),
+                .unwrap_or_else(|_| "backend=debug,sqlx=info,tower_http=info".into()),
         )
         .with(
             tracing_subscriber::fmt::layer()
@@ -69,14 +67,27 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
-    let state = AppState::new(config, db, email_service);
+    // 初始化 WebAuthn
+    let origin_url = webauthn_rs::prelude::Url::parse(&config.webauthn_origin)
+        .expect("WEBAUTHN_ORIGIN must be a valid URL");
+    let webauthn = webauthn_rs::WebauthnBuilder::new(&config.webauthn_rp_id, &origin_url)
+        .expect("Invalid WebAuthn configuration")
+        .rp_name("unoidc")
+        .build()
+        .expect("Failed to build WebAuthn instance");
+
+    let state = AppState::new(config, db, email_service, webauthn);
     let app = build_app_with_state(state);
 
     // 启动服务器
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
     tracing::info!("Server listening on {}", listener.local_addr()?);
 
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
