@@ -50,11 +50,11 @@ where
         // 级别 - 彩色
         if self.ansi {
             let color = match *meta.level() {
-                tracing::Level::ERROR => "\x1b[31m", // red
-                tracing::Level::WARN => "\x1b[33m",  // yellow
-                tracing::Level::INFO => "\x1b[32m",  // green
-                tracing::Level::DEBUG => "\x1b[34m", // blue
-                tracing::Level::TRACE => "\x1b[35m", // magenta
+                tracing::Level::ERROR => "\x1b[1;31m", // bold red
+                tracing::Level::WARN => "\x1b[1;33m",  // bold yellow
+                tracing::Level::INFO => "\x1b[1;32m",  // bold green
+                tracing::Level::DEBUG => "\x1b[1;34m", // bold blue
+                tracing::Level::TRACE => "\x1b[1;35m", // bold magenta
             };
             write!(writer, "{}{:>5}\x1b[0m", color, meta.level())?;
         } else {
