@@ -12,7 +12,7 @@ use tracing_subscriber::{
     util::SubscriberInitExt,
 };
 
-/// 自定义日志格式化器：时间/target 灰色，级别彩色，消息默认色
+/// 自定义日志格式化器：时间/target 灰色，级别彩色，错误/警告消息也带色
 struct ColoredFormatter {
     ansi: bool,
 }
@@ -61,17 +61,38 @@ where
             write!(writer, "{:>5}", meta.level())?;
         }
 
-        // target / 模块路径 - 灰色
+        // target - 灰色
         if self.ansi {
             write!(writer, " \x1b[90m{}\x1b[0m", meta.target())?;
         } else {
             write!(writer, " {}", meta.target())?;
         }
 
+        // 文件:行号 - 暗淡青色，只对 debug/trace 一定显示；info/warn/error 也带上但比较低调
+        if let (Some(file), Some(line)) = (meta.file(), meta.line()) {
+            if self.ansi {
+                write!(writer, " \x1b[2;36m{}:{}\x1b[0m", file, line)?;
+            } else {
+                write!(writer, " {}:{}", file, line)?;
+            }
+        }
+
         write!(writer, ": ")?;
 
-        // 消息体
+        // 消息体：ERROR 淡红，WARN 黄，其他默认
+        if self.ansi {
+            match *meta.level() {
+                tracing::Level::ERROR => write!(writer, "\x1b[91m")?,
+                tracing::Level::WARN => write!(writer, "\x1b[93m")?,
+                _ => {}
+            }
+        }
+
         ctx.field_format().format_fields(writer.by_ref(), event)?;
+
+        if self.ansi && matches!(*meta.level(), tracing::Level::ERROR | tracing::Level::WARN) {
+            write!(writer, "\x1b[0m")?;
+        }
 
         writeln!(writer)
     }
