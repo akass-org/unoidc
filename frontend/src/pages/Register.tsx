@@ -9,6 +9,7 @@ import { ThemeToggle } from "#src/components/ThemeToggle";
 import { useUIConfigStore } from "#src/stores/theme";
 import { useSessionStore } from "#src/stores/session";
 import { Input, Button, useToast } from "#src/components/ui";
+import { parseCreationOptions, bufferToBase64url } from "#src/utils/webauthn";
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -104,11 +105,11 @@ export function RegisterPage() {
         username: passkeyForm.username,
         email: passkeyForm.email,
         display_name: passkeyForm.displayName,
-      })) as unknown as { options: PublicKeyCredentialCreationOptions };
+      })) as unknown as { options: Record<string, unknown> };
 
-      const credential = (await navigator.credentials.create({
-        publicKey: startRes.options,
-      })) as PublicKeyCredential | null;
+      const credential = (await navigator.credentials.create(
+        parseCreationOptions(startRes.options),
+      )) as PublicKeyCredential | null;
       if (!credential) {
         setError("操作已取消");
         setPasskeyLoading(false);
@@ -116,44 +117,21 @@ export function RegisterPage() {
       }
 
       const response = credential.response as AuthenticatorAttestationResponse;
+      const transports = (response.getTransports?.() ?? []) as string[];
 
       const finishPayload = {
         username: passkeyForm.username,
         email: passkeyForm.email,
         display_name: passkeyForm.displayName,
         id: credential.id,
-        rawId: btoa(String.fromCharCode(...new Uint8Array(credential.rawId as ArrayBuffer)))
-          .replace(/\+/g, "-")
-          .replace(/\//g, "_")
-          .replace(/=/g, ""),
+        rawId: bufferToBase64url(credential.rawId),
         type: credential.type,
         response: {
-          clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(response.clientDataJSON)))
-            .replace(/\+/g, "-")
-            .replace(/\//g, "_")
-            .replace(/=/g, ""),
-          attestationObject: btoa(String.fromCharCode(...new Uint8Array(response.attestationObject)))
-            .replace(/\+/g, "-")
-            .replace(/\//g, "_")
-            .replace(/=/g, ""),
-          authenticatorData: (response as unknown as { getAuthenticatorData?: () => ArrayBuffer }).getAuthenticatorData
-            ? btoa(
-                String.fromCharCode(
-                  ...new Uint8Array(
-                    (response as unknown as { getAuthenticatorData: () => ArrayBuffer }).getAuthenticatorData(),
-                  ),
-                ),
-              )
-                .replace(/\+/g, "-")
-                .replace(/\//g, "_")
-                .replace(/=/g, "")
-            : undefined,
-          transports: (response as unknown as { transports?: string[] }).transports ?? [],
+          clientDataJSON: bufferToBase64url(response.clientDataJSON),
+          attestationObject: bufferToBase64url(response.attestationObject),
+          transports,
         },
-        clientExtensionResults:
-          (
-            credential as unknown as { getClientExtensionResults?: () => Record<string, unknown> }
-          ).getClientExtensionResults?.() || {},
+        clientExtensionResults: credential.getClientExtensionResults?.() ?? {},
       };
 
       await passkeyApi.registerAnonFinish(finishPayload);

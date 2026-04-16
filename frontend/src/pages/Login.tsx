@@ -6,6 +6,7 @@ import { useUIConfigStore } from "#src/stores/theme";
 import { getErrorMessage } from "#src/api/client";
 import { authApi } from "#src/api/auth";
 import { passkeyApi } from "#src/api/passkey";
+import { startAuthentication } from "#src/utils/webauthn";
 import { LoginPageWrapper } from "#src/components/LoginLayout";
 import { ThemeToggle } from "#src/components/ThemeToggle";
 import { Button, Input } from "#src/components/ui";
@@ -103,54 +104,8 @@ export function LoginPage() {
     setPasskeyLoading(true);
 
     try {
-      const options = (await passkeyApi.loginStart()) as unknown as PublicKeyCredentialRequestOptions;
-
-      const credential = (await navigator.credentials.get({
-        publicKey: options,
-      })) as PublicKeyCredential | null;
-      if (!credential) {
-        setError("操作已取消");
-        setPasskeyLoading(false);
-        return;
-      }
-
-      const response = credential.response as AuthenticatorAssertionResponse;
-
-      const finishPayload = {
-        id: credential.id,
-        rawId: btoa(String.fromCharCode(...new Uint8Array(credential.rawId as ArrayBuffer)))
-          .replace(/\+/g, "-")
-          .replace(/\//g, "_")
-          .replace(/=/g, ""),
-        type: credential.type,
-        response: {
-          clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(response.clientDataJSON)))
-            .replace(/\+/g, "-")
-            .replace(/\//g, "_")
-            .replace(/=/g, ""),
-          authenticatorData: btoa(
-            String.fromCharCode(...new Uint8Array(response.authenticatorData)),
-          )
-            .replace(/\+/g, "-")
-            .replace(/\//g, "_")
-            .replace(/=/g, ""),
-          signature: btoa(String.fromCharCode(...new Uint8Array(response.signature)))
-            .replace(/\+/g, "-")
-            .replace(/\//g, "_")
-            .replace(/=/g, ""),
-          userHandle: response.userHandle
-            ? btoa(String.fromCharCode(...new Uint8Array(response.userHandle)))
-                .replace(/\+/g, "-")
-                .replace(/\//g, "_")
-                .replace(/=/g, "")
-            : undefined,
-        },
-        clientExtensionResults:
-          (
-            credential as unknown as { getClientExtensionResults?: () => Record<string, unknown> }
-          ).getClientExtensionResults?.() || {},
-      };
-
+      const options = await passkeyApi.loginStart();
+      const finishPayload = await startAuthentication(options);
       await passkeyApi.loginFinish(finishPayload);
       const session = (await authApi.getSession()) as {
         user: {
