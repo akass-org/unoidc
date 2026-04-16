@@ -68,15 +68,6 @@ where
             write!(writer, " {}", meta.target())?;
         }
 
-        // 文件:行号 - 暗淡青色，只对 debug/trace 一定显示；info/warn/error 也带上但比较低调
-        if let (Some(file), Some(line)) = (meta.file(), meta.line()) {
-            if self.ansi {
-                write!(writer, " \x1b[2;36m{}:{}\x1b[0m", file, line)?;
-            } else {
-                write!(writer, " {}:{}", file, line)?;
-            }
-        }
-
         write!(writer, ": ")?;
 
         // 消息体：ERROR 淡红，WARN 黄，其他默认
