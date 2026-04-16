@@ -294,7 +294,9 @@ impl PasskeyService {
                 AppError::InvalidRequest("未找到匹配的凭据".to_string())
             })?;
 
-        if result.counter() <= cred.counter as u32 {
+        // 只对 counter > 0 的凭据做 replay 检测。
+        // Bitwarden 等软件 authenticator 的 counter 始终为 0，不应拦截。
+        if cred.counter > 0 && result.counter() <= cred.counter as u32 {
             warn!(credential_id = %cred_id_str, counter = %result.counter(), stored_counter = %cred.counter, "Passkey counter replay detected");
             let _ = crate::service::AuditService::log_login_failure(
                 &state.db,
