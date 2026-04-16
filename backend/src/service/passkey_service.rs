@@ -131,15 +131,17 @@ impl PasskeyService {
                 AppError::InvalidRequest(format!("Passkey 注册验证失败: {}", e))
             })?;
 
+        // 先序列化完整 Passkey（供 start_authentication 使用）
+        let public_key =
+            serde_json::to_vec(&passkey).map_err(|e| AppError::InternalServerError {
+                error_code: Some(format!("SERIALIZE_PASSKEY: {}", e)),
+            })?;
+
         // 提取凭据内部信息（danger-credential-internals feature 提供 Into<Credential>）
         let cred: Credential = passkey.into();
         let cred_id: Vec<u8> = cred.cred_id.clone().into();
         let cred_id_str =
             base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, &cred_id);
-        let public_key =
-            serde_json::to_vec(&cred.cred).map_err(|e| AppError::InternalServerError {
-                error_code: Some(format!("SERIALIZE_PUBKEY: {}", e)),
-            })?;
         let counter = cred.counter as i64;
         let device_type = if cred.backup_eligible {
             Some("multiDevice".to_string())
@@ -199,8 +201,7 @@ impl PasskeyService {
         let passkeys: Vec<Passkey> = credentials
             .into_iter()
             .filter_map(|c| {
-                let pk: Credential = serde_json::from_slice(&c.public_key).ok()?;
-                Some(Passkey::from(pk))
+                serde_json::from_slice(&c.public_key).ok()
             })
             .collect();
 
@@ -423,14 +424,15 @@ impl PasskeyService {
                 AppError::InvalidRequest(format!("Passkey 注册验证失败: {}", e))
             })?;
 
+        let public_key =
+            serde_json::to_vec(&passkey).map_err(|e| AppError::InternalServerError {
+                error_code: Some(format!("SERIALIZE_PASSKEY: {}", e)),
+            })?;
+
         let cred: Credential = passkey.into();
         let cred_id: Vec<u8> = cred.cred_id.clone().into();
         let cred_id_str =
             base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, &cred_id);
-        let public_key =
-            serde_json::to_vec(&cred.cred).map_err(|e| AppError::InternalServerError {
-                error_code: Some(format!("SERIALIZE_PUBKEY: {}", e)),
-            })?;
         let counter = cred.counter as i64;
         let device_type = if cred.backup_eligible {
             Some("multiDevice".to_string())
