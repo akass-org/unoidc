@@ -62,6 +62,14 @@ pub fn build_app_with_state(state: Arc<AppState>) -> Router {
             post(handler::passkey::finish_register),
         )
         .route(
+            "/api/v1/passkey/register-anon/start",
+            post(handler::passkey::start_register_anon),
+        )
+        .route(
+            "/api/v1/passkey/register-anon/finish",
+            post(handler::passkey::finish_register_anon),
+        )
+        .route(
             "/api/v1/passkey/{id}",
             delete(handler::passkey::delete_passkey),
         )

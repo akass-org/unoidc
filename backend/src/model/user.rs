@@ -13,7 +13,7 @@ pub struct User {
     pub username: String,
     pub email: String,
     #[serde(skip_serializing)]
-    pub password_hash: String,
+    pub password_hash: Option<String>,
     pub display_name: Option<String>,
     pub given_name: Option<String>,
     pub family_name: Option<String>,
@@ -53,7 +53,7 @@ impl User {
 pub struct CreateUser {
     pub username: String,
     pub email: String,
-    pub password_hash: String,
+    pub password_hash: Option<String>,
     pub display_name: Option<String>,
     pub given_name: Option<String>,
     pub family_name: Option<String>,

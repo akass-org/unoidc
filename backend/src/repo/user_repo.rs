@@ -23,7 +23,10 @@ impl UserRepo {
     }
 
     /// 根据用户名查找用户
-    pub async fn find_by_username(pool: &PgPool, username: &str) -> Result<Option<User>, sqlx::Error> {
+    pub async fn find_by_username(
+        pool: &PgPool,
+        username: &str,
+    ) -> Result<Option<User>, sqlx::Error> {
         sqlx::query_as::<_, User>(
             r#"
             SELECT * FROM users WHERE username = $1
@@ -47,7 +50,11 @@ impl UserRepo {
     }
 
     /// 获取所有用户（分页）
-    pub async fn find_all(pool: &PgPool, limit: i32, offset: i32) -> Result<Vec<User>, sqlx::Error> {
+    pub async fn find_all(
+        pool: &PgPool,
+        limit: i32,
+        offset: i32,
+    ) -> Result<Vec<User>, sqlx::Error> {
         sqlx::query_as::<_, User>(
             r#"
             SELECT * FROM users
@@ -89,6 +96,39 @@ impl UserRepo {
         .bind(now)
         .bind(now)
         .fetch_one(pool)
+        .await
+    }
+
+    pub async fn create_in_tx(
+        conn: &mut sqlx::PgConnection,
+        input: CreateUser,
+    ) -> Result<User, sqlx::Error> {
+        let id = Uuid::new_v4();
+        let now = time::OffsetDateTime::now_utc();
+
+        sqlx::query_as::<_, User>(
+            r#"
+            INSERT INTO users (
+                id, username, email, password_hash, display_name, given_name, family_name,
+                email_verified, enabled, failed_login_attempts, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(&input.username)
+        .bind(&input.email)
+        .bind(&input.password_hash)
+        .bind(&input.display_name)
+        .bind(&input.given_name)
+        .bind(&input.family_name)
+        .bind(false)
+        .bind(true)
+        .bind(0)
+        .bind(now)
+        .bind(now)
+        .fetch_one(conn)
         .await
     }
 
@@ -201,7 +241,11 @@ impl UserRepo {
     }
 
     /// 锁定账户
-    pub async fn lock_account(pool: &PgPool, id: Uuid, lock_until: time::OffsetDateTime) -> Result<(), sqlx::Error> {
+    pub async fn lock_account(
+        pool: &PgPool,
+        id: Uuid,
+        lock_until: time::OffsetDateTime,
+    ) -> Result<(), sqlx::Error> {
         let now = time::OffsetDateTime::now_utc();
 
         sqlx::query(
@@ -223,7 +267,11 @@ impl UserRepo {
     /// 更新用户密码
     ///
     /// 同时更新 updated_at 时间戳
-    pub async fn update_password(pool: &PgPool, id: Uuid, password_hash: &str) -> Result<(), sqlx::Error> {
+    pub async fn update_password(
+        pool: &PgPool,
+        id: Uuid,
+        password_hash: &str,
+    ) -> Result<(), sqlx::Error> {
         let now = time::OffsetDateTime::now_utc();
 
         sqlx::query(

@@ -1,106 +1,132 @@
-import { useState, useEffect } from 'react'
-import { 
-  Palette, 
-  Type,
-  RefreshCw,
-  Shield,
-  Save
-} from 'lucide-react'
-import { adminApi } from '#src/api/admin'
-import { useUIConfigStore, type LoginLayout } from '#src/stores/theme'
-import { useApi } from '#src/hooks'
-import { 
-  Card, 
-  CardHeader,
-  Button, 
-  Input,
-  useToast
-} from '#src/components/ui'
+import { useState, useEffect } from "react";
+import { Palette, Type, RefreshCw, Shield, Save, Key } from "lucide-react";
+import { adminApi } from "#src/api/admin";
+import { useUIConfigStore, type LoginLayout } from "#src/stores/theme";
+import { useApi } from "#src/hooks";
+import { Card, CardHeader, Button, Input, useToast } from "#src/components/ui";
 
 // Animation keyframes
-const fadeIn = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`
-const slideUp = `@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`
+const fadeIn = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`;
+const slideUp = `@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`;
 
 const layoutOptions: { value: LoginLayout; label: string; description: string }[] = [
-  { value: 'split-left', label: '左侧品牌', description: '图片占 65%，品牌在左' },
-  { value: 'split-right', label: '右侧品牌', description: '图片占 65%，品牌在右' },
-  { value: 'centered', label: '简洁模式', description: '纯净居中卡片' },
-  { value: 'fullscreen', label: '背景图片模式', description: '使用背景图的沉浸式布局' },
-]
+  { value: "split-left", label: "左侧品牌", description: "图片占 65%，品牌在左" },
+  { value: "split-right", label: "右侧品牌", description: "图片占 65%，品牌在右" },
+  { value: "centered", label: "简洁模式", description: "纯净居中卡片" },
+  { value: "fullscreen", label: "背景图片模式", description: "使用背景图的沉浸式布局" },
+];
+
+function ToggleRow({
+  label,
+  helper,
+  enabled,
+  onChange,
+}: {
+  label: string;
+  helper: string;
+  enabled: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-900 dark:text-white">{label}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-600 mt-0.5">{helper}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        onClick={() => onChange(!enabled)}
+        className={`
+          w-11 h-6 rounded-full transition-colors duration-200
+          ${enabled ? "bg-black dark:bg-white" : "bg-gray-200 dark:bg-white/[0.12]"}
+        `}
+      >
+        <div
+          className={`
+            w-5 h-5 rounded-full bg-white dark:bg-black shadow-sm
+            transform transition-transform duration-200
+            ${enabled ? "translate-x-5" : "translate-x-0.5"}
+            mt-0.5
+          `}
+        />
+      </button>
+    </div>
+  );
+}
 
 export function AdminSettings() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { brandName, setBrandName, loginLayout, setLoginLayout } = useUIConfigStore()
-  const { addToast } = useToast()
-  void addToast // suppress unused warning
-  const [activeTab, setActiveTab] = useState<'branding' | 'appearance' | 'security'>('branding')
-  
+  const { brandName, setBrandName, loginLayout, setLoginLayout } = useUIConfigStore();
+  const { addToast } = useToast();
+  void addToast; // suppress unused warning
+  const [activeTab, setActiveTab] = useState<"branding" | "appearance" | "security" | "auth">(
+    "branding",
+  );
+
   // Settings state
   const [settings, setSettings] = useState({
     brand_name: brandName,
-    logo_url: '',
-    login_background_url: '',
+    logo_url: "",
+    login_background_url: "",
     login_layout: loginLayout,
     session_timeout: 24,
     max_login_attempts: 5,
-  })
+    enable_password_login: true,
+    enable_passkey_signup: true,
+  });
 
   // Load settings
   useEffect(() => {
-    loadSettings()
-  }, [])
+    loadSettings();
+  }, []);
 
   const loadSettings = async () => {
     try {
-      const data = await adminApi.getSettings() as typeof settings
-      setSettings(prev => ({ ...prev, ...data }))
+      const data = (await adminApi.getSettings()) as typeof settings;
+      setSettings((prev) => ({ ...prev, ...data }));
     } catch (err) {
       // Use defaults if backend not ready
     }
-  }
+  };
 
-  const { loading: saving, execute: saveSettings } = useApi(
-    adminApi.updateSettings,
-    {
-      successMessage: '设置已保存',
-      onSuccess: (_data) => {
-        // Update local store
-        setBrandName(settings.brand_name)
-        setLoginLayout(settings.login_layout)
-      }
-    }
-  )
+  const { loading: saving, execute: saveSettings } = useApi(adminApi.updateSettings, {
+    successMessage: "设置已保存",
+    onSuccess: (_data) => {
+      // Update local store
+      setBrandName(settings.brand_name);
+      setLoginLayout(settings.login_layout);
+    },
+  });
 
-  const { loading: rotating, execute: rotateKey } = useApi(
-    adminApi.rotateKey,
-    {
-      successMessage: '密钥轮换成功',
-    }
-  )
+  const { loading: rotating, execute: rotateKey } = useApi(adminApi.rotateKey, {
+    successMessage: "密钥轮换成功",
+  });
 
   const handleSave = async () => {
-    await saveSettings(settings)
-  }
+    await saveSettings(settings);
+  };
 
   const tabs = [
-    { id: 'branding', label: '品牌', icon: Type },
-    { id: 'appearance', label: '外观', icon: Palette },
-    { id: 'security', label: '安全', icon: Shield },
-  ]
+    { id: "branding", label: "品牌", icon: Type },
+    { id: "appearance", label: "外观", icon: Palette },
+    { id: "security", label: "安全", icon: Shield },
+    { id: "auth", label: "认证", icon: Key },
+  ];
 
   return (
-    <div className="space-y-5" style={{ animation: 'slideUp 0.3s ease-out' }}>
-      <style>{fadeIn}{slideUp}</style>
+    <div className="space-y-5" style={{ animation: "slideUp 0.3s ease-out" }}>
+      <style>
+        {fadeIn}
+        {slideUp}
+      </style>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">系统设置</h1>
           <p className="text-sm text-gray-500 mt-0.5">配置系统品牌和外观</p>
         </div>
-        <Button 
-          onClick={handleSave}
-          loading={saving}
-          size="sm"
-        >
+        <Button onClick={handleSave} loading={saving} size="sm">
           <Save className="w-4 h-4" />
           保存
         </Button>
@@ -110,33 +136,30 @@ export function AdminSettings() {
       <div className="border-b border-gray-200 dark:border-white/[0.06]">
         <nav className="flex gap-1">
           {tabs.map((tab) => {
-            const Icon = tab.icon
+            const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as typeof activeTab)}
                 className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === tab.id
-                    ? 'border-black text-black dark:border-white dark:text-white'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                    ? "border-black text-black dark:border-white dark:text-white"
+                    : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                 }`}
               >
                 <Icon className="w-4 h-4" />
                 {tab.label}
               </button>
-            )
+            );
           })}
         </nav>
       </div>
 
       {/* Branding Tab */}
-      {activeTab === 'branding' && (
+      {activeTab === "branding" && (
         <div className="space-y-4 max-w-5xl w-full">
           <Card>
-            <CardHeader 
-              title="品牌信息" 
-              subtitle="配置系统的品牌标识"
-            />
+            <CardHeader title="品牌信息" subtitle="配置系统的品牌标识" />
             <div className="space-y-4">
               <Input
                 label="品牌名称"
@@ -159,13 +182,10 @@ export function AdminSettings() {
       )}
 
       {/* Appearance Tab */}
-      {activeTab === 'appearance' && (
+      {activeTab === "appearance" && (
         <div className="space-y-4 max-w-5xl w-full">
           <Card>
-            <CardHeader 
-              title="登录页布局" 
-              subtitle="选择登录页的显示样式"
-            />
+            <CardHeader title="登录页布局" subtitle="选择登录页的显示样式" />
             <div className="grid grid-cols-2 gap-2">
               {layoutOptions.map((option) => (
                 <button
@@ -173,26 +193,29 @@ export function AdminSettings() {
                   onClick={() => setSettings({ ...settings, login_layout: option.value })}
                   className={`flex flex-col gap-1 p-3 rounded-lg border text-left transition-all ${
                     settings.login_layout === option.value
-                      ? 'border-black bg-gray-100 dark:border-white dark:bg-white/[0.04]'
-                      : 'border-gray-200 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/[0.12]'
+                      ? "border-black bg-gray-100 dark:border-white dark:bg-white/[0.04]"
+                      : "border-gray-200 dark:border-white/[0.06] hover:border-gray-300 dark:hover:border-white/[0.12]"
                   }`}
                 >
-                  <span className={`text-sm font-medium ${
-                    settings.login_layout === option.value ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
-                  }`}>
+                  <span
+                    className={`text-sm font-medium ${
+                      settings.login_layout === option.value
+                        ? "text-gray-900 dark:text-white"
+                        : "text-gray-600 dark:text-gray-400"
+                    }`}
+                  >
                     {option.label}
                   </span>
-                  <span className="text-xs text-gray-500 dark:text-gray-600">{option.description}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-600">
+                    {option.description}
+                  </span>
                 </button>
               ))}
             </div>
           </Card>
 
           <Card>
-            <CardHeader 
-              title="登录页背景" 
-              subtitle="配置登录页的背景图片"
-            />
+            <CardHeader title="登录页背景" subtitle="配置登录页的背景图片" />
             <Input
               label="背景图片 URL"
               type="url"
@@ -205,14 +228,34 @@ export function AdminSettings() {
         </div>
       )}
 
-      {/* Security Tab */}
-      {activeTab === 'security' && (
+      {/* Auth Tab */}
+      {activeTab === "auth" && (
         <div className="space-y-4 max-w-5xl w-full">
           <Card>
-            <CardHeader 
-              title="会话设置" 
-              subtitle="配置用户会话安全参数"
-            />
+            <CardHeader title="认证方式" subtitle="配置系统的登录与注册方式" />
+            <div className="space-y-5">
+              <ToggleRow
+                label="启用密码登录"
+                helper="关闭后，登录页将隐藏密码输入框，仅允许 passkey 登录"
+                enabled={settings.enable_password_login}
+                onChange={(v) => setSettings({ ...settings, enable_password_login: v })}
+              />
+              <ToggleRow
+                label="允许纯 passkey 注册"
+                helper="开启后，新用户可以直接使用 passkey 注册账户，无需设置密码"
+                enabled={settings.enable_passkey_signup}
+                onChange={(v) => setSettings({ ...settings, enable_passkey_signup: v })}
+              />
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Security Tab */}
+      {activeTab === "security" && (
+        <div className="space-y-4 max-w-5xl w-full">
+          <Card>
+            <CardHeader title="会话设置" subtitle="配置用户会话安全参数" />
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">
@@ -223,7 +266,9 @@ export function AdminSettings() {
                   min={1}
                   max={168}
                   value={settings.session_timeout}
-                  onChange={(e) => setSettings({ ...settings, session_timeout: parseInt(e.target.value) })}
+                  onChange={(e) =>
+                    setSettings({ ...settings, session_timeout: parseInt(e.target.value) })
+                  }
                   className="w-full max-w-xs bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-lg px-4 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-black/10 dark:focus:ring-white/20"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-600 mt-1.5">
@@ -239,7 +284,9 @@ export function AdminSettings() {
                   min={1}
                   max={10}
                   value={settings.max_login_attempts}
-                  onChange={(e) => setSettings({ ...settings, max_login_attempts: parseInt(e.target.value) })}
+                  onChange={(e) =>
+                    setSettings({ ...settings, max_login_attempts: parseInt(e.target.value) })
+                  }
                   className="w-full max-w-xs bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-lg px-4 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-black/10 dark:focus:ring-white/20"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-600 mt-1.5">
@@ -250,10 +297,7 @@ export function AdminSettings() {
           </Card>
 
           <Card>
-            <CardHeader 
-              title="密钥管理" 
-              subtitle="管理签名密钥"
-            />
+            <CardHeader title="密钥管理" subtitle="管理签名密钥" />
             <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-white/[0.02] rounded-lg border border-gray-200 dark:border-white/[0.06]">
               <div>
                 <p className="text-sm text-gray-900 dark:text-white">轮换签名密钥</p>
@@ -261,12 +305,7 @@ export function AdminSettings() {
                   生成新的 JWT 签名密钥
                 </p>
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={rotateKey}
-                loading={rotating}
-              >
+              <Button variant="secondary" size="sm" onClick={rotateKey} loading={rotating}>
                 <RefreshCw className="w-4 h-4" />
                 轮换
               </Button>
@@ -275,5 +314,5 @@ export function AdminSettings() {
         </div>
       )}
     </div>
-  )
+  );
 }

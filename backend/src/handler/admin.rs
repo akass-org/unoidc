@@ -3,13 +3,13 @@
 // 管理后台 API 接口
 
 use axum::{
-    extract::{Path, State, ConnectInfo},
+    extract::{ConnectInfo, Path, State},
     http::HeaderMap,
     response::IntoResponse,
     Json,
 };
-use std::net::SocketAddr;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
@@ -20,8 +20,8 @@ use crate::{
     error::{AppError, Result},
     middleware::auth::{require_auth_user, AuthUser},
     model::{CreateClient, CreateGroup, UpdateClient, UpdateGroup, UpdateUser},
-    service::{AuditService, AuthService, ClientService, GroupService, KeyService, UserService},
     repo::{AuditLogRepo, ClientRepo, GroupRepo, RefreshTokenRepo, SettingsRepo, UserRepo},
+    service::{AuditService, AuthService, ClientService, GroupService, KeyService, UserService},
     AppState,
 };
 
@@ -62,7 +62,7 @@ async fn is_user_admin(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool> {
                 error_code: Some("ADMIN_CHECK_ERROR".to_string()),
             }
         })?;
-    
+
     if let Some(group) = admin_group {
         // 检查用户是否在 admin 组
         let user_groups = crate::repo::GroupRepo::find_user_groups(pool, user_id)
@@ -73,10 +73,10 @@ async fn is_user_admin(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool> {
                     error_code: Some("ADMIN_CHECK_ERROR".to_string()),
                 }
             })?;
-        
+
         return Ok(user_groups.iter().any(|g| g.id == group.id));
     }
-    
+
     Ok(false)
 }
 
@@ -87,11 +87,11 @@ async fn require_admin(
     session_secret: &str,
 ) -> Result<AuthUser> {
     let auth_user = require_auth_user(pool, headers, session_secret).await?;
-    
+
     if is_user_admin(pool, auth_user.user.id).await? {
         return Ok(auth_user);
     }
-    
+
     Err(AppError::Forbidden {
         reason: Some("Admin access required".to_string()),
     })
@@ -150,7 +150,7 @@ async fn user_to_response(pool: &sqlx::PgPool, user: crate::model::User) -> Resu
         .into_iter()
         .map(|group| group.name)
         .collect();
-    
+
     Ok(UserResponse {
         id: user.id.to_string(),
         username: user.username,
@@ -176,12 +176,14 @@ pub async fn get_users(
 ) -> Result<Json<Vec<UserResponse>>> {
     let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
-    let users = UserService::list_users(&state.db, 1000, 0).await.map_err(|e| {
-        tracing::error!("Database error while listing users: {}", e);
-        AppError::InternalServerError {
-            error_code: Some("USERS_FETCH_ERROR".to_string()),
-        }
-    })?;
+    let users = UserService::list_users(&state.db, 1000, 0)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error while listing users: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("USERS_FETCH_ERROR".to_string()),
+            }
+        })?;
 
     let mut responses = Vec::new();
     for user in users {
@@ -219,11 +221,11 @@ pub async fn create_user(
         password,
         Some(req.display_name),
     )
-        .await
-        .map_err(|e| AppError::BusinessError {
-            code: "USER_CREATE_FAILED".to_string(),
-            message: e.to_string(),
-        })?;
+    .await
+    .map_err(|e| AppError::BusinessError {
+        code: "USER_CREATE_FAILED".to_string(),
+        message: e.to_string(),
+    })?;
 
     if req.is_admin {
         let admin_group = ensure_admin_group(&state.db).await?;
@@ -351,13 +353,15 @@ pub async fn reset_user_password(
 ) -> Result<Json<ResetPasswordResponse>> {
     let auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
 
-    let new_password = crypto::generate_secure_token(16).map_err(|e| AppError::InternalServerError {
-        error_code: Some(format!("TOKEN_GEN_ERROR: {}", e)),
-    })?;
+    let new_password =
+        crypto::generate_secure_token(16).map_err(|e| AppError::InternalServerError {
+            error_code: Some(format!("TOKEN_GEN_ERROR: {}", e)),
+        })?;
 
-    let password_hash = crypto::hash_password(&new_password).map_err(|e| AppError::InternalServerError {
-        error_code: Some(format!("HASH_ERROR: {}", e)),
-    })?;
+    let password_hash =
+        crypto::hash_password(&new_password).map_err(|e| AppError::InternalServerError {
+            error_code: Some(format!("HASH_ERROR: {}", e)),
+        })?;
 
     crate::repo::UserRepo::update_password(&state.db, id, &password_hash)
         .await
@@ -388,12 +392,13 @@ pub async fn reset_user_password(
             .and_then(|v| v.to_str().ok())
             .and_then(|s| s.split(',').next().map(|ip| ip.trim().to_string()))
             .filter(|s| !s.is_empty())
-            .or_else(|| headers
-                .get("x-real-ip")
-                .and_then(|v| v.to_str().ok())
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-            )
+            .or_else(|| {
+                headers
+                    .get("x-real-ip")
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+            })
             .unwrap_or(remote_ip)
     } else {
         remote_ip
@@ -405,11 +410,13 @@ pub async fn reset_user_password(
 
     // 记录审计日志（包含操作者信息）
     let _ = AuditService::log_password_reset(
-        &state.db, id,
+        &state.db,
+        id,
         Some(auth_user.user.id.to_string()),
         Some(ip_address),
         user_agent,
-    ).await;
+    )
+    .await;
 
     Ok(Json(ResetPasswordResponse {
         message: "Password has been reset successfully".to_string(),
@@ -528,7 +535,9 @@ pub async fn update_group(
 
     let update = UpdateGroup {
         name: req.name,
-        description: req.description.map(|d| if d.is_empty() { None } else { Some(d) }),
+        description: req
+            .description
+            .map(|d| if d.is_empty() { None } else { Some(d) }),
     };
 
     let group = GroupService::update_group(&state.db, id, update)
@@ -654,7 +663,10 @@ impl From<crate::model::Client> for ClientResponse {
     }
 }
 
-async fn client_to_response(pool: &sqlx::PgPool, client: crate::model::Client) -> Result<ClientResponse> {
+async fn client_to_response(
+    pool: &sqlx::PgPool,
+    client: crate::model::Client,
+) -> Result<ClientResponse> {
     let mut response = ClientResponse::from(client.clone());
     let group_ids = ClientRepo::find_client_groups(pool, client.id)
         .await
@@ -677,7 +689,10 @@ async fn client_to_response(pool: &sqlx::PgPool, client: crate::model::Client) -
                 group_names.push(group.name);
             }
         }
-        response.allowed_group_ids = group_ids.iter().map(|group_id| group_id.to_string()).collect();
+        response.allowed_group_ids = group_ids
+            .iter()
+            .map(|group_id| group_id.to_string())
+            .collect();
         response.allowed_groups = group_names;
     }
 
@@ -919,7 +934,7 @@ pub async fn get_audit_logs(
         LEFT JOIN clients c ON al.client_id = c.id
         ORDER BY al.created_at DESC
         LIMIT 500
-        "#
+        "#,
     )
     .fetch_all(&state.db)
     .await
@@ -961,7 +976,10 @@ pub async fn get_audit_logs(
                 user_agent: row.user_agent.unwrap_or_else(|| "unknown".to_string()),
                 outcome: row.outcome,
                 reason: row.reason_code,
-                created_at: row.created_at.format(&Rfc3339).unwrap_or_else(|_| row.created_at.to_string()),
+                created_at: row
+                    .created_at
+                    .format(&Rfc3339)
+                    .unwrap_or_else(|_| row.created_at.to_string()),
             }
         })
         .collect();
@@ -981,6 +999,8 @@ pub struct SettingsResponse {
     pub login_layout: String,
     pub session_timeout: i32,
     pub max_login_attempts: i32,
+    pub enable_password_login: bool,
+    pub enable_passkey_signup: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -991,6 +1011,8 @@ pub struct UpdateSettingsRequest {
     pub login_layout: Option<String>,
     pub session_timeout: Option<i32>,
     pub max_login_attempts: Option<i32>,
+    pub enable_password_login: Option<bool>,
+    pub enable_passkey_signup: Option<bool>,
 }
 
 /// 获取系统设置
@@ -999,21 +1021,25 @@ pub async fn get_settings(
     headers: HeaderMap,
 ) -> Result<Json<SettingsResponse>> {
     let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
-    
+
     // 从数据库读取设置
-    let settings = SettingsRepo::get_all(&state.db).await
-        .map_err(|e| AppError::InternalServerError {
-            error_code: Some(format!("DB_ERROR: {}", e)),
-        })?;
-    
+    let settings =
+        SettingsRepo::get_all(&state.db)
+            .await
+            .map_err(|e| AppError::InternalServerError {
+                error_code: Some(format!("DB_ERROR: {}", e)),
+            })?;
+
     // 转换为 map 方便查找
-    let settings_map: std::collections::HashMap<String, String> = 
-        settings.into_iter().collect();
-    
+    let settings_map: std::collections::HashMap<String, String> = settings.into_iter().collect();
+
     let get_value = |key: &str, default: &str| -> String {
-        settings_map.get(key).cloned().unwrap_or_else(|| default.to_string())
+        settings_map
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| default.to_string())
     };
-    
+
     Ok(Json(SettingsResponse {
         brand_name: get_value("brand_name", "UNOIDC"),
         logo_url: get_value("logo_url", ""),
@@ -1021,6 +1047,8 @@ pub async fn get_settings(
         login_layout: get_value("login_layout", "split-left"),
         session_timeout: get_value("session_timeout", "24").parse().unwrap_or(24),
         max_login_attempts: get_value("max_login_attempts", "5").parse().unwrap_or(5),
+        enable_password_login: get_value("enable_password_login", "true").parse().unwrap_or(true),
+        enable_passkey_signup: get_value("enable_passkey_signup", "true").parse().unwrap_or(true),
     }))
 }
 
@@ -1030,11 +1058,11 @@ pub async fn update_settings(
     headers: HeaderMap,
     Json(req): Json<UpdateSettingsRequest>,
 ) -> Result<Json<SettingsResponse>> {
-    let _auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
-    
+    let auth_user = require_admin(&state.db, &headers, &state.config.session_secret).await?;
+
     // 构建要更新的设置列表
     let mut updates: Vec<(String, String)> = Vec::new();
-    
+
     if let Some(brand_name) = req.brand_name {
         updates.push(("brand_name".to_string(), brand_name));
     }
@@ -1051,17 +1079,38 @@ pub async fn update_settings(
         updates.push(("session_timeout".to_string(), session_timeout.to_string()));
     }
     if let Some(max_login_attempts) = req.max_login_attempts {
-        updates.push(("max_login_attempts".to_string(), max_login_attempts.to_string()));
+        updates.push((
+            "max_login_attempts".to_string(),
+            max_login_attempts.to_string(),
+        ));
     }
-    
+    if let Some(enable_password_login) = req.enable_password_login {
+        updates.push(("enable_password_login".to_string(), enable_password_login.to_string()));
+    }
+    if let Some(enable_passkey_signup) = req.enable_passkey_signup {
+        updates.push(("enable_passkey_signup".to_string(), enable_passkey_signup.to_string()));
+    }
+
+    // 安全网：禁用密码登录前，当前管理员必须至少有一个 passkey
+    if req.enable_password_login == Some(false) {
+        let admin_passkeys = crate::repo::PasskeyRepo::list_by_user_id(&state.db, auth_user.user.id).await?;
+        if admin_passkeys.is_empty() {
+            return Err(AppError::BusinessError {
+                code: "CANNOT_DISABLE_PASSWORD_LOGIN".to_string(),
+                message: "您需要先绑定 passkey 才能禁用密码登录".to_string(),
+            });
+        }
+    }
+
     // 批量更新到数据库
     if !updates.is_empty() {
-        SettingsRepo::set_many(&state.db, &updates).await
+        SettingsRepo::set_many(&state.db, &updates)
+            .await
             .map_err(|e| AppError::InternalServerError {
                 error_code: Some(format!("DB_ERROR: {}", e)),
             })?;
     }
-    
+
     // 返回更新后的设置
     get_settings(State(state), headers).await
 }

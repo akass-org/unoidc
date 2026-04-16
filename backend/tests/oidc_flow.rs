@@ -59,14 +59,18 @@ async fn cleanup_test_data(state: &AppState) {
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM groups WHERE name LIKE 'oidc-group-%' OR name LIKE 'oidc-logout-group-%'")
-        .execute(&state.db)
-        .await
-        .ok();
-    sqlx::query("DELETE FROM users WHERE username LIKE 'oidc_user_%' OR username LIKE 'oidc_logout_user_%'")
-        .execute(&state.db)
-        .await
-        .ok();
+    sqlx::query(
+        "DELETE FROM groups WHERE name LIKE 'oidc-group-%' OR name LIKE 'oidc-logout-group-%'",
+    )
+    .execute(&state.db)
+    .await
+    .ok();
+    sqlx::query(
+        "DELETE FROM users WHERE username LIKE 'oidc_user_%' OR username LIKE 'oidc_logout_user_%'",
+    )
+    .execute(&state.db)
+    .await
+    .ok();
 }
 
 async fn create_test_user(state: &AppState, username: &str) -> backend::model::User {
@@ -76,7 +80,7 @@ async fn create_test_user(state: &AppState, username: &str) -> backend::model::U
         CreateUser {
             username: username.to_string(),
             email: format!("{}@example.com", username),
-            password_hash,
+            password_hash: Some(password_hash),
             display_name: Some("Test User".to_string()),
             given_name: Some("Test".to_string()),
             family_name: Some("User".to_string()),
@@ -108,7 +112,10 @@ async fn create_test_client(state: &AppState, client_id: &str) -> backend::model
     .unwrap()
 }
 
-async fn create_logged_in_app_user(state: &AppState, username: &str) -> (backend::model::User, backend::model::Session) {
+async fn create_logged_in_app_user(
+    state: &AppState,
+    username: &str,
+) -> (backend::model::User, backend::model::Session) {
     let user = create_test_user(state, username).await;
     let session = SessionRepo::create(
         &state.db,
@@ -147,7 +154,9 @@ async fn test_oidc_authorize_token_refresh_flow() {
     .unwrap();
 
     let (user, session) = create_logged_in_app_user(&state, &username).await;
-    GroupRepo::add_user_to_group(&state.db, user.id, user_group.id).await.unwrap();
+    GroupRepo::add_user_to_group(&state.db, user.id, user_group.id)
+        .await
+        .unwrap();
 
     let client = create_test_client(&state, &client_id).await;
     ClientRepo::add_client_to_group(&state.db, client.id, user_group.id)
@@ -179,7 +188,12 @@ async fn test_oidc_authorize_token_refresh_flow() {
         .unwrap();
 
     assert_eq!(authorize_response.status(), StatusCode::OK);
-    let authorize_body = authorize_response.into_body().collect().await.unwrap().to_bytes();
+    let authorize_body = authorize_response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let authorize_json: Value = serde_json::from_slice(&authorize_body).unwrap();
     assert_eq!(authorize_json["client_id"], client.client_id);
     assert_eq!(authorize_json["requires_consent"], true);
@@ -215,7 +229,12 @@ async fn test_oidc_authorize_token_refresh_flow() {
         .unwrap();
 
     assert_eq!(consent_response.status(), StatusCode::OK);
-    let consent_body = consent_response.into_body().collect().await.unwrap().to_bytes();
+    let consent_body = consent_response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let consent_json: Value = serde_json::from_slice(&consent_body).unwrap();
     let code = consent_json["code"].as_str().unwrap().to_string();
     assert!(!code.is_empty());
@@ -241,7 +260,12 @@ async fn test_oidc_authorize_token_refresh_flow() {
         .unwrap();
 
     assert_eq!(token_response.status(), StatusCode::OK);
-    let token_body = token_response.into_body().collect().await.unwrap().to_bytes();
+    let token_body = token_response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let token_json: Value = serde_json::from_slice(&token_body).unwrap();
     let refresh_token = token_json["refresh_token"].as_str().unwrap().to_string();
     assert!(!refresh_token.is_empty());
@@ -285,7 +309,12 @@ async fn test_oidc_authorize_token_refresh_flow() {
         .unwrap();
 
     assert_eq!(refresh_response.status(), StatusCode::OK);
-    let refresh_body = refresh_response.into_body().collect().await.unwrap().to_bytes();
+    let refresh_body = refresh_response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let refresh_json: Value = serde_json::from_slice(&refresh_body).unwrap();
     assert!(refresh_json["refresh_token"].is_string());
 
@@ -298,7 +327,11 @@ async fn test_oidc_authorize_rejects_invalid_redirect_uri() {
     let state = common::get_test_db().await;
     cleanup_test_data(&state).await;
 
-    let client = create_test_client(&state, &format!("oidc-client-{}", Uuid::new_v4().as_simple())).await;
+    let client = create_test_client(
+        &state,
+        &format!("oidc-client-{}", Uuid::new_v4().as_simple()),
+    )
+    .await;
     let app = build_app_with_state(state.clone());
 
     let response = app
@@ -385,7 +418,12 @@ async fn test_oidc_logout_accepts_id_token_hint_with_string_audience() {
         .unwrap();
 
     assert_eq!(consent_response.status(), StatusCode::OK);
-    let consent_body = consent_response.into_body().collect().await.unwrap().to_bytes();
+    let consent_body = consent_response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let consent_json: Value = serde_json::from_slice(&consent_body).unwrap();
     let code = consent_json["code"].as_str().unwrap().to_string();
 
@@ -410,7 +448,12 @@ async fn test_oidc_logout_accepts_id_token_hint_with_string_audience() {
         .unwrap();
 
     assert_eq!(token_response.status(), StatusCode::OK);
-    let token_body = token_response.into_body().collect().await.unwrap().to_bytes();
+    let token_body = token_response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let token_json: Value = serde_json::from_slice(&token_body).unwrap();
     let id_token = token_json["id_token"].as_str().unwrap().to_string();
 

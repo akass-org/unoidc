@@ -8,10 +8,11 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use webauthn_rs::prelude::*;
+use uuid::Uuid;
 use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
     AuthenticatorAttestationResponseRaw, RegistrationExtensionsClientOutputs,
@@ -21,6 +22,7 @@ use crate::{
     error::{AppError, Result},
     handler::auth::{build_login_session_response, extract_client_ip_secure},
     middleware::{auth::require_auth_user, request_context::RequestContext},
+    repo::SettingsRepo,
     service::PasskeyService,
     AppState,
 };
@@ -178,6 +180,109 @@ pub async fn finish_login(
             Err(e)
         }
     }
+}
+
+/// 匿名注册开始请求
+#[derive(Debug, Deserialize)]
+pub struct AnonRegisterStartRequest {
+    pub username: String,
+    pub email: String,
+    pub display_name: String,
+}
+
+/// 匿名注册开始响应
+#[derive(Debug, Serialize)]
+pub struct AnonRegisterStartResponse {
+    pub options: CreationChallengeResponse,
+    pub temp_user_id: String,
+}
+
+/// 开始匿名 passkey 注册
+pub async fn start_register_anon(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<AnonRegisterStartRequest>,
+) -> Result<impl IntoResponse> {
+    let enable_passkey_signup = SettingsRepo::get(&state.db, "enable_passkey_signup")
+        .await
+        .ok()
+        .flatten()
+        .map(|v| v.parse().unwrap_or(true))
+        .unwrap_or(true);
+    if !enable_passkey_signup {
+        return Err(AppError::Forbidden {
+            reason: Some("纯 passkey 注册已被管理员禁用".to_string()),
+        });
+    }
+
+    let temp_user_id = Uuid::new_v4();
+    let display_name = if req.display_name.is_empty() {
+        req.username.clone()
+    } else {
+        req.display_name
+    };
+    let ccr = PasskeyService::start_anon_registration(
+        &state,
+        temp_user_id,
+        &req.username,
+        &display_name,
+    )
+    .await?;
+    Ok(Json(AnonRegisterStartResponse {
+        options: ccr,
+        temp_user_id: temp_user_id.to_string(),
+    }))
+}
+
+/// 匿名注册完成请求
+#[derive(Debug, Deserialize)]
+pub struct AnonRegisterFinishRequest {
+    pub username: String,
+    pub email: String,
+    pub display_name: String,
+    pub id: String,
+    #[serde(rename = "rawId")]
+    pub raw_id: Base64UrlSafeData,
+    pub response: AuthenticatorAttestationResponseRaw,
+    #[serde(rename = "type")]
+    pub type_: String,
+    #[serde(default, alias = "clientExtensionResults", alias = "extensions")]
+    pub client_extension_results: RegistrationExtensionsClientOutputs,
+}
+
+/// 完成匿名 passkey 注册
+pub async fn finish_register_anon(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<AnonRegisterFinishRequest>,
+) -> Result<impl IntoResponse> {
+    let enable_passkey_signup = SettingsRepo::get(&state.db, "enable_passkey_signup")
+        .await
+        .ok()
+        .flatten()
+        .map(|v| v.parse().unwrap_or(true))
+        .unwrap_or(true);
+    if !enable_passkey_signup {
+        return Err(AppError::Forbidden {
+            reason: Some("纯 passkey 注册已被管理员禁用".to_string()),
+        });
+    }
+
+    let reg = RegisterPublicKeyCredential {
+        id: req.id,
+        raw_id: req.raw_id,
+        response: req.response,
+        extensions: req.client_extension_results,
+        type_: req.type_,
+    };
+
+    PasskeyService::finish_anon_registration(
+        &state,
+        &reg,
+        req.username,
+        req.email,
+        req.display_name,
+    )
+    .await?;
+    Ok(Json(serde_json::json!({ "success": true })))
 }
 
 /// 删除 passkey

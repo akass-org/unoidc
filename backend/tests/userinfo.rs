@@ -4,6 +4,10 @@
 
 mod common;
 
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
 use backend::{
     build_app_with_state,
     crypto::jwt::{self, AccessTokenClaims},
@@ -11,10 +15,6 @@ use backend::{
     repo::{ClientRepo, GroupRepo, UserRepo},
     service::KeyService,
     AppState,
-};
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
 };
 use serial_test::serial;
 use tower::ServiceExt;
@@ -42,10 +42,12 @@ async fn cleanup_test_data(state: &AppState) {
         .execute(&state.db)
         .await
         .ok();
-    sqlx::query("DELETE FROM clients WHERE client_id LIKE 'test-client-%' OR client_id = 'test-client'")
-        .execute(&state.db)
-        .await
-        .ok();
+    sqlx::query(
+        "DELETE FROM clients WHERE client_id LIKE 'test-client-%' OR client_id = 'test-client'",
+    )
+    .execute(&state.db)
+    .await
+    .ok();
     sqlx::query("DELETE FROM user_sessions WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%')")
         .execute(&state.db)
         .await
@@ -64,7 +66,7 @@ async fn create_test_user(state: &AppState, username: &str, email: &str) -> back
         CreateUser {
             username: username.to_string(),
             email: email.to_string(),
-            password_hash,
+            password_hash: Some(password_hash),
             given_name: Some("Test".to_string()),
             family_name: Some("User".to_string()),
             display_name: None,
@@ -98,7 +100,12 @@ async fn create_test_client(state: &AppState, client_id: &str) -> backend::model
 }
 
 /// 创建测试用的 access token
-async fn create_access_token(state: &AppState, user_id: uuid::Uuid, client_id: &str, scope: &str) -> String {
+async fn create_access_token(
+    state: &AppState,
+    user_id: uuid::Uuid,
+    client_id: &str,
+    scope: &str,
+) -> String {
     let jwk = KeyService::get_active_key(&state.db, &state.config.private_key_encryption_key)
         .await
         .expect("Failed to get signing key");
@@ -115,8 +122,7 @@ async fn create_access_token(state: &AppState, user_id: uuid::Uuid, client_id: &
         token_type: "oauth-access-token".to_string(),
     };
 
-    jwt::sign_jwt(&claims, &jwk.kid, &jwk.private_key_pem)
-        .expect("Failed to sign access token")
+    jwt::sign_jwt(&claims, &jwk.kid, &jwk.private_key_pem).expect("Failed to sign access token")
 }
 
 #[tokio::test]

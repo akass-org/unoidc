@@ -31,7 +31,7 @@ async fn test_change_password_revokes_sessions_and_refresh_tokens() {
         CreateUser {
             username: username.clone(),
             email: format!("{}@test.dev", username),
-            password_hash: password::hash_password(plain_password).unwrap(),
+            password_hash: Some(password::hash_password(plain_password).unwrap()),
             display_name: None,
             given_name: None,
             family_name: None,
@@ -42,7 +42,11 @@ async fn test_change_password_revokes_sessions_and_refresh_tokens() {
 
     let session = SessionRepo::create(
         &state.db,
-        CreateSession::new(user.id, Some("127.0.0.1".to_string()), Some("test-agent".to_string())),
+        CreateSession::new(
+            user.id,
+            Some("127.0.0.1".to_string()),
+            Some("test-agent".to_string()),
+        ),
     )
     .await
     .unwrap();
@@ -58,7 +62,10 @@ async fn test_change_password_revokes_sessions_and_refresh_tokens() {
             app_url: Some("http://localhost:5173".to_string()),
             redirect_uris: vec!["http://localhost:5173/callback".to_string()],
             post_logout_redirect_uris: None,
-            grant_types: vec!["authorization_code".to_string(), "refresh_token".to_string()],
+            grant_types: vec![
+                "authorization_code".to_string(),
+                "refresh_token".to_string(),
+            ],
             response_types: vec!["code".to_string()],
             token_endpoint_auth_method: "none".to_string(),
         },
@@ -84,7 +91,8 @@ async fn test_change_password_revokes_sessions_and_refresh_tokens() {
 
     let app = build_app_with_state(state.clone());
 
-    let signature = crypto::sign_session(&session.session_id, &state.config.session_secret).unwrap();
+    let signature =
+        crypto::sign_session(&session.session_id, &state.config.session_secret).unwrap();
     let cookie_value = format!("{}.{}", session.session_id, signature);
     let csrf = "test-csrf-token";
 

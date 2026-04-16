@@ -50,7 +50,9 @@ async fn main() -> anyhow::Result<()> {
         .execute(&pool)
         .await?;
 
-        UserRepo::find_by_id(&pool, user.id).await?.expect("user exists after update")
+        UserRepo::find_by_id(&pool, user.id)
+            .await?
+            .expect("user exists after update")
     } else {
         let password_hash = password::hash_password(plain_password)?;
         let created = UserRepo::create(
@@ -58,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
             CreateUser {
                 username: username.to_string(),
                 email: email.to_string(),
-                password_hash,
+                password_hash: Some(password_hash),
                 display_name: Some("aka".to_string()),
                 given_name: None,
                 family_name: None,

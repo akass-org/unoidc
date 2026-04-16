@@ -1,11 +1,6 @@
 use std::env;
 
-use backend::{
-    crypto::password,
-    db,
-    model::CreateUser,
-    repo::UserRepo,
-};
+use backend::{crypto::password, db, model::CreateUser, repo::UserRepo};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -39,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
         CreateUser {
             username: username.to_string(),
             email: email.to_string(),
-            password_hash,
+            password_hash: Some(password_hash),
             display_name: None,
             given_name: None,
             family_name: None,

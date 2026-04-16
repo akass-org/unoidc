@@ -78,6 +78,32 @@ impl PasskeyRepo {
         .await
     }
 
+    pub async fn create_in_tx(
+        conn: &mut sqlx::PgConnection,
+        input: CreatePasskeyCredential,
+    ) -> Result<PasskeyCredential, sqlx::Error> {
+        sqlx::query_as::<_, PasskeyCredential>(
+            r#"
+            INSERT INTO passkey_credentials (
+                id, user_id, public_key, counter, device_type, backed_up,
+                transports, display_name
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+            "#,
+        )
+        .bind(&input.id)
+        .bind(input.user_id)
+        .bind(&input.public_key)
+        .bind(input.counter)
+        .bind(&input.device_type)
+        .bind(input.backed_up)
+        .bind(&input.transports)
+        .bind(&input.display_name)
+        .fetch_one(conn)
+        .await
+    }
+
     /// 删除指定用户的指定凭据
     pub async fn delete(pool: &PgPool, id: &str, user_id: Uuid) -> Result<u64, sqlx::Error> {
         let result = sqlx::query(

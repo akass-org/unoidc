@@ -70,11 +70,11 @@ impl AuthService {
             });
         }
 
-        let password_valid = password::verify_password(password, &user.password_hash)
-            .map_err(|e| {
-                warn!("Password verification error: {}", e);
-                AppError::InternalServerError { error_code: None }
-            })?;
+        let hash_to_verify = user.password_hash.as_deref().unwrap_or(DUMMY_PASSWORD_HASH);
+        let password_valid = password::verify_password(password, hash_to_verify).map_err(|e| {
+            warn!("Password verification error: {}", e);
+            AppError::InternalServerError { error_code: None }
+        })?;
 
         if !password_valid {
             let failed_attempts = UserRepo::increment_failed_login(pool, user.id)
@@ -90,8 +90,8 @@ impl AuthService {
             );
 
             if failed_attempts >= MAX_FAILED_ATTEMPTS {
-                let lockout_until = OffsetDateTime::now_utc()
-                    + time::Duration::seconds(LOCKOUT_DURATION_SECONDS);
+                let lockout_until =
+                    OffsetDateTime::now_utc() + time::Duration::seconds(LOCKOUT_DURATION_SECONDS);
 
                 UserRepo::lock_account(pool, user.id, lockout_until)
                     .await
@@ -156,12 +156,10 @@ impl AuthService {
     ///
     /// 删除指定会话
     pub async fn logout(pool: &PgPool, session_id: &str) -> Result<()> {
-        SessionRepo::delete(pool, session_id)
-            .await
-            .map_err(|e| {
-                warn!("Failed to delete session: {}", e);
-                AppError::InternalServerError { error_code: None }
-            })?;
+        SessionRepo::delete(pool, session_id).await.map_err(|e| {
+            warn!("Failed to delete session: {}", e);
+            AppError::InternalServerError { error_code: None }
+        })?;
 
         info!(session_id = %session_id, "Session logged out");
 
@@ -171,7 +169,10 @@ impl AuthService {
     /// 验证会话
     ///
     /// 检查会话是否有效并更新最后访问时间
-    pub async fn validate_session(pool: &PgPool, session_id: &str) -> Result<Option<(User, Session)>> {
+    pub async fn validate_session(
+        pool: &PgPool,
+        session_id: &str,
+    ) -> Result<Option<(User, Session)>> {
         // 查找会话
         let session = match SessionRepo::find_by_session_id(pool, session_id).await {
             Ok(Some(s)) if s.is_valid() => s,
@@ -196,7 +197,11 @@ impl AuthService {
             Ok(Some(u)) if u.can_login() => u,
             Ok(Some(u)) => {
                 // 用户无法登录（被禁用或锁定）
-                warn!("User cannot login: enabled={}, locked={}", u.enabled, u.is_locked());
+                warn!(
+                    "User cannot login: enabled={}, locked={}",
+                    u.enabled,
+                    u.is_locked()
+                );
                 return Ok(None);
             }
             Ok(None) => {

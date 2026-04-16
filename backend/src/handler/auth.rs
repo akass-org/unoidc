@@ -247,6 +247,17 @@ pub async fn login(
         message: e.to_string(),
     })?;
 
+    // 检查是否启用了密码登录
+    let enable_password_login = SettingsRepo::get(&state.db, "enable_password_login").await?
+        .map(|v| v == "true")
+        .unwrap_or(true);
+    if !enable_password_login {
+        return Err(AppError::BusinessError {
+            code: "PASSWORD_LOGIN_DISABLED".to_string(),
+            message: "密码登录已被管理员禁用".to_string(),
+        });
+    }
+
     // 安全提取客户端 IP（带受信代理检查）
     let ip_address = extract_client_ip_secure(&headers, &addr, &state.config.trusted_proxy_ips);
     let user_agent = headers
@@ -682,6 +693,8 @@ pub struct PublicConfigResponse {
     pub logo_url: String,
     pub login_background_url: String,
     pub login_layout: String,
+    pub enable_password_login: bool,
+    pub enable_passkey_signup: bool,
 }
 
 /// 获取公共配置（无需登录，用于登录页）
@@ -709,6 +722,8 @@ pub async fn get_public_config(State(state): State<Arc<AppState>>) -> Result<Res
         logo_url: get_value("logo_url", ""),
         login_background_url: get_value("login_background_url", ""),
         login_layout: get_value("login_layout", "split-left"),
+        enable_password_login: get_value("enable_password_login", "true").parse().unwrap_or(true),
+        enable_passkey_signup: get_value("enable_passkey_signup", "true").parse().unwrap_or(true),
     })
     .map_err(|e| AppError::InternalServerError {
         error_code: Some(format!("JSON_ERROR: {}", e)),

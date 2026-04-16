@@ -121,7 +121,11 @@ impl GroupRepo {
     }
 
     /// 添加用户到组
-    pub async fn add_user_to_group(pool: &PgPool, user_id: Uuid, group_id: Uuid) -> Result<(), sqlx::Error> {
+    pub async fn add_user_to_group(
+        pool: &PgPool,
+        user_id: Uuid,
+        group_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
         let now = time::OffsetDateTime::now_utc();
 
         sqlx::query(
@@ -140,8 +144,67 @@ impl GroupRepo {
         Ok(())
     }
 
+    pub async fn find_by_name_in_tx(
+        conn: &mut sqlx::PgConnection,
+        name: &str,
+    ) -> Result<Option<Group>, sqlx::Error> {
+        sqlx::query_as::<_, Group>("SELECT * FROM groups WHERE name = $1")
+            .bind(name)
+            .fetch_optional(conn)
+            .await
+    }
+
+    pub async fn create_in_tx(
+        conn: &mut sqlx::PgConnection,
+        input: CreateGroup,
+    ) -> Result<Group, sqlx::Error> {
+        let id = Uuid::new_v4();
+        let now = time::OffsetDateTime::now_utc();
+
+        sqlx::query_as::<_, Group>(
+            r#"
+            INSERT INTO groups (id, name, description, created_at)
+            VALUES ($1, $2, $3, $4)
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(&input.name)
+        .bind(&input.description)
+        .bind(now)
+        .fetch_one(conn)
+        .await
+    }
+
+    pub async fn add_user_to_group_in_tx(
+        conn: &mut sqlx::PgConnection,
+        user_id: Uuid,
+        group_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        let now = time::OffsetDateTime::now_utc();
+
+        sqlx::query(
+            r#"
+            INSERT INTO user_groups (user_id, group_id, created_at)
+            VALUES ($1, $2, $3)
+            ON CONFLICT DO NOTHING
+            "#,
+        )
+        .bind(user_id)
+        .bind(group_id)
+        .bind(now)
+        .execute(conn)
+        .await?;
+
+        Ok(())
+    }
+
     /// 从组中移除用户
-    pub async fn remove_user_from_group(pool: &PgPool, user_id: Uuid, group_id: Uuid) -> Result<(), sqlx::Error> {
+    pub async fn remove_user_from_group(
+        pool: &PgPool,
+        user_id: Uuid,
+        group_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             DELETE FROM user_groups
@@ -173,7 +236,10 @@ impl GroupRepo {
     }
 
     /// 获取组中的所有用户ID
-    pub async fn find_group_user_ids(pool: &PgPool, group_id: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
+    pub async fn find_group_user_ids(
+        pool: &PgPool,
+        group_id: Uuid,
+    ) -> Result<Vec<Uuid>, sqlx::Error> {
         let results: Vec<(Uuid,)> = sqlx::query_as(
             r#"
             SELECT user_id FROM user_groups WHERE group_id = $1

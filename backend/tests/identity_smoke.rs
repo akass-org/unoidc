@@ -23,7 +23,7 @@ async fn test_user_crud() {
     let user = model::CreateUser {
         username: format!("test_user_{}", uuid::Uuid::new_v4()),
         email: format!("test_{}@example.com", uuid::Uuid::new_v4()),
-        password_hash: "test_hash".to_string(),
+        password_hash: Some("test_hash".to_string()),
         display_name: Some("Test User".to_string()),
         given_name: None,
         family_name: None,
@@ -152,17 +152,17 @@ async fn test_user_service() {
     let username = format!("testuser_{}", uuid::Uuid::new_v4());
     let email = format!("test_{}@example.com", uuid::Uuid::new_v4());
     let password = "test_password_123".to_string();
-        let display_name = "Test User"; // Added display name variable
+    let display_name = "Test User"; // Added display name variable
 
-        let user = service::UserService::register(
-            &pool,
-            username.clone(),
-            email.clone(),
-            password.clone(),
-            Some(display_name.to_string()),
-        )
-        .await
-        .expect("Failed to register user");
+    let user = service::UserService::register(
+        &pool,
+        username.clone(),
+        email.clone(),
+        password.clone(),
+        Some(display_name.to_string()),
+    )
+    .await
+    .expect("Failed to register user");
 
     assert_eq!(user.username, username);
     assert_eq!(user.email, email);
