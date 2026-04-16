@@ -1,6 +1,81 @@
 use backend::{build_app_with_state, config::Config, db, metrics, AppState};
 use std::{io::IsTerminal, net::SocketAddr};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing::{Event, Subscriber};
+use tracing_subscriber::{
+    fmt::{
+        format::{FormatEvent, FormatFields, Writer},
+        time::FormatTime,
+        FmtContext,
+    },
+    layer::SubscriberExt,
+    registry::LookupSpan,
+    util::SubscriberInitExt,
+};
+
+/// 自定义日志格式化器：时间/target 灰色，级别彩色，消息默认色
+struct ColoredFormatter {
+    ansi: bool,
+}
+
+impl ColoredFormatter {
+    fn new(ansi: bool) -> Self {
+        Self { ansi }
+    }
+}
+
+impl<S, N> FormatEvent<S, N> for ColoredFormatter
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        ctx: &FmtContext<'_, S, N>,
+        mut writer: Writer<'_>,
+        event: &Event<'_>,
+    ) -> std::fmt::Result {
+        let meta = event.metadata();
+        let timer = tracing_subscriber::fmt::time::time();
+
+        // 时间 - 灰色
+        if self.ansi {
+            write!(writer, "\x1b[90m")?;
+        }
+        timer.format_time(&mut writer)?;
+        if self.ansi {
+            write!(writer, "\x1b[0m")?;
+        }
+        write!(writer, " ")?;
+
+        // 级别 - 彩色
+        if self.ansi {
+            let color = match *meta.level() {
+                tracing::Level::ERROR => "\x1b[31m", // red
+                tracing::Level::WARN => "\x1b[33m",  // yellow
+                tracing::Level::INFO => "\x1b[32m",  // green
+                tracing::Level::DEBUG => "\x1b[34m", // blue
+                tracing::Level::TRACE => "\x1b[35m", // magenta
+            };
+            write!(writer, "{}{:>5}\x1b[0m", color, meta.level())?;
+        } else {
+            write!(writer, "{:>5}", meta.level())?;
+        }
+
+        // target / 模块路径 - 灰色
+        if self.ansi {
+            write!(writer, " \x1b[90m{}\x1b[0m", meta.target())?;
+        } else {
+            write!(writer, " {}", meta.target())?;
+        }
+
+        write!(writer, ": ")?;
+
+        // 消息体
+        ctx.field_format().format_fields(writer.by_ref(), event)?;
+
+        writeln!(writer)
+    }
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -11,7 +86,7 @@ async fn main() -> anyhow::Result<()> {
         std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal()
     };
 
-    // 初始化日志（使用 tracing-subscriber fmt 原生输出）
+    // 初始化日志（带颜色自定义）
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -20,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
         .with(
             tracing_subscriber::fmt::layer()
                 .with_ansi(ansi)
-                .with_target(true),
+                .event_format(ColoredFormatter::new(ansi)),
         )
         .init();
 
@@ -74,7 +149,7 @@ async fn main() -> anyhow::Result<()> {
         .expect("Invalid WebAuthn configuration")
         .rp_name("unoidc")
         .build()
-        .expect("Failed to build WebAuthn instance");
+        .expect("Failed to build Webauthn instance");
 
     let state = AppState::new(config, db, email_service, webauthn);
     let app = build_app_with_state(state);
