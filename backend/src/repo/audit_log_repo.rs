@@ -98,7 +98,9 @@ impl AuditLogRepo {
 
         let sql = format!(
             "SELECT * FROM audit_logs {} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
-            where_clause, param_count, param_count + 1
+            where_clause,
+            param_count,
+            param_count + 1
         );
 
         let mut query_builder = sqlx::query_as::<_, AuditLog>(&sql);
@@ -169,7 +171,10 @@ impl AuditLogRepo {
     }
 
     /// 清理过期的审计日志（可选）
-    pub async fn delete_before(pool: &PgPool, before: time::OffsetDateTime) -> Result<u64, sqlx::Error> {
+    pub async fn delete_before(
+        pool: &PgPool,
+        before: time::OffsetDateTime,
+    ) -> Result<u64, sqlx::Error> {
         let result = sqlx::query(
             r#"
             DELETE FROM audit_logs WHERE created_at < $1

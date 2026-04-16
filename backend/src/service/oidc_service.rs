@@ -110,7 +110,9 @@ impl OidcService {
     ///
     /// 在 consume_and_return 返回 None 后调用，检查 code 是否存在
     pub async fn is_auth_code_replay(pool: &PgPool, code_hash: &str) -> anyhow::Result<bool> {
-        AuthCodeRepo::exists(pool, code_hash).await.map_err(Into::into)
+        AuthCodeRepo::exists(pool, code_hash)
+            .await
+            .map_err(Into::into)
     }
 
     /// 验证 scope 列表合法性

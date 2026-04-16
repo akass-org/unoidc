@@ -5,10 +5,10 @@
 use sqlx::PgPool;
 use tracing::{info, warn};
 
-use crate::{error::AppError, model::Client};
+use crate::crypto::jwt;
 use crate::repo::{ClientRepo, RefreshTokenRepo, SessionRepo};
 use crate::service::KeyService;
-use crate::crypto::jwt;
+use crate::{error::AppError, model::Client};
 
 pub struct LogoutService;
 
@@ -17,19 +17,20 @@ impl LogoutService {
     ///
     /// 幂等操作：如果会话不存在也返回成功
     pub async fn logout_by_session(pool: &PgPool, session_id: &str) -> Result<(), AppError> {
-        SessionRepo::delete(pool, session_id)
-            .await
-            .map_err(|e| {
-                info!("Failed to delete session during logout: {}", e);
-                AppError::InternalServerError { error_code: None }
-            })?;
+        SessionRepo::delete(pool, session_id).await.map_err(|e| {
+            info!("Failed to delete session during logout: {}", e);
+            AppError::InternalServerError { error_code: None }
+        })?;
 
         info!(session_id = %session_id, "Session logged out via session_id");
         Ok(())
     }
 
     /// 撤销用户所有刷新令牌（但不删除会话）
-    pub async fn revoke_all_user_tokens(pool: &PgPool, user_id: uuid::Uuid) -> Result<u64, AppError> {
+    pub async fn revoke_all_user_tokens(
+        pool: &PgPool,
+        user_id: uuid::Uuid,
+    ) -> Result<u64, AppError> {
         RefreshTokenRepo::revoke_all_for_user(pool, user_id)
             .await
             .map_err(|e| {
@@ -55,10 +56,12 @@ impl LogoutService {
                 client_id: Some(client_id.to_string()),
             })?;
 
-        let allowed_uris = client.get_post_logout_redirect_uris()
-            .map_err(|e| AppError::InternalServerError {
-                error_code: Some(format!("PARSE_ERROR: {}", e)),
-            })?;
+        let allowed_uris =
+            client
+                .get_post_logout_redirect_uris()
+                .map_err(|e| AppError::InternalServerError {
+                    error_code: Some(format!("PARSE_ERROR: {}", e)),
+                })?;
 
         if allowed_uris.is_empty() {
             return Err(AppError::InvalidRequest(
@@ -97,14 +100,12 @@ impl LogoutService {
             });
         }
 
-        let jwks = KeyService::get_jwks(pool)
-            .await
-            .map_err(|e| {
-                warn!("Failed to get JWKS for id_token_hint validation: {}", e);
-                AppError::InternalServerError {
-                    error_code: Some("JWKS_ERROR".to_string()),
-                }
-            })?;
+        let jwks = KeyService::get_jwks(pool).await.map_err(|e| {
+            warn!("Failed to get JWKS for id_token_hint validation: {}", e);
+            AppError::InternalServerError {
+                error_code: Some("JWKS_ERROR".to_string()),
+            }
+        })?;
 
         if jwks.is_empty() {
             return Err(AppError::InternalServerError {
@@ -124,7 +125,10 @@ impl LogoutService {
                     return Ok(token_data.claims);
                 }
                 Err(e) => {
-                    warn!("id_token_hint verification attempt failed with kid={}: {}", jwk.kid, e);
+                    warn!(
+                        "id_token_hint verification attempt failed with kid={}: {}",
+                        jwk.kid, e
+                    );
                     continue;
                 }
             }
@@ -138,15 +142,20 @@ impl LogoutService {
     /// 生成 Front-Channel Logout URL
     ///
     /// 根据 OIDC Front-Channel Logout 规范构建回调 URL
-    pub fn get_front_channel_logout_uri(client: &Client, session_id: &str) -> Result<String, AppError> {
-        let front_channel_uri = client.front_channel_logout_uri
-            .as_ref()
-            .ok_or_else(|| AppError::InvalidRequest(
-                "Client does not support front-channel logout".to_string(),
-            ))?;
+    pub fn get_front_channel_logout_uri(
+        client: &Client,
+        session_id: &str,
+    ) -> Result<String, AppError> {
+        let front_channel_uri = client.front_channel_logout_uri.as_ref().ok_or_else(|| {
+            AppError::InvalidRequest("Client does not support front-channel logout".to_string())
+        })?;
 
         // 根据是否已有查询参数选择分隔符
-        let separator = if front_channel_uri.contains('?') { '&' } else { '?' };
+        let separator = if front_channel_uri.contains('?') {
+            '&'
+        } else {
+            '?'
+        };
         Ok(format!(
             "{}{}issuer={}&session_id={}",
             front_channel_uri,

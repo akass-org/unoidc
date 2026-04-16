@@ -51,14 +51,32 @@ impl TokenService {
         let jwk = KeyService::get_active_key(pool, &config.private_key_encryption_key).await?;
 
         // 签发 access_token
-        let access_token = Self::create_access_token(config, &jwk.kid, &jwk.private_key_pem, &user, client, &auth_code.scope)?;
+        let access_token = Self::create_access_token(
+            config,
+            &jwk.kid,
+            &jwk.private_key_pem,
+            &user,
+            client,
+            &auth_code.scope,
+        )?;
 
         // 签发 id_token
-        let id_token = Self::create_id_token(config, &jwk.kid, &jwk.private_key_pem, &user, client, auth_code, &groups)?;
+        let id_token = Self::create_id_token(
+            config,
+            &jwk.kid,
+            &jwk.private_key_pem,
+            &user,
+            client,
+            auth_code,
+            &groups,
+        )?;
 
         // 签发 refresh_token（如果 scope 包含 offline_access）
         let refresh_token = if auth_code.get_scopes().contains(&"offline_access") {
-            Some(Self::create_refresh_token(pool, config, user.id, client.id, &auth_code.scope).await?)
+            Some(
+                Self::create_refresh_token(pool, config, user.id, client.id, &auth_code.scope)
+                    .await?,
+            )
         } else {
             None
         };
@@ -110,7 +128,8 @@ impl TokenService {
         if stored_token.is_replaced() {
             tracing::warn!(
                 "Refresh token replay detected for user {} client {}",
-                stored_token.user_id, client.id
+                stored_token.user_id,
+                client.id
             );
             // 更新重放检测指标
             metrics::REPLAY_DETECTED_TOTAL.inc();
@@ -158,7 +177,8 @@ impl TokenService {
         if family_replay.0 > 0 {
             tracing::warn!(
                 "Refresh token family replay detected for user {} client {}",
-                stored_token.user_id, client.id
+                stored_token.user_id,
+                client.id
             );
             metrics::REPLAY_DETECTED_TOTAL.inc();
             sqlx::query(
@@ -174,7 +194,9 @@ impl TokenService {
             .execute(&mut *tx)
             .await?;
             tx.commit().await?;
-            return Err(anyhow::anyhow!("Token family replay detected - all tokens revoked"));
+            return Err(anyhow::anyhow!(
+                "Token family replay detected - all tokens revoked"
+            ));
         }
 
         // 标准有效性检查（过期/撤销）
@@ -203,11 +225,27 @@ impl TokenService {
         let jwk = KeyService::get_active_key(pool, &config.private_key_encryption_key).await?;
 
         // 签发新 access_token
-        let access_token = Self::create_access_token(config, &jwk.kid, &jwk.private_key_pem, &user, client, &stored_token.scope)?;
+        let access_token = Self::create_access_token(
+            config,
+            &jwk.kid,
+            &jwk.private_key_pem,
+            &user,
+            client,
+            &stored_token.scope,
+        )?;
 
         // 签发新 id_token
         let auth_time = stored_token.created_at;
-        let id_token = Self::create_id_token_from_refresh(config, &jwk.kid, &jwk.private_key_pem, &user, client, &stored_token.scope, auth_time, &groups)?;
+        let id_token = Self::create_id_token_from_refresh(
+            config,
+            &jwk.kid,
+            &jwk.private_key_pem,
+            &user,
+            client,
+            &stored_token.scope,
+            auth_time,
+            &groups,
+        )?;
 
         // 在同一事务内轮换 refresh token
         let new_refresh_token = Self::rotate_refresh_token(&mut tx, config, &stored_token).await?;
@@ -273,15 +311,51 @@ impl TokenService {
             amr: auth_code.get_amr().unwrap_or_default(),
             token_type: "id-token".to_string(),
             nonce: auth_code.nonce.clone(),
-            name: if scopes.contains(&"profile") { Some(user.get_display_name().to_string()) } else { None },
-            given_name: if scopes.contains(&"profile") { user.given_name.clone() } else { None },
-            family_name: if scopes.contains(&"profile") { user.family_name.clone() } else { None },
-            preferred_username: if scopes.contains(&"profile") { Some(user.username.clone()) } else { None },
-            display_name: if scopes.contains(&"profile") { user.display_name.clone() } else { None },
-            picture: if scopes.contains(&"profile") { user.picture.clone() } else { None },
-            email: if scopes.contains(&"email") { Some(user.email.clone()) } else { None },
-            email_verified: if scopes.contains(&"email") { Some(user.email_verified) } else { None },
-            groups: if scopes.contains(&"groups") { Some(groups.to_vec()) } else { None },
+            name: if scopes.contains(&"profile") {
+                Some(user.get_display_name().to_string())
+            } else {
+                None
+            },
+            given_name: if scopes.contains(&"profile") {
+                user.given_name.clone()
+            } else {
+                None
+            },
+            family_name: if scopes.contains(&"profile") {
+                user.family_name.clone()
+            } else {
+                None
+            },
+            preferred_username: if scopes.contains(&"profile") {
+                Some(user.username.clone())
+            } else {
+                None
+            },
+            display_name: if scopes.contains(&"profile") {
+                user.display_name.clone()
+            } else {
+                None
+            },
+            picture: if scopes.contains(&"profile") {
+                user.picture.clone()
+            } else {
+                None
+            },
+            email: if scopes.contains(&"email") {
+                Some(user.email.clone())
+            } else {
+                None
+            },
+            email_verified: if scopes.contains(&"email") {
+                Some(user.email_verified)
+            } else {
+                None
+            },
+            groups: if scopes.contains(&"groups") {
+                Some(groups.to_vec())
+            } else {
+                None
+            },
         };
         jwt::sign_jwt(&claims, kid, private_key_pem)
     }
@@ -311,15 +385,51 @@ impl TokenService {
             amr: vec!["pwd".to_string()],
             token_type: "id-token".to_string(),
             nonce: None,
-            name: if scopes.contains(&"profile") { Some(user.get_display_name().to_string()) } else { None },
-            given_name: if scopes.contains(&"profile") { user.given_name.clone() } else { None },
-            family_name: if scopes.contains(&"profile") { user.family_name.clone() } else { None },
-            preferred_username: if scopes.contains(&"profile") { Some(user.username.clone()) } else { None },
-            display_name: if scopes.contains(&"profile") { user.display_name.clone() } else { None },
-            picture: if scopes.contains(&"profile") { user.picture.clone() } else { None },
-            email: if scopes.contains(&"email") { Some(user.email.clone()) } else { None },
-            email_verified: if scopes.contains(&"email") { Some(user.email_verified) } else { None },
-            groups: if scopes.contains(&"groups") { Some(groups.to_vec()) } else { None },
+            name: if scopes.contains(&"profile") {
+                Some(user.get_display_name().to_string())
+            } else {
+                None
+            },
+            given_name: if scopes.contains(&"profile") {
+                user.given_name.clone()
+            } else {
+                None
+            },
+            family_name: if scopes.contains(&"profile") {
+                user.family_name.clone()
+            } else {
+                None
+            },
+            preferred_username: if scopes.contains(&"profile") {
+                Some(user.username.clone())
+            } else {
+                None
+            },
+            display_name: if scopes.contains(&"profile") {
+                user.display_name.clone()
+            } else {
+                None
+            },
+            picture: if scopes.contains(&"profile") {
+                user.picture.clone()
+            } else {
+                None
+            },
+            email: if scopes.contains(&"email") {
+                Some(user.email.clone())
+            } else {
+                None
+            },
+            email_verified: if scopes.contains(&"email") {
+                Some(user.email_verified)
+            } else {
+                None
+            },
+            groups: if scopes.contains(&"groups") {
+                Some(groups.to_vec())
+            } else {
+                None
+            },
         };
         jwt::sign_jwt(&claims, kid, private_key_pem)
     }
@@ -334,16 +444,21 @@ impl TokenService {
     ) -> Result<String> {
         let plain_token = crypto::generate_refresh_token()?;
         let token_hash = crypto::hash_token(&plain_token);
-        let expires_at = OffsetDateTime::now_utc() + time::Duration::seconds(config.refresh_token_ttl);
+        let expires_at =
+            OffsetDateTime::now_utc() + time::Duration::seconds(config.refresh_token_ttl);
 
-        RefreshTokenRepo::create(pool, CreateRefreshToken {
-            token_hash,
-            parent_token_hash: None,
-            user_id,
-            client_id,
-            scope: scope.to_string(),
-            expires_at,
-        }).await?;
+        RefreshTokenRepo::create(
+            pool,
+            CreateRefreshToken {
+                token_hash,
+                parent_token_hash: None,
+                user_id,
+                client_id,
+                scope: scope.to_string(),
+                expires_at,
+            },
+        )
+        .await?;
 
         Ok(plain_token)
     }
@@ -356,7 +471,8 @@ impl TokenService {
     ) -> Result<String> {
         let plain_token = crypto::generate_refresh_token()?;
         let new_hash = crypto::hash_token(&plain_token);
-        let expires_at = OffsetDateTime::now_utc() + time::Duration::seconds(config.refresh_token_ttl);
+        let expires_at =
+            OffsetDateTime::now_utc() + time::Duration::seconds(config.refresh_token_ttl);
         let now = OffsetDateTime::now_utc();
 
         // 创建新 token

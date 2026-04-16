@@ -34,10 +34,7 @@ pub async fn readiness(State(state): State<Arc<AppState>>) -> Json<Value> {
 }
 
 async fn check_database(state: &Arc<AppState>) -> &'static str {
-    match sqlx::query("SELECT 1")
-        .execute(&state.db)
-        .await
-    {
+    match sqlx::query("SELECT 1").execute(&state.db).await {
         Ok(_) => "up",
         Err(_) => "down",
     }

@@ -1,10 +1,10 @@
-import { Link } from 'react-router-dom'
-import type { LucideIcon } from 'lucide-react'
+import { Link } from "react-router-dom";
+import type { LucideIcon } from "lucide-react";
 
 interface PortalSwitchButtonProps {
-  to: string
-  label: string
-  icon: LucideIcon
+  to: string;
+  label: string;
+  icon: LucideIcon;
 }
 
 export function PortalSwitchButton({ to, label, icon: Icon }: PortalSwitchButtonProps) {
@@ -16,5 +16,5 @@ export function PortalSwitchButton({ to, label, icon: Icon }: PortalSwitchButton
       <Icon className="w-3.5 h-3.5" />
       {label}
     </Link>
-  )
+  );
 }

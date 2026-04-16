@@ -1,147 +1,131 @@
-import { useState, useEffect } from 'react'
-import { 
-  Tags, 
-  Search, 
-  Plus, 
-  Users,
-  Trash2,
-  Edit
-} from 'lucide-react'
-import { adminApi } from '#src/api/admin'
-import { useApi } from '#src/hooks'
-import { 
-  Card, 
-  Button, 
-  Input,
-  Modal,
-  EmptyState,
-  useToast
-} from '#src/components/ui'
-import { getErrorMessage } from '#src/api/client'
+import { useState, useEffect } from "react";
+import { Tags, Search, Plus, Users, Trash2, Edit } from "lucide-react";
+import { adminApi } from "#src/api/admin";
+import { useApi } from "#src/hooks";
+import { Card, Button, Input, Modal, EmptyState, useToast } from "#src/components/ui";
+import { getErrorMessage } from "#src/api/client";
 
 // Animation keyframes
-const fadeIn = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`
-const slideUp = `@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`
+const fadeIn = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`;
+const slideUp = `@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`;
 
 interface Group {
-  id: string
-  name: string
-  description: string
-  member_count: number
-  created_at: string
+  id: string;
+  name: string;
+  description: string;
+  member_count: number;
+  created_at: string;
 }
 
 export function AdminGroups() {
-  const [groups, setGroups] = useState<Group[]>([])
-  const [filteredGroups, setFilteredGroups] = useState<Group[]>([])
-  const [search, setSearch] = useState('')
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [editingGroup, setEditingGroup] = useState<Group | null>(null)
-  const [deletingGroup, setDeletingGroup] = useState<Group | null>(null)
-  const { addToast } = useToast()
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [filteredGroups, setFilteredGroups] = useState<Group[]>([]);
+  const [search, setSearch] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<Group | null>(null);
+  const [deletingGroup, setDeletingGroup] = useState<Group | null>(null);
+  const { addToast } = useToast();
 
   // Form states
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-  })
+    name: "",
+    description: "",
+  });
 
   // Load groups
   useEffect(() => {
-    loadGroups()
-  }, [])
+    loadGroups();
+  }, []);
 
   // Filter groups
   useEffect(() => {
-    const filtered = groups.filter(g =>
-      g.name.toLowerCase().includes(search.toLowerCase()) ||
-      g.description.toLowerCase().includes(search.toLowerCase())
-    )
-    setFilteredGroups(filtered)
-  }, [groups, search])
+    const filtered = groups.filter(
+      (g) =>
+        g.name.toLowerCase().includes(search.toLowerCase()) ||
+        g.description.toLowerCase().includes(search.toLowerCase()),
+    );
+    setFilteredGroups(filtered);
+  }, [groups, search]);
 
   const loadGroups = async () => {
     try {
-      const data = await adminApi.getGroups() as Group[]
-      setGroups(data)
+      const data = (await adminApi.getGroups()) as Group[];
+      setGroups(data);
     } catch (err) {
       addToast({
-        type: 'error',
-        title: '加载失败',
+        type: "error",
+        title: "加载失败",
         message: getErrorMessage(err),
-      })
+      });
     }
-  }
+  };
 
-  const { loading: creating, execute: createGroup } = useApi(
-    adminApi.createGroup,
-    {
-      successMessage: '用户组创建成功',
-      onSuccess: () => {
-        setShowCreateModal(false)
-        setFormData({ name: '', description: '' })
-        loadGroups()
-      }
-    }
-  )
+  const { loading: creating, execute: createGroup } = useApi(adminApi.createGroup, {
+    successMessage: "用户组创建成功",
+    onSuccess: () => {
+      setShowCreateModal(false);
+      setFormData({ name: "", description: "" });
+      loadGroups();
+    },
+  });
 
   const { loading: updating, execute: updateGroup } = useApi(
     (id: string, data: Record<string, unknown>) => adminApi.updateGroup(id, data),
     {
-      successMessage: '用户组更新成功',
+      successMessage: "用户组更新成功",
       onSuccess: () => {
-        setEditingGroup(null)
-        loadGroups()
-      }
-    }
-  )
+        setEditingGroup(null);
+        loadGroups();
+      },
+    },
+  );
 
   const { loading: deleting, execute: deleteGroup } = useApi(
     (id: string) => adminApi.deleteGroup(id),
     {
-      successMessage: '用户组已删除',
+      successMessage: "用户组已删除",
       onSuccess: () => {
-        setDeletingGroup(null)
-        loadGroups()
-      }
-    }
-  )
+        setDeletingGroup(null);
+        loadGroups();
+      },
+    },
+  );
 
   const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    await createGroup(formData)
-  }
+    e.preventDefault();
+    await createGroup(formData);
+  };
 
   const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editingGroup) return
+    e.preventDefault();
+    if (!editingGroup) return;
     await updateGroup(editingGroup.id, {
       name: editingGroup.name,
       description: editingGroup.description,
-    })
-  }
+    });
+  };
 
   const handleDelete = async () => {
-    if (!deletingGroup) return
-    await deleteGroup(deletingGroup.id)
-  }
+    if (!deletingGroup) return;
+    await deleteGroup(deletingGroup.id);
+  };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('zh-CN')
-  }
+    return new Date(dateStr).toLocaleDateString("zh-CN");
+  };
 
   return (
-    <div className="space-y-5" style={{ animation: 'slideUp 0.3s ease-out' }}>
-      <style>{fadeIn}{slideUp}</style>
+    <div className="space-y-5" style={{ animation: "slideUp 0.3s ease-out" }}>
+      <style>
+        {fadeIn}
+        {slideUp}
+      </style>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">用户组管理</h1>
           <p className="text-sm text-gray-500 mt-0.5">管理用户组和成员关系</p>
         </div>
-        <Button 
-          onClick={() => setShowCreateModal(true)}
-          size="sm"
-        >
+        <Button onClick={() => setShowCreateModal(true)} size="sm">
           <Plus className="w-4 h-4" />
           添加用户组
         </Button>
@@ -165,13 +149,17 @@ export function AdminGroups() {
       <div className="grid grid-cols-2 gap-3">
         <Card className="text-center py-4">
           <p className="text-2xl font-bold text-gray-900 dark:text-white">{groups.length}</p>
-          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">用户组</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">
+            用户组
+          </p>
         </Card>
         <Card className="text-center py-4">
           <p className="text-2xl font-bold text-gray-600 dark:text-gray-300">
             {groups.reduce((sum, g) => sum + g.member_count, 0)}
           </p>
-          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">成员关系数</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">
+            成员关系数
+          </p>
         </Card>
       </div>
 
@@ -194,7 +182,9 @@ export function AdminGroups() {
                     <Tags className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white">{group.name}</h3>
+                    <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+                      {group.name}
+                    </h3>
                     <p className="text-xs text-gray-500 mt-0.5">{group.description}</p>
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 dark:text-gray-600">
                       <div className="flex items-center gap-1">
@@ -205,7 +195,7 @@ export function AdminGroups() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setEditingGroup(group)}
@@ -239,10 +229,7 @@ export function AdminGroups() {
             <Button variant="ghost" onClick={() => setShowCreateModal(false)}>
               取消
             </Button>
-            <Button 
-              onClick={handleCreate} 
-              loading={creating}
-            >
+            <Button onClick={handleCreate} loading={creating}>
               创建
             </Button>
           </>
@@ -282,10 +269,7 @@ export function AdminGroups() {
               <Button variant="ghost" onClick={() => setEditingGroup(null)}>
                 取消
               </Button>
-              <Button 
-                onClick={handleUpdate} 
-                loading={updating}
-              >
+              <Button onClick={handleUpdate} loading={updating}>
                 保存
               </Button>
             </>
@@ -324,11 +308,7 @@ export function AdminGroups() {
               <Button variant="ghost" onClick={() => setDeletingGroup(null)}>
                 取消
               </Button>
-              <Button 
-                onClick={handleDelete}
-                loading={deleting}
-                variant="danger"
-              >
+              <Button onClick={handleDelete} loading={deleting} variant="danger">
                 删除
               </Button>
             </>
@@ -342,5 +322,5 @@ export function AdminGroups() {
         </Modal>
       )}
     </div>
-  )
+  );
 }

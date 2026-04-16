@@ -147,11 +147,10 @@ impl RateLimitService {
 
     /// 清理过期的限流记录（应由后台任务调用）
     pub async fn cleanup_expired(pool: &PgPool) -> Result<u64> {
-        let result = sqlx::query(
-            "DELETE FROM rate_limits WHERE window_start < NOW() - INTERVAL '1 hour'",
-        )
-        .execute(pool)
-        .await?;
+        let result =
+            sqlx::query("DELETE FROM rate_limits WHERE window_start < NOW() - INTERVAL '1 hour'")
+                .execute(pool)
+                .await?;
         Ok(result.rows_affected())
     }
 

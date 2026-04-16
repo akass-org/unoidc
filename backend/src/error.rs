@@ -283,8 +283,7 @@ impl IntoResponse for AppError {
 
                     OidcErrorCode::AccessDenied => StatusCode::FORBIDDEN,
 
-                    OidcErrorCode::ServerError
-                    | OidcErrorCode::TemporarilyUnavailable => {
+                    OidcErrorCode::ServerError | OidcErrorCode::TemporarilyUnavailable => {
                         StatusCode::INTERNAL_SERVER_ERROR
                     }
                 };

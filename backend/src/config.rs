@@ -23,6 +23,8 @@ pub struct Config {
     pub rate_limit_token_window_secs: u64,
     pub cors_allowed_origins: Vec<String>,
     pub trusted_proxy_ips: Vec<String>,
+    pub webauthn_rp_id: String,
+    pub webauthn_origin: String,
     pub smtp: SmtpConfig,
 }
 
@@ -75,6 +77,8 @@ impl Default for Config {
                 "http://localhost:3000".to_string(),
             ],
             trusted_proxy_ips: vec![],
+            webauthn_rp_id: "localhost".to_string(),
+            webauthn_origin: "http://localhost:5173".to_string(),
             smtp: SmtpConfig::default(),
         }
     }
@@ -145,6 +149,9 @@ impl Config {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect(),
+            webauthn_rp_id: env::var("WEBAUTHN_RP_ID").unwrap_or_else(|_| "localhost".to_string()),
+            webauthn_origin: env::var("WEBAUTHN_ORIGIN")
+                .unwrap_or_else(|_| "http://localhost:5173".to_string()),
             smtp: SmtpConfig {
                 host: env::var("SMTP_HOST").unwrap_or_default(),
                 port: env::var("SMTP_PORT")
@@ -228,8 +235,14 @@ impl Config {
             warnings.push("APP_BASE_URL should use HTTPS in production");
         }
 
-        if self.cors_allowed_origins.iter().any(|o| o.contains("localhost")) {
-            warnings.push("CORS_ALLOWED_ORIGINS contains localhost origins - should be removed in production");
+        if self
+            .cors_allowed_origins
+            .iter()
+            .any(|o| o.contains("localhost"))
+        {
+            warnings.push(
+                "CORS_ALLOWED_ORIGINS contains localhost origins - should be removed in production",
+            );
         }
 
         if !warnings.is_empty() {

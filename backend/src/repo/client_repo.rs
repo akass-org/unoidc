@@ -23,7 +23,10 @@ impl ClientRepo {
     }
 
     /// 根据 client_id 查找客户端
-    pub async fn find_by_client_id(pool: &PgPool, client_id: &str) -> Result<Option<Client>, sqlx::Error> {
+    pub async fn find_by_client_id(
+        pool: &PgPool,
+        client_id: &str,
+    ) -> Result<Option<Client>, sqlx::Error> {
         sqlx::query_as::<_, Client>(
             r#"
             SELECT * FROM clients WHERE client_id = $1
@@ -62,9 +65,9 @@ impl ClientRepo {
         let now = time::OffsetDateTime::now_utc();
         let redirect_uris = serde_json::to_value(&input.redirect_uris)
             .map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
-        let post_logout_redirect_uris = input.post_logout_redirect_uris
-            .map(|uris| serde_json::to_value(&uris)
-                .map_err(|e| sqlx::Error::Encode(Box::new(e))))
+        let post_logout_redirect_uris = input
+            .post_logout_redirect_uris
+            .map(|uris| serde_json::to_value(&uris).map_err(|e| sqlx::Error::Encode(Box::new(e))))
             .transpose()?;
         let grant_types = serde_json::to_value(&input.grant_types)
             .map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
@@ -104,9 +107,15 @@ impl ClientRepo {
     }
 
     /// 更新客户端
-    pub async fn update(pool: &PgPool, id: Uuid, input: UpdateClient) -> Result<Client, sqlx::Error> {
+    pub async fn update(
+        pool: &PgPool,
+        id: Uuid,
+        input: UpdateClient,
+    ) -> Result<Client, sqlx::Error> {
         let now = time::OffsetDateTime::now_utc();
-        let mut client = Self::find_by_id(pool, id).await?.ok_or(sqlx::Error::RowNotFound)?;
+        let mut client = Self::find_by_id(pool, id)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)?;
 
         if let Some(name) = input.name {
             client.name = name;
@@ -122,8 +131,10 @@ impl ClientRepo {
                 .map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
         }
         if let Some(post_logout_redirect_uris) = input.post_logout_redirect_uris {
-            client.post_logout_redirect_uris = Some(serde_json::to_value(&post_logout_redirect_uris)
-                .map_err(|e| sqlx::Error::Encode(Box::new(e)))?);
+            client.post_logout_redirect_uris = Some(
+                serde_json::to_value(&post_logout_redirect_uris)
+                    .map_err(|e| sqlx::Error::Encode(Box::new(e)))?,
+            );
         }
         if let Some(enabled) = input.enabled {
             client.enabled = enabled;
@@ -177,7 +188,11 @@ impl ClientRepo {
     }
 
     /// 更新客户端密钥
-    pub async fn update_secret(pool: &PgPool, id: Uuid, secret_hash: String) -> Result<(), sqlx::Error> {
+    pub async fn update_secret(
+        pool: &PgPool,
+        id: Uuid,
+        secret_hash: String,
+    ) -> Result<(), sqlx::Error> {
         let now = time::OffsetDateTime::now_utc();
 
         sqlx::query(
@@ -197,7 +212,11 @@ impl ClientRepo {
     }
 
     /// 添加客户端到组
-    pub async fn add_client_to_group(pool: &PgPool, client_id: Uuid, group_id: Uuid) -> Result<(), sqlx::Error> {
+    pub async fn add_client_to_group(
+        pool: &PgPool,
+        client_id: Uuid,
+        group_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             INSERT INTO client_groups (client_id, group_id)
@@ -214,7 +233,11 @@ impl ClientRepo {
     }
 
     /// 从组中移除客户端
-    pub async fn remove_client_from_group(pool: &PgPool, client_id: Uuid, group_id: Uuid) -> Result<(), sqlx::Error> {
+    pub async fn remove_client_from_group(
+        pool: &PgPool,
+        client_id: Uuid,
+        group_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             DELETE FROM client_groups
@@ -265,7 +288,10 @@ impl ClientRepo {
     }
 
     /// 获取客户端可访问的组列表
-    pub async fn find_client_groups(pool: &PgPool, client_id: Uuid) -> Result<Vec<uuid::Uuid>, sqlx::Error> {
+    pub async fn find_client_groups(
+        pool: &PgPool,
+        client_id: Uuid,
+    ) -> Result<Vec<uuid::Uuid>, sqlx::Error> {
         let results: Vec<(Uuid,)> = sqlx::query_as(
             r#"
             SELECT group_id FROM client_groups WHERE client_id = $1
@@ -279,7 +305,10 @@ impl ClientRepo {
     }
 
     /// 查找当前用户可见的客户端（通过用户组关系）
-    pub async fn find_accessible_clients_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Client>, sqlx::Error> {
+    pub async fn find_accessible_clients_for_user(
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<Vec<Client>, sqlx::Error> {
         sqlx::query_as::<_, Client>(
             r#"
             SELECT c.*
@@ -319,7 +348,11 @@ impl ClientRepo {
     }
 
     /// 设置客户端的无感授权选项
-    pub async fn set_silent_authorize(pool: &PgPool, client_id: Uuid, enable: bool) -> Result<Client, sqlx::Error> {
+    pub async fn set_silent_authorize(
+        pool: &PgPool,
+        client_id: Uuid,
+        enable: bool,
+    ) -> Result<Client, sqlx::Error> {
         let now = time::OffsetDateTime::now_utc();
         sqlx::query_as::<_, Client>(
             r#"

@@ -57,10 +57,7 @@ impl PasswordResetTokenRepo {
     }
 
     /// 撤销用户所有待处理的密码重置令牌
-    pub async fn revoke_all_for_user(
-        pool: &PgPool,
-        user_id: Uuid,
-    ) -> Result<(), sqlx::Error> {
+    pub async fn revoke_all_for_user(pool: &PgPool, user_id: Uuid) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM password_reset_tokens WHERE user_id = $1 AND consumed_at IS NULL")
             .bind(user_id)
             .execute(pool)
@@ -70,10 +67,9 @@ impl PasswordResetTokenRepo {
 
     /// 清理过期的令牌
     pub async fn cleanup_expired(pool: &PgPool) -> Result<u64, sqlx::Error> {
-        let result =
-            sqlx::query("DELETE FROM password_reset_tokens WHERE expires_at < NOW()")
-                .execute(pool)
-                .await?;
+        let result = sqlx::query("DELETE FROM password_reset_tokens WHERE expires_at < NOW()")
+            .execute(pool)
+            .await?;
         Ok(result.rows_affected())
     }
 }

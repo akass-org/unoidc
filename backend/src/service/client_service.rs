@@ -13,7 +13,10 @@ pub struct ClientService;
 
 impl ClientService {
     /// 创建新客户端
-    pub async fn create_client(pool: &PgPool, mut input: CreateClient) -> Result<(Client, Option<String>), anyhow::Error> {
+    pub async fn create_client(
+        pool: &PgPool,
+        mut input: CreateClient,
+    ) -> Result<(Client, Option<String>), anyhow::Error> {
         // 验证客户端名称
         if input.name.is_empty() || input.name.len() > 128 {
             return Err(anyhow::anyhow!("Client name must be 1-128 characters"));
@@ -51,7 +54,10 @@ impl ClientService {
     }
 
     /// 根据 client_id 获取客户端
-    pub async fn get_client_by_client_id(pool: &PgPool, client_id: &str) -> Result<Client, anyhow::Error> {
+    pub async fn get_client_by_client_id(
+        pool: &PgPool,
+        client_id: &str,
+    ) -> Result<Client, anyhow::Error> {
         ClientRepo::find_by_client_id(pool, client_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Client not found"))
@@ -94,7 +100,9 @@ impl ClientService {
         let client = Self::get_client(pool, id).await?;
 
         if client.is_public {
-            return Err(anyhow::anyhow!("Cannot regenerate secret for public client"));
+            return Err(anyhow::anyhow!(
+                "Cannot regenerate secret for public client"
+            ));
         }
 
         let plain_secret = crypto::generate_client_secret()?;
@@ -127,8 +135,7 @@ impl ClientService {
         }
 
         // 机密客户端需要验证密钥
-        let secret = client_secret
-            .ok_or_else(|| anyhow::anyhow!("Client secret required"))?;
+        let secret = client_secret.ok_or_else(|| anyhow::anyhow!("Client secret required"))?;
 
         let secret_hash = client
             .client_secret_hash

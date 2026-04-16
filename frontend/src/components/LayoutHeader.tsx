@@ -1,24 +1,24 @@
-import { Link, useNavigate } from 'react-router-dom'
-import { LogOut, Settings, Monitor, LayoutDashboard } from 'lucide-react'
-import { useSessionStore } from '#src/stores/session'
-import { useUIConfigStore } from '#src/stores/theme'
-import { ThemeToggle } from './ThemeToggle'
-import { PortalSwitchButton } from './PortalSwitchButton'
-import { Avatar } from '#src/components/ui'
+import { Link, useNavigate } from "react-router-dom";
+import { LogOut, Settings, Monitor, LayoutDashboard } from "lucide-react";
+import { useSessionStore } from "#src/stores/session";
+import { useUIConfigStore } from "#src/stores/theme";
+import { ThemeToggle } from "./ThemeToggle";
+import { PortalSwitchButton } from "./PortalSwitchButton";
+import { Avatar } from "#src/components/ui";
 
 interface LayoutHeaderProps {
-  isAdminPortal: boolean
+  isAdminPortal: boolean;
 }
 
 export function LayoutHeader({ isAdminPortal }: LayoutHeaderProps) {
-  const { user, logout } = useSessionStore()
-  const { brandName } = useUIConfigStore()
-  const navigate = useNavigate()
+  const { user, logout } = useSessionStore();
+  const { brandName } = useUIConfigStore();
+  const navigate = useNavigate();
 
   const handleLogout = async () => {
-    await logout()
-    navigate('/login')
-  }
+    await logout();
+    navigate("/login");
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-gray-200 dark:border-white/[0.06]">
@@ -31,9 +31,7 @@ export function LayoutHeader({ isAdminPortal }: LayoutHeaderProps) {
                 <LayoutDashboard className="w-4 h-4 text-white dark:text-black" />
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-sm text-gray-900 dark:text-white">
-                  {brandName}
-                </span>
+                <span className="font-bold text-sm text-gray-900 dark:text-white">{brandName}</span>
                 <span className="text-[10px] font-bold text-gray-500 dark:text-gray-600 px-1.5 py-0.5 bg-gray-100 dark:bg-white/[0.04] rounded">
                   管理
                 </span>
@@ -44,9 +42,7 @@ export function LayoutHeader({ isAdminPortal }: LayoutHeaderProps) {
               <div className="w-7 h-7 rounded-md bg-black dark:bg-white flex items-center justify-center">
                 <Settings className="w-4 h-4 text-white dark:text-black" />
               </div>
-              <span className="font-bold text-sm text-gray-900 dark:text-white">
-                {brandName}
-              </span>
+              <span className="font-bold text-sm text-gray-900 dark:text-white">{brandName}</span>
             </Link>
           )}
 
@@ -66,7 +62,7 @@ export function LayoutHeader({ isAdminPortal }: LayoutHeaderProps) {
 
               <div className="flex items-center gap-2">
                 <Avatar
-                  name={user?.display_name || user?.username || '?'}
+                  name={user?.display_name || user?.username || "?"}
                   src={user?.picture}
                   size="sm"
                 />
@@ -87,5 +83,5 @@ export function LayoutHeader({ isAdminPortal }: LayoutHeaderProps) {
         </div>
       </div>
     </header>
-  )
+  );
 }

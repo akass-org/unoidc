@@ -115,7 +115,15 @@ mod tests {
 
         // 错误的签名应该失败
         assert!(!verify_session_signature(session_id, "invalid-sig", secret));
-        assert!(!verify_session_signature("wrong-session", &signature, secret));
-        assert!(!verify_session_signature(session_id, &signature, "wrong-secret"));
+        assert!(!verify_session_signature(
+            "wrong-session",
+            &signature,
+            secret
+        ));
+        assert!(!verify_session_signature(
+            session_id,
+            &signature,
+            "wrong-secret"
+        ));
     }
 }

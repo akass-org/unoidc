@@ -8,7 +8,7 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use backend::{build_app_with_state};
+use backend::build_app_with_state;
 use serde_json::{json, Value};
 use serial_test::serial;
 use tower::ServiceExt;
@@ -75,8 +75,11 @@ async fn test_invalid_request_error() {
         .unwrap();
 
     let status = response.status();
-    assert!(status == StatusCode::UNPROCESSABLE_ENTITY || status == StatusCode::BAD_REQUEST,
-        "Expected 400 or 422, got {}", status);
+    assert!(
+        status == StatusCode::UNPROCESSABLE_ENTITY || status == StatusCode::BAD_REQUEST,
+        "Expected 400 or 422, got {}",
+        status
+    );
     let error_json = parse_error_response(response).await;
     if let Some(json) = error_json {
         assert!(json.get("error").is_some());
@@ -126,8 +129,11 @@ async fn test_oidc_protocol_error() {
         .unwrap();
 
     let status = response.status();
-    assert!(status.is_client_error() || status == StatusCode::FOUND,
-        "Expected client error or redirect, got {}", status);
+    assert!(
+        status.is_client_error() || status == StatusCode::FOUND,
+        "Expected client error or redirect, got {}",
+        status
+    );
     if status != StatusCode::FOUND && status != StatusCode::SEE_OTHER {
         if let Some(error_json) = parse_error_response(response).await {
             if let Some(error_code) = error_json.get("error") {
@@ -166,8 +172,14 @@ async fn test_error_response_format() {
     if let Some(error_json) = error_json {
         assert!(error_json.get("error").is_some(), "Missing 'error' field");
         assert!(error_json.get("status").is_some(), "Missing 'status' field");
-        assert!(error_json["error"].is_string(), "'error' should be a string");
-        assert!(error_json["status"].is_number(), "'status' should be a number");
+        assert!(
+            error_json["error"].is_string(),
+            "'error' should be a string"
+        );
+        assert!(
+            error_json["status"].is_number(),
+            "'status' should be a number"
+        );
     }
 }
 
@@ -199,11 +211,26 @@ async fn test_internal_server_error_sanitization() {
         if let Some(error_json) = parse_error_response(response).await {
             let error_str = error_json.to_string().to_lowercase();
 
-            assert!(!error_str.contains("sqlx"), "Error response should not contain SQLx details");
-            assert!(!error_str.contains("database"), "Error response should not contain database details");
-            assert!(!error_str.contains("stack"), "Error response should not contain stack trace");
-            assert!(!error_str.contains("password"), "Error response should not contain password");
-            assert!(!error_str.contains("token"), "Error response should not contain token");
+            assert!(
+                !error_str.contains("sqlx"),
+                "Error response should not contain SQLx details"
+            );
+            assert!(
+                !error_str.contains("database"),
+                "Error response should not contain database details"
+            );
+            assert!(
+                !error_str.contains("stack"),
+                "Error response should not contain stack trace"
+            );
+            assert!(
+                !error_str.contains("password"),
+                "Error response should not contain password"
+            );
+            assert!(
+                !error_str.contains("token"),
+                "Error response should not contain token"
+            );
         }
     }
 }

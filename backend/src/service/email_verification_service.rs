@@ -36,7 +36,8 @@ impl EmailVerificationService {
         EmailVerificationTokenRepo::revoke_all_for_user(pool, user.id).await?;
 
         // Create new verification token
-        let expires_at = OffsetDateTime::now_utc() + time::Duration::minutes(EMAIL_TOKEN_TTL_MINUTES);
+        let expires_at =
+            OffsetDateTime::now_utc() + time::Duration::minutes(EMAIL_TOKEN_TTL_MINUTES);
 
         EmailVerificationTokenRepo::create(
             pool,
@@ -55,10 +56,7 @@ impl EmailVerificationService {
     /// Verify email change by token
     ///
     /// Returns new verified email address
-    pub async fn verify_email_change(
-        pool: &PgPool,
-        plain_token: &str,
-    ) -> Result<String> {
+    pub async fn verify_email_change(pool: &PgPool, plain_token: &str) -> Result<String> {
         let token_hash = crypto::hash_token(plain_token);
 
         // Find and validate token
@@ -71,8 +69,7 @@ impl EmailVerificationService {
         }
 
         // Mark as verified
-        let verified_token = EmailVerificationTokenRepo::mark_verified(pool, token.id)
-            .await?;
+        let verified_token = EmailVerificationTokenRepo::mark_verified(pool, token.id).await?;
 
         Ok(verified_token.new_email)
     }

@@ -6,13 +6,13 @@ use argon2::{
 
 /// 密码哈希配置
 const PASSWORD_MEMORY_COST: u32 = 19_456; // 19 MiB
-const PASSWORD_TIME_COST: u32 = 2;        // 2 iterations
-const PASSWORD_PARALLELISM: u32 = 1;      // 1 thread
+const PASSWORD_TIME_COST: u32 = 2; // 2 iterations
+const PASSWORD_PARALLELISM: u32 = 1; // 1 thread
 
 /// 客户端密钥哈希配置（更高强度）
 const CLIENT_SECRET_MEMORY_COST: u32 = 64_000; // 64 MiB
-const CLIENT_SECRET_TIME_COST: u32 = 3;         // 3 iterations
-const CLIENT_SECRET_PARALLELISM: u32 = 4;       // 4 threads
+const CLIENT_SECRET_TIME_COST: u32 = 3; // 3 iterations
+const CLIENT_SECRET_PARALLELISM: u32 = 4; // 4 threads
 
 /// 使用 Argon2id 对密码进行哈希
 ///
@@ -70,7 +70,12 @@ pub fn hash_client_secret(secret: &str) -> Result<String> {
         CLIENT_SECRET_PARALLELISM,
         None,
     )
-    .map_err(|e| anyhow::anyhow!("Failed to create Argon2id parameters for client secret: {}", e))?;
+    .map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to create Argon2id parameters for client secret: {}",
+            e
+        )
+    })?;
 
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 

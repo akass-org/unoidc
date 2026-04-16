@@ -1,21 +1,21 @@
-import type { ReactNode } from 'react'
+import type { ReactNode } from "react";
 
 interface TableProps<T> {
-  data: T[]
-  columns: Column<T>[]
-  keyExtractor: (item: T) => string
-  emptyState?: ReactNode
-  loading?: boolean
-  tableMinWidth?: string
-  disableRowTransition?: boolean
-  disableRowDivider?: boolean
+  data: T[];
+  columns: Column<T>[];
+  keyExtractor: (item: T) => string;
+  emptyState?: ReactNode;
+  loading?: boolean;
+  tableMinWidth?: string;
+  disableRowTransition?: boolean;
+  disableRowDivider?: boolean;
 }
 
 interface Column<T> {
-  key: string
-  title: string
-  render: (item: T) => ReactNode
-  width?: string
+  key: string;
+  title: string;
+  render: (item: T) => ReactNode;
+  width?: string;
 }
 
 export function Table<T>({
@@ -33,11 +33,11 @@ export function Table<T>({
       <div className="w-full h-48 flex items-center justify-center">
         <div className="w-6 h-6 border border-gray-300 dark:border-white/20 border-t-gray-900 dark:border-t-white rounded-full animate-spin" />
       </div>
-    )
+    );
   }
 
   if (data.length === 0 && emptyState) {
-    return <div className="py-12">{emptyState}</div>
+    return <div className="py-12">{emptyState}</div>;
   }
 
   return (
@@ -56,11 +56,13 @@ export function Table<T>({
             ))}
           </tr>
         </thead>
-        <tbody className={disableRowDivider ? '' : 'divide-y divide-gray-200 dark:divide-white/[0.04]'}>
+        <tbody
+          className={disableRowDivider ? "" : "divide-y divide-gray-200 dark:divide-white/[0.04]"}
+        >
           {data.map((item) => (
             <tr
               key={keyExtractor(item)}
-              className={`hover:bg-gray-50 dark:hover:bg-white/[0.02] ${disableRowTransition ? '' : 'transition-colors'}`}
+              className={`hover:bg-gray-50 dark:hover:bg-white/[0.02] ${disableRowTransition ? "" : "transition-colors"}`}
             >
               {columns.map((col) => (
                 <td key={col.key} className="py-3.5 px-4">
@@ -72,7 +74,7 @@ export function Table<T>({
         </tbody>
       </table>
     </div>
-  )
+  );
 }
 
 export function EmptyState({
@@ -81,10 +83,10 @@ export function EmptyState({
   description,
   action,
 }: {
-  icon: ReactNode
-  title: string
-  description: string
-  action?: ReactNode
+  icon: ReactNode;
+  title: string;
+  description: string;
+  action?: ReactNode;
 }) {
   return (
     <div className="text-center py-12">
@@ -95,5 +97,5 @@ export function EmptyState({
       <p className="text-sm text-gray-500 dark:text-gray-600 mb-4">{description}</p>
       {action}
     </div>
-  )
+  );
 }

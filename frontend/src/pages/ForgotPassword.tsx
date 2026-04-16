@@ -1,32 +1,32 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Shield, CheckCircle, ArrowLeft } from 'lucide-react'
-import { authApi } from '#src/api/auth'
-import { LoginPageWrapper } from '#src/components/LoginLayout'
-import { ThemeToggle } from '#src/components/ThemeToggle'
-import { useUIConfigStore } from '#src/stores/theme'
-import { Input } from '#src/components/ui'
-import { getErrorMessage } from '#src/api/client'
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { Shield, CheckCircle, ArrowLeft } from "lucide-react";
+import { authApi } from "#src/api/auth";
+import { LoginPageWrapper } from "#src/components/LoginLayout";
+import { ThemeToggle } from "#src/components/ThemeToggle";
+import { useUIConfigStore } from "#src/stores/theme";
+import { Input } from "#src/components/ui";
+import { getErrorMessage } from "#src/api/client";
 
 export function ForgotPasswordPage() {
-  const { brandName } = useUIConfigStore()
+  const { brandName } = useUIConfigStore();
 
-  const [email, setEmail] = useState('')
-  const [submitted, setSubmitted] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [email, setEmail] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
+    e.preventDefault();
+    setError("");
+    setLoading(true);
     try {
-      await authApi.forgotPassword(email)
-      setSubmitted(true)
+      await authApi.forgotPassword(email);
+      setSubmitted(true);
     } catch (err) {
-      setError(getErrorMessage(err))
+      setError(getErrorMessage(err));
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -38,9 +38,7 @@ export function ForgotPasswordPage() {
           <div className="flex items-center justify-center w-8 h-8 rounded-md bg-black dark:bg-white">
             <Shield className="w-4 h-4 text-white dark:text-black" />
           </div>
-          <span className="text-sm font-bold text-gray-900 dark:text-white">
-            {brandName}
-          </span>
+          <span className="text-sm font-bold text-gray-900 dark:text-white">{brandName}</span>
         </div>
         <ThemeToggle />
       </div>
@@ -70,9 +68,7 @@ export function ForgotPasswordPage() {
         <>
           {/* Title */}
           <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-              找回密码
-            </h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">找回密码</h1>
             <p className="text-sm text-gray-500 dark:text-gray-500">
               输入您的邮箱地址，我们将发送重置链接
             </p>
@@ -100,19 +96,31 @@ export function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              style={{ backgroundColor: '#ffffff', color: '#000000' }}
+              style={{ backgroundColor: "#ffffff", color: "#000000" }}
               className="w-full py-3 px-4 font-bold text-sm rounded-md hover:bg-gray-100 btn-transition disabled:opacity-50 disabled:cursor-not-allowed border border-white"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
                   发送中...
                 </span>
               ) : (
-                '发送重置链接'
+                "发送重置链接"
               )}
             </button>
           </form>
@@ -130,5 +138,5 @@ export function ForgotPasswordPage() {
         </>
       )}
     </LoginPageWrapper>
-  )
+  );
 }

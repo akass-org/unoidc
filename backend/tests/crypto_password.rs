@@ -44,7 +44,8 @@ fn client_secret_hash_and_verify() {
     assert!(password::verify_client_secret(secret, &hash).expect("Failed to verify client secret"));
 
     // 验证错误的密钥应该失败
-    assert!(!password::verify_client_secret("wrong_secret", &hash).expect("Failed to verify client secret"));
+    assert!(!password::verify_client_secret("wrong_secret", &hash)
+        .expect("Failed to verify client secret"));
 }
 
 #[test]

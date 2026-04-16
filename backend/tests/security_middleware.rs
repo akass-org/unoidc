@@ -42,8 +42,8 @@ fn test_app_with_remote_addr(config: Config, remote_addr: Option<String>) -> axu
     // 重新构建 router，插入自定义的 remote_addr
     use axum::routing::{get, post};
     use backend::middleware::{
-        request_context_middleware, rate_limit_middleware,
-        create_cors_layer, CorsConfig, csrf_middleware,
+        create_cors_layer, csrf_middleware, rate_limit_middleware, request_context_middleware,
+        CorsConfig,
     };
 
     let cors_config = CorsConfig {
@@ -56,12 +56,24 @@ fn test_app_with_remote_addr(config: Config, remote_addr: Option<String>) -> axu
         .route("/health/ready", get(backend::handler::health::readiness))
         .route("/api/v1/auth/login", post(backend::handler::auth::login))
         .route("/api/v1/auth/logout", post(backend::handler::auth::logout))
-        .route("/api/v1/auth/register", post(backend::handler::auth::register))
-        .route("/api/v1/auth/forgot-password", post(backend::handler::auth::forgot_password))
-        .route("/.well-known/openid-configuration", get(backend::handler::oidc::discovery))
+        .route(
+            "/api/v1/auth/register",
+            post(backend::handler::auth::register),
+        )
+        .route(
+            "/api/v1/auth/forgot-password",
+            post(backend::handler::auth::forgot_password),
+        )
+        .route(
+            "/.well-known/openid-configuration",
+            get(backend::handler::oidc::discovery),
+        )
         .route("/jwks.json", get(backend::handler::oidc::jwks))
         .route("/authorize", get(backend::handler::oidc::authorize_get))
-        .route("/authorize/consent", post(backend::handler::oidc::authorize_consent))
+        .route(
+            "/authorize/consent",
+            post(backend::handler::oidc::authorize_consent),
+        )
         .route("/token", post(backend::handler::oidc::token))
         .route("/userinfo", get(backend::handler::oidc::userinfo))
         .route("/logout", get(backend::handler::oidc::logout))
@@ -80,15 +92,18 @@ async fn test_cors_allows_configured_origin() {
     let config = test_config();
     let app = test_app(config);
 
-    let response = app.oneshot(
-        Request::builder()
-            .method("OPTIONS")
-            .uri("/.well-known/openid-configuration")
-            .header("origin", "http://localhost:5173")
-            .header("access-control-request-method", "GET")
-            .body(Body::empty())
-            .unwrap(),
-    ).await.unwrap();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/.well-known/openid-configuration")
+                .header("origin", "http://localhost:5173")
+                .header("access-control-request-method", "GET")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     let allow_origin = response.headers().get("access-control-allow-origin");
@@ -101,15 +116,18 @@ async fn test_cors_rejects_unknown_origin() {
     let config = test_config();
     let app = test_app(config);
 
-    let response = app.oneshot(
-        Request::builder()
-            .method("OPTIONS")
-            .uri("/.well-known/openid-configuration")
-            .header("origin", "https://evil.example.com")
-            .header("access-control-request-method", "GET")
-            .body(Body::empty())
-            .unwrap(),
-    ).await.unwrap();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/.well-known/openid-configuration")
+                .header("origin", "https://evil.example.com")
+                .header("access-control-request-method", "GET")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     let allow_origin = response.headers().get("access-control-allow-origin");
     assert!(allow_origin.is_none());
@@ -120,14 +138,17 @@ async fn test_cors_exposes_custom_headers() {
     let config = test_config();
     let app = test_app(config);
 
-    let response = app.oneshot(
-        Request::builder()
-            .method("GET")
-            .uri("/.well-known/openid-configuration")
-            .header("origin", "http://localhost:5173")
-            .body(Body::empty())
-            .unwrap(),
-    ).await.unwrap();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/.well-known/openid-configuration")
+                .header("origin", "http://localhost:5173")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     let expose = response.headers().get("access-control-expose-headers");
     assert!(expose.is_some());
@@ -141,17 +162,23 @@ async fn test_csrf_allows_exempt_login_path() {
     let config = test_config();
     let app = test_app(config);
 
-    let response = app.oneshot(
-        Request::builder()
-            .method("POST")
-            .uri("/api/v1/auth/login")
-            .header("content-type", "application/json")
-            .body(Body::from(json!({
-                "username": "test",
-                "password": "test"
-            }).to_string()))
-            .unwrap(),
-    ).await.unwrap();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "username": "test",
+                        "password": "test"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     assert_ne!(response.status(), StatusCode::FORBIDDEN);
 }
@@ -161,14 +188,17 @@ async fn test_csrf_allows_exempt_token_path() {
     let config = test_config();
     let app = test_app(config);
 
-    let response = app.oneshot(
-        Request::builder()
-            .method("POST")
-            .uri("/token")
-            .header("content-type", "application/x-www-form-urlencoded")
-            .body(Body::from("grant_type=authorization_code&code=test"))
-            .unwrap(),
-    ).await.unwrap();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/token")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("grant_type=authorization_code&code=test"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     assert_ne!(response.status(), StatusCode::FORBIDDEN);
 }
@@ -178,18 +208,24 @@ async fn test_csrf_rejects_post_without_token() {
     let config = test_config();
     let app = test_app(config);
 
-    let response = app.oneshot(
-        Request::builder()
-            .method("POST")
-            .uri("/api/v1/auth/register")
-            .header("content-type", "application/json")
-            .body(Body::from(json!({
-                "username": "test",
-                "email": "test@test.com",
-                "password": "password123"
-            }).to_string()))
-            .unwrap(),
-    ).await.unwrap();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "username": "test",
+                        "email": "test@test.com",
+                        "password": "password123"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
     let body = response.into_body().collect().await.unwrap().to_bytes();
@@ -204,20 +240,26 @@ async fn test_csrf_allows_matching_tokens() {
 
     let csrf_token = "test-csrf-token-value";
 
-    let response = app.oneshot(
-        Request::builder()
-            .method("POST")
-            .uri("/api/v1/auth/register")
-            .header("content-type", "application/json")
-            .header("cookie", format!("unoidc_csrf={}", csrf_token))
-            .header("x-csrf-token", csrf_token)
-            .body(Body::from(json!({
-                "username": "test",
-                "email": "test@test.com",
-                "password": "password123"
-            }).to_string()))
-            .unwrap(),
-    ).await.unwrap();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .header("cookie", format!("unoidc_csrf={}", csrf_token))
+                .header("x-csrf-token", csrf_token)
+                .body(Body::from(
+                    json!({
+                        "username": "test",
+                        "email": "test@test.com",
+                        "password": "password123"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     assert_ne!(response.status(), StatusCode::FORBIDDEN);
 }
@@ -227,20 +269,26 @@ async fn test_csrf_rejects_mismatched_tokens() {
     let config = test_config();
     let app = test_app(config);
 
-    let response = app.oneshot(
-        Request::builder()
-            .method("POST")
-            .uri("/api/v1/auth/register")
-            .header("content-type", "application/json")
-            .header("cookie", "unoidc_csrf=token-a")
-            .header("x-csrf-token", "token-b")
-            .body(Body::from(json!({
-                "username": "test",
-                "email": "test@test.com",
-                "password": "password123"
-            }).to_string()))
-            .unwrap(),
-    ).await.unwrap();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .header("cookie", "unoidc_csrf=token-a")
+                .header("x-csrf-token", "token-b")
+                .body(Body::from(
+                    json!({
+                        "username": "test",
+                        "email": "test@test.com",
+                        "password": "password123"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
@@ -250,13 +298,16 @@ async fn test_csrf_allows_get_requests() {
     let config = test_config();
     let app = test_app(config);
 
-    let response = app.oneshot(
-        Request::builder()
-            .method("GET")
-            .uri("/.well-known/openid-configuration")
-            .body(Body::empty())
-            .unwrap(),
-    ).await.unwrap();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/.well-known/openid-configuration")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
 }
@@ -269,22 +320,29 @@ async fn test_rate_limit_includes_retry_after_header() {
     let app = test_app(config);
 
     for _ in 0..2 {
-        let _ = app.clone().oneshot(
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/.well-known/openid-configuration")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+
+    let response = app
+        .oneshot(
             Request::builder()
                 .method("GET")
                 .uri("/.well-known/openid-configuration")
                 .body(Body::empty())
                 .unwrap(),
-        ).await.unwrap();
-    }
-
-    let response = app.oneshot(
-        Request::builder()
-            .method("GET")
-            .uri("/.well-known/openid-configuration")
-            .body(Body::empty())
-            .unwrap(),
-    ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
     assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     let retry_after = response.headers().get("retry-after");
@@ -300,34 +358,49 @@ async fn test_rate_limit_login_tier_stricter() {
     let app = test_app(config);
 
     for _ in 0..2 {
-        let _ = app.clone().oneshot(
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"username": "a", "password": "b"}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+
+    let response = app
+        .clone()
+        .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/auth/login")
                 .header("content-type", "application/json")
-                .body(Body::from(json!({"username": "a", "password": "b"}).to_string()))
+                .body(Body::from(
+                    json!({"username": "a", "password": "b"}).to_string(),
+                ))
                 .unwrap(),
-        ).await.unwrap();
-    }
-
-    let response = app.clone().oneshot(
-        Request::builder()
-            .method("POST")
-            .uri("/api/v1/auth/login")
-            .header("content-type", "application/json")
-            .body(Body::from(json!({"username": "a", "password": "b"}).to_string()))
-            .unwrap(),
-    ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
     assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
-    let other_response = app.oneshot(
-        Request::builder()
-            .method("GET")
-            .uri("/.well-known/openid-configuration")
-            .body(Body::empty())
-            .unwrap(),
-    ).await.unwrap();
+    let other_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/.well-known/openid-configuration")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(other_response.status(), StatusCode::OK);
 }
@@ -341,24 +414,31 @@ async fn test_rate_limit_token_tier_stricter() {
     let app = test_app(config);
 
     for _ in 0..2 {
-        let _ = app.clone().oneshot(
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/token")
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(Body::from("grant_type=authorization_code&code=test"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+
+    let response = app
+        .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/token")
                 .header("content-type", "application/x-www-form-urlencoded")
                 .body(Body::from("grant_type=authorization_code&code=test"))
                 .unwrap(),
-        ).await.unwrap();
-    }
-
-    let response = app.oneshot(
-        Request::builder()
-            .method("POST")
-            .uri("/token")
-            .header("content-type", "application/x-www-form-urlencoded")
-            .body(Body::from("grant_type=authorization_code&code=test"))
-            .unwrap(),
-    ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
     assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 }
@@ -373,35 +453,46 @@ async fn test_ip_from_x_forwarded_for() {
     let app = test_app_with_remote_addr(config, Some("127.0.0.1:12345".to_string()));
 
     for _ in 0..2 {
-        let _ = app.clone().oneshot(
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/.well-known/openid-configuration")
+                    .header("x-forwarded-for", "1.2.3.4")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+
+    let response = app
+        .clone()
+        .oneshot(
             Request::builder()
                 .method("GET")
                 .uri("/.well-known/openid-configuration")
                 .header("x-forwarded-for", "1.2.3.4")
                 .body(Body::empty())
                 .unwrap(),
-        ).await.unwrap();
-    }
-
-    let response = app.clone().oneshot(
-        Request::builder()
-            .method("GET")
-            .uri("/.well-known/openid-configuration")
-            .header("x-forwarded-for", "1.2.3.4")
-            .body(Body::empty())
-            .unwrap(),
-    ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
     assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
-    let other_ip_response = app.oneshot(
-        Request::builder()
-            .method("GET")
-            .uri("/.well-known/openid-configuration")
-            .header("x-forwarded-for", "5.6.7.8")
-            .body(Body::empty())
-            .unwrap(),
-    ).await.unwrap();
+    let other_ip_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/.well-known/openid-configuration")
+                .header("x-forwarded-for", "5.6.7.8")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     assert_eq!(other_ip_response.status(), StatusCode::OK);
 }

@@ -37,7 +37,8 @@ impl RequestContext {
             .get(REQUEST_ID_HEADER)
             .and_then(|h| h.to_str().ok())
             .filter(|s| {
-                s.parse::<uuid::Uuid>().is_ok() || s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+                s.parse::<uuid::Uuid>().is_ok()
+                    || s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
             })
             .map(|s| s.to_string())
             .unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -47,7 +48,10 @@ impl RequestContext {
             .get(CORRELATION_ID_HEADER)
             .and_then(|h| h.to_str().ok())
             .filter(|s| s.len() <= 128) // 限制长度防止 HTTP 头过大
-            .filter(|s| s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.~".contains(c)))
+            .filter(|s| {
+                s.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "-_.~".contains(c))
+            })
             .map(|s| s.to_string());
 
         Self {
@@ -64,10 +68,7 @@ impl RequestContext {
 /// 2. 提取关联 ID（如果存在）
 /// 3. 将请求 ID 添加到响应 header
 /// 4. 将请求 ID 注入到 tracing span 中
-pub async fn request_context_middleware(
-    req: Request,
-    next: Next,
-) -> Response<Body> {
+pub async fn request_context_middleware(req: Request, next: Next) -> Response<Body> {
     let started_at = Instant::now();
 
     // Extract or create request context
@@ -92,20 +93,23 @@ pub async fn request_context_middleware(
     }
 
     // 在 span 中执行后续处理
-    let response = span.in_scope(|| async {
-        // 将请求上下文添加到请求扩展中
-        let mut req = req;
-        req.extensions_mut().insert(ctx.clone());
+    let response = span
+        .in_scope(|| async {
+            // 将请求上下文添加到请求扩展中
+            let mut req = req;
+            req.extensions_mut().insert(ctx.clone());
 
-        // 执行后续中间件和处理器
-        next.run(req).await
-    })
-    .await;
+            // 执行后续中间件和处理器
+            next.run(req).await
+        })
+        .await;
 
     // 将请求 ID 添加到响应 header
     let mut response = response;
     if let Ok(header_value) = HeaderValue::from_str(&ctx.request_id) {
-        response.headers_mut().insert(REQUEST_ID_HEADER, header_value);
+        response
+            .headers_mut()
+            .insert(REQUEST_ID_HEADER, header_value);
     }
 
     // 如果有关联 ID，也添加到响应 header
@@ -153,12 +157,7 @@ pub async fn request_context_middleware(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{
-        body::Body,
-        http::Request,
-        Router,
-        routing::get,
-    };
+    use axum::{body::Body, http::Request, routing::get, Router};
     use tower::ServiceExt;
 
     #[tokio::test]
@@ -168,12 +167,7 @@ mod tests {
             .layer(axum::middleware::from_fn(request_context_middleware));
 
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/test")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri("/test").body(Body::empty()).unwrap())
             .await
             .unwrap();
 

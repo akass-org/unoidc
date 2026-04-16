@@ -81,9 +81,12 @@ impl EmailService {
     async fn send(&self, to: &str, subject: &str, text_body: &str) -> Result<()> {
         use lettre::{Message, SmtpTransport, Transport};
 
-        let from = self.from_address.parse::<lettre::message::Mailbox>()
+        let from = self
+            .from_address
+            .parse::<lettre::message::Mailbox>()
             .map_err(|e| anyhow::anyhow!("Invalid from address: {}", e))?;
-        let to_addr = to.parse::<lettre::message::Mailbox>()
+        let to_addr = to
+            .parse::<lettre::message::Mailbox>()
             .map_err(|e| anyhow::anyhow!("Invalid to address: {}", e))?;
 
         let email = Message::builder()

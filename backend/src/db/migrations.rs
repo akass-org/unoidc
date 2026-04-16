@@ -1,5 +1,5 @@
+use anyhow::{Context, Result};
 use sqlx::PgPool;
-use anyhow::{Result, Context};
 use std::fs;
 use tracing::info;
 
@@ -82,14 +82,13 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
         "CREATE TABLE IF NOT EXISTS _migrations (
             name VARCHAR(255) PRIMARY KEY,
             executed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )"
+        )",
     )
     .execute(pool)
     .await
     .context("Failed to create migrations tracking table")?;
 
-    let current_dir = std::env::current_dir()
-        .context("Failed to get current directory")?;
+    let current_dir = std::env::current_dir().context("Failed to get current directory")?;
     let migrations_dir = current_dir.join("migrations");
 
     if !migrations_dir.exists() {
@@ -115,19 +114,17 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
 
     info!("Found {} migration files", migrations.len());
 
-    let executed: Vec<String> = sqlx::query_scalar(
-        "SELECT name FROM _migrations"
-    )
-    .fetch_all(pool)
-    .await
-    .context("Failed to query executed migrations")?;
+    let executed: Vec<String> = sqlx::query_scalar("SELECT name FROM _migrations")
+        .fetch_all(pool)
+        .await
+        .context("Failed to query executed migrations")?;
 
     if executed.is_empty() {
         let table_exists: bool = sqlx::query_scalar(
             "SELECT EXISTS (
                 SELECT 1 FROM information_schema.tables
                 WHERE table_name = 'users'
-            )"
+            )",
         )
         .fetch_one(pool)
         .await
@@ -136,11 +133,13 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
         if table_exists {
             info!("Detected existing database schema, registering all migrations as executed");
             for migration in &migrations {
-                sqlx::query("INSERT INTO _migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING")
-                    .bind(migration)
-                    .execute(pool)
-                    .await
-                    .ok();
+                sqlx::query(
+                    "INSERT INTO _migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING",
+                )
+                .bind(migration)
+                .execute(pool)
+                .await
+                .ok();
             }
             info!("All existing migrations registered");
             return Ok(());
@@ -164,13 +163,11 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
             .await
             .with_context(|| format!("Failed to execute migration: {}", migration))?;
 
-        sqlx::query(
-            "INSERT INTO _migrations (name) VALUES ($1)"
-        )
-        .bind(&migration)
-        .execute(pool)
-        .await
-        .with_context(|| format!("Failed to record migration: {}", migration))?;
+        sqlx::query("INSERT INTO _migrations (name) VALUES ($1)")
+            .bind(&migration)
+            .execute(pool)
+            .await
+            .with_context(|| format!("Failed to record migration: {}", migration))?;
 
         info!("Completed migration: {}", migration);
     }

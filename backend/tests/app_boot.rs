@@ -1,6 +1,6 @@
 #[tokio::test]
 async fn app_builds_router() {
-    use backend::{build_app_with_state, AppState, config::Config};
+    use backend::{build_app_with_state, config::Config, AppState};
     use sqlx::postgres::PgPoolOptions;
 
     // 使用测试配置构建应用（不需要真实数据库连接）

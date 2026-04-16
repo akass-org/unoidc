@@ -62,8 +62,12 @@ impl KeyService {
 
     /// 解密 JWK 中的私钥
     fn decrypt_jwk(jwk: Jwk, encryption_key: &str) -> Result<Jwk> {
-        let decrypted_pem = key_encryption::decrypt_private_key(&jwk.private_key_pem, encryption_key)?;
-        Ok(Jwk { private_key_pem: decrypted_pem, ..jwk })
+        let decrypted_pem =
+            key_encryption::decrypt_private_key(&jwk.private_key_pem, encryption_key)?;
+        Ok(Jwk {
+            private_key_pem: decrypted_pem,
+            ..jwk
+        })
     }
 
     /// 获取当前激活的密钥，不存在则自动生成
@@ -95,7 +99,11 @@ impl KeyService {
     }
 
     /// 根据 kid 查找密钥（解密后返回）
-    pub async fn get_key_by_kid(pool: &PgPool, kid: &str, encryption_key: &str) -> Result<Option<Jwk>> {
+    pub async fn get_key_by_kid(
+        pool: &PgPool,
+        kid: &str,
+        encryption_key: &str,
+    ) -> Result<Option<Jwk>> {
         match JwkRepo::find_by_kid(pool, kid).await? {
             Some(jwk) => Ok(Some(Self::decrypt_jwk(jwk, encryption_key)?)),
             None => Ok(None),
@@ -142,11 +150,12 @@ impl KeyService {
             .try_into()
             .map_err(|_| anyhow::anyhow!("Invalid y coordinate length"))?;
 
-        let encoded_point = p256::elliptic_curve::sec1::EncodedPoint::<p256::NistP256>::from_affine_coordinates(
-            &x_arr.into(),
-            &y_arr.into(),
-            false,
-        );
+        let encoded_point =
+            p256::elliptic_curve::sec1::EncodedPoint::<p256::NistP256>::from_affine_coordinates(
+                &x_arr.into(),
+                &y_arr.into(),
+                false,
+            );
 
         let public_key = PublicKey::from_sec1_bytes(encoded_point.as_bytes())
             .map_err(|e| anyhow::anyhow!("Failed to construct public key: {}", e))?;

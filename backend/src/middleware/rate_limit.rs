@@ -5,12 +5,12 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use std::net::SocketAddr;
 use std::{
     collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
-use std::net::SocketAddr;
 use tokio::sync::RwLock;
 
 #[derive(Debug, Clone)]
@@ -153,10 +153,7 @@ pub fn extract_client_ip(
         .unwrap_or(false);
 
     if is_trusted_proxy {
-        if let Some(xff) = headers
-            .get("x-forwarded-for")
-            .and_then(|v| v.to_str().ok())
-        {
+        if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
             if let Some(first_ip) = xff.split(',').next() {
                 let ip = first_ip.trim();
                 if !ip.is_empty() {
@@ -165,10 +162,7 @@ pub fn extract_client_ip(
             }
         }
 
-        if let Some(real_ip) = headers
-            .get("x-real-ip")
-            .and_then(|v| v.to_str().ok())
-        {
+        if let Some(real_ip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
             let ip = real_ip.trim();
             if !ip.is_empty() {
                 return ip.to_string();
@@ -227,7 +221,9 @@ pub async fn rate_limit_middleware(
                 .into_response();
 
             if let Ok(val) = HeaderValue::from_str(&retry_after.to_string()) {
-                response.headers_mut().insert(axum::http::header::RETRY_AFTER, val);
+                response
+                    .headers_mut()
+                    .insert(axum::http::header::RETRY_AFTER, val);
             }
 
             response
@@ -268,9 +264,18 @@ mod tests {
 
     fn make_limiter() -> RateLimiter {
         RateLimiter::new(
-            RateLimitConfig { window_secs: 60, max_requests: 100 },
-            RateLimitConfig { window_secs: 60, max_requests: 3 },
-            RateLimitConfig { window_secs: 60, max_requests: 5 },
+            RateLimitConfig {
+                window_secs: 60,
+                max_requests: 100,
+            },
+            RateLimitConfig {
+                window_secs: 60,
+                max_requests: 3,
+            },
+            RateLimitConfig {
+                window_secs: 60,
+                max_requests: 5,
+            },
             vec!["10.0.0.1".to_string()],
         )
     }
@@ -279,34 +284,70 @@ mod tests {
     async fn test_allows_within_limit() {
         let limiter = make_limiter();
         for _ in 0..100 {
-            assert!(limiter.check(RateLimitTier::Global, "192.168.1.1").await.is_ok());
+            assert!(limiter
+                .check(RateLimitTier::Global, "192.168.1.1")
+                .await
+                .is_ok());
         }
-        assert!(limiter.check(RateLimitTier::Global, "192.168.1.1").await.is_err());
+        assert!(limiter
+            .check(RateLimitTier::Global, "192.168.1.1")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn test_different_ips_independent() {
         let limiter = make_limiter();
-        assert!(limiter.check(RateLimitTier::Global, "192.168.1.1").await.is_ok());
-        assert!(limiter.check(RateLimitTier::Global, "192.168.1.1").await.is_ok());
-        assert!(limiter.check(RateLimitTier::Global, "192.168.1.2").await.is_ok());
+        assert!(limiter
+            .check(RateLimitTier::Global, "192.168.1.1")
+            .await
+            .is_ok());
+        assert!(limiter
+            .check(RateLimitTier::Global, "192.168.1.1")
+            .await
+            .is_ok());
+        assert!(limiter
+            .check(RateLimitTier::Global, "192.168.1.2")
+            .await
+            .is_ok());
     }
 
     #[tokio::test]
     async fn test_window_reset() {
         let limiter = RateLimiter::new(
-            RateLimitConfig { window_secs: 1, max_requests: 2 },
-            RateLimitConfig { window_secs: 1, max_requests: 2 },
-            RateLimitConfig { window_secs: 1, max_requests: 2 },
+            RateLimitConfig {
+                window_secs: 1,
+                max_requests: 2,
+            },
+            RateLimitConfig {
+                window_secs: 1,
+                max_requests: 2,
+            },
+            RateLimitConfig {
+                window_secs: 1,
+                max_requests: 2,
+            },
             vec![],
         );
 
-        assert!(limiter.check(RateLimitTier::Global, "192.168.1.1").await.is_ok());
-        assert!(limiter.check(RateLimitTier::Global, "192.168.1.1").await.is_ok());
-        assert!(limiter.check(RateLimitTier::Global, "192.168.1.1").await.is_err());
+        assert!(limiter
+            .check(RateLimitTier::Global, "192.168.1.1")
+            .await
+            .is_ok());
+        assert!(limiter
+            .check(RateLimitTier::Global, "192.168.1.1")
+            .await
+            .is_ok());
+        assert!(limiter
+            .check(RateLimitTier::Global, "192.168.1.1")
+            .await
+            .is_err());
 
         tokio::time::sleep(Duration::from_millis(1100)).await;
-        assert!(limiter.check(RateLimitTier::Global, "192.168.1.1").await.is_ok());
+        assert!(limiter
+            .check(RateLimitTier::Global, "192.168.1.1")
+            .await
+            .is_ok());
     }
 
     #[tokio::test]
@@ -314,19 +355,40 @@ mod tests {
         let limiter = make_limiter();
 
         for _ in 0..3 {
-            assert!(limiter.check(RateLimitTier::Login, "10.0.0.1").await.is_ok());
+            assert!(limiter
+                .check(RateLimitTier::Login, "10.0.0.1")
+                .await
+                .is_ok());
         }
-        assert!(limiter.check(RateLimitTier::Login, "10.0.0.1").await.is_err());
-        assert!(limiter.check(RateLimitTier::Token, "10.0.0.1").await.is_ok());
-        assert!(limiter.check(RateLimitTier::Global, "10.0.0.1").await.is_ok());
+        assert!(limiter
+            .check(RateLimitTier::Login, "10.0.0.1")
+            .await
+            .is_err());
+        assert!(limiter
+            .check(RateLimitTier::Token, "10.0.0.1")
+            .await
+            .is_ok());
+        assert!(limiter
+            .check(RateLimitTier::Global, "10.0.0.1")
+            .await
+            .is_ok());
     }
 
     #[test]
     fn test_tier_from_path() {
-        assert_eq!(RateLimitTier::from_path("/api/v1/auth/login"), RateLimitTier::Login);
-        assert_eq!(RateLimitTier::from_path("/api/v1/auth/register"), RateLimitTier::Login);
+        assert_eq!(
+            RateLimitTier::from_path("/api/v1/auth/login"),
+            RateLimitTier::Login
+        );
+        assert_eq!(
+            RateLimitTier::from_path("/api/v1/auth/register"),
+            RateLimitTier::Login
+        );
         assert_eq!(RateLimitTier::from_path("/token"), RateLimitTier::Token);
-        assert_eq!(RateLimitTier::from_path("/authorize"), RateLimitTier::Global);
+        assert_eq!(
+            RateLimitTier::from_path("/authorize"),
+            RateLimitTier::Global
+        );
         assert_eq!(RateLimitTier::from_path("/userinfo"), RateLimitTier::Global);
         assert_eq!(
             RateLimitTier::from_path("/.well-known/openid-configuration"),
@@ -339,7 +401,10 @@ mod tests {
         let mut h = axum::http::HeaderMap::new();
         h.insert("x-forwarded-for", "1.2.3.4, 5.6.7.8".parse().unwrap());
         let trusted = vec!["10.0.0.1".to_string()];
-        assert_eq!(extract_client_ip(&h, Some("10.0.0.1:12345"), &trusted), "1.2.3.4");
+        assert_eq!(
+            extract_client_ip(&h, Some("10.0.0.1:12345"), &trusted),
+            "1.2.3.4"
+        );
     }
 
     #[test]
@@ -347,7 +412,10 @@ mod tests {
         let mut h = axum::http::HeaderMap::new();
         h.insert("x-forwarded-for", "1.2.3.4, 5.6.7.8".parse().unwrap());
         let trusted: Vec<String> = vec![];
-        assert_eq!(extract_client_ip(&h, Some("10.0.0.1:12345"), &trusted), "10.0.0.1");
+        assert_eq!(
+            extract_client_ip(&h, Some("10.0.0.1:12345"), &trusted),
+            "10.0.0.1"
+        );
     }
 
     #[test]
@@ -355,14 +423,20 @@ mod tests {
         let mut h = axum::http::HeaderMap::new();
         h.insert("x-real-ip", "1.2.3.4".parse().unwrap());
         let trusted = vec!["10.0.0.1".to_string()];
-        assert_eq!(extract_client_ip(&h, Some("10.0.0.1:12345"), &trusted), "1.2.3.4");
+        assert_eq!(
+            extract_client_ip(&h, Some("10.0.0.1:12345"), &trusted),
+            "1.2.3.4"
+        );
     }
 
     #[test]
     fn test_extract_ip_fallback_remote() {
         let h = axum::http::HeaderMap::new();
         let trusted: Vec<String> = vec![];
-        assert_eq!(extract_client_ip(&h, Some("10.0.0.1:12345"), &trusted), "10.0.0.1");
+        assert_eq!(
+            extract_client_ip(&h, Some("10.0.0.1:12345"), &trusted),
+            "10.0.0.1"
+        );
     }
 
     #[test]

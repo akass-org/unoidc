@@ -99,5 +99,8 @@ async fn migrations_are_idempotent() {
     // 未来应该实现迁移版本跟踪，使迁移幂等
     let result = db::run_migrations(&pool).await;
     // 当前预期会失败，因为表已经存在
-    assert!(result.is_err(), "Second migration run should fail (tables already exist)");
+    assert!(
+        result.is_err(),
+        "Second migration run should fail (tables already exist)"
+    );
 }

@@ -9,7 +9,10 @@ const CSRF_COOKIE_NAME: &str = "unoidc_csrf";
 const CSRF_HEADER_NAME: &str = "x-csrf-token";
 
 fn is_state_changing_method(method: &Method) -> bool {
-    matches!(method, &Method::POST | &Method::PUT | &Method::DELETE | &Method::PATCH)
+    matches!(
+        method,
+        &Method::POST | &Method::PUT | &Method::DELETE | &Method::PATCH
+    )
 }
 
 fn is_exempt_path(path: &str) -> bool {
@@ -24,13 +27,11 @@ fn is_exempt_path(path: &str) -> bool {
 
 pub fn extract_csrf_cookie(headers: &axum::http::HeaderMap) -> Option<String> {
     let cookie_header = headers.get("cookie")?.to_str().ok()?;
-    cookie_header
-        .split(';')
-        .find_map(|c| {
-            let c = c.trim();
-            c.strip_prefix(&format!("{}=", CSRF_COOKIE_NAME))
-                .map(|v| v.to_string())
-        })
+    cookie_header.split(';').find_map(|c| {
+        let c = c.trim();
+        c.strip_prefix(&format!("{}=", CSRF_COOKIE_NAME))
+            .map(|v| v.to_string())
+    })
 }
 
 pub fn extract_csrf_header(headers: &axum::http::HeaderMap) -> Option<String> {
@@ -134,6 +135,9 @@ mod tests {
         assert_eq!(cookie, "unoidc_csrf=test-token; Path=/; SameSite=Lax");
 
         let secure_cookie = generate_csrf_cookie("test-token", true);
-        assert_eq!(secure_cookie, "unoidc_csrf=test-token; Path=/; SameSite=Strict; Secure");
+        assert_eq!(
+            secure_cookie,
+            "unoidc_csrf=test-token; Path=/; SameSite=Strict; Secure"
+        );
     }
 }

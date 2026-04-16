@@ -18,11 +18,14 @@ use crate::crypto;
 use crate::crypto::jwt;
 use crate::crypto::jwt::AccessTokenClaims;
 use crate::error::{AppError, OidcErrorCode, Result};
-use crate::middleware::auth::{check_user_client_access, extract_auth_user, require_auth_user};
 use crate::metrics;
+use crate::middleware::auth::{check_user_client_access, extract_auth_user, require_auth_user};
 use crate::model::Jwk;
 use crate::repo::{ClientRepo, GroupRepo, UserRepo};
-use crate::service::{AuthService, ClientService, ConsentService, KeyService, LogoutService, OidcService, TokenService};
+use crate::service::{
+    AuthService, ClientService, ConsentService, KeyService, LogoutService, OidcService,
+    TokenService,
+};
 use crate::AppState;
 use std::collections::HashMap;
 
@@ -51,14 +54,12 @@ pub async fn discovery(State(state): State<Arc<AppState>>) -> Json<Value> {
 
 /// GET /jwks.json
 pub async fn jwks(State(state): State<Arc<AppState>>) -> Result<Json<Value>> {
-    let keys = KeyService::get_jwks(&state.db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get JWKS: {}", e);
-            crate::error::AppError::InternalServerError {
-                error_code: Some("KEYS_UNAVAILABLE".to_string()),
-            }
-        })?;
+    let keys = KeyService::get_jwks(&state.db).await.map_err(|e| {
+        tracing::error!("Failed to get JWKS: {}", e);
+        crate::error::AppError::InternalServerError {
+            error_code: Some("KEYS_UNAVAILABLE".to_string()),
+        }
+    })?;
 
     let jwk_list: Vec<Value> = keys.iter().map(|k| k.public_key_jwk.clone()).collect();
     Ok(Json(json!({ "keys": jwk_list })))
@@ -480,7 +481,9 @@ pub async fn token(
                 if *form_cid != cid {
                     return Err(AppError::OidcError {
                         error: OidcErrorCode::InvalidRequest,
-                        error_description: Some("client_id mismatch between form and basic auth".to_string()),
+                        error_description: Some(
+                            "client_id mismatch between form and basic auth".to_string(),
+                        ),
                     });
                 }
             }
@@ -525,13 +528,17 @@ pub async fn token(
                 })?
                 .ok_or(AppError::OidcError {
                     error: OidcErrorCode::InvalidGrant,
-                    error_description: Some("authorization code is invalid, expired, or already used".to_string()),
+                    error_description: Some(
+                        "authorization code is invalid, expired, or already used".to_string(),
+                    ),
                 })?;
 
             if auth_code.client_id != client.id || auth_code.redirect_uri != *redirect_uri {
                 return Err(AppError::OidcError {
                     error: OidcErrorCode::InvalidGrant,
-                    error_description: Some("authorization code does not match client or redirect_uri".to_string()),
+                    error_description: Some(
+                        "authorization code does not match client or redirect_uri".to_string(),
+                    ),
                 });
             }
 
@@ -567,12 +574,16 @@ pub async fn token(
         _ => {
             return Err(AppError::OidcError {
                 error: OidcErrorCode::UnsupportedGrantType,
-                error_description: Some("supported grant_type: authorization_code, refresh_token".to_string()),
+                error_description: Some(
+                    "supported grant_type: authorization_code, refresh_token".to_string(),
+                ),
             });
         }
     };
 
-    Ok(Json(serde_json::to_value(token_response).unwrap_or_else(|_| json!({}))))
+    Ok(Json(
+        serde_json::to_value(token_response).unwrap_or_else(|_| json!({})),
+    ))
 }
 
 // ============================================================
@@ -590,11 +601,12 @@ pub async fn userinfo(
     let token = extract_bearer_token(&headers)?;
 
     // 获取公钥用于验证 token
-    let jwks = KeyService::get_jwks(&state.db)
-        .await
-        .map_err(|_| AppError::InternalServerError {
-            error_code: Some("JWKS_UNAVAILABLE".to_string()),
-        })?;
+    let jwks =
+        KeyService::get_jwks(&state.db)
+            .await
+            .map_err(|_| AppError::InternalServerError {
+                error_code: Some("JWKS_UNAVAILABLE".to_string()),
+            })?;
 
     if jwks.is_empty() {
         return Err(AppError::InternalServerError {
@@ -726,10 +738,7 @@ fn verify_access_token(
     };
 
     // 构建 kid -> JWK 的 HashMap 用于 O(1) 查找
-    let jwk_map: HashMap<&str, &Jwk> = jwks
-        .iter()
-        .map(|jwk| (jwk.kid.as_str(), jwk))
-        .collect();
+    let jwk_map: HashMap<&str, &Jwk> = jwks.iter().map(|jwk| (jwk.kid.as_str(), jwk)).collect();
 
     // 通过 kid 查找对应的 JWK
     let jwk = match jwk_map.get(kid.as_str()) {
@@ -806,7 +815,9 @@ pub async fn logout(
     use axum::http::StatusCode;
 
     // 尝试提取并清除当前 session
-    let _session_cleared = if let Some(session_id) = extract_session_from_headers(&headers, &state.config.session_secret) {
+    let _session_cleared = if let Some(session_id) =
+        extract_session_from_headers(&headers, &state.config.session_secret)
+    {
         match AuthService::logout(&state.db, &session_id).await {
             Ok(()) => {
                 tracing::info!(session_id = %session_id, "OIDC logout: session destroyed");
@@ -849,7 +860,10 @@ pub async fn logout(
             ));
         }
         // 验证state只包含安全的URL字符
-        if !s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.~".contains(c)) {
+        if !s
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_.~".contains(c))
+        {
             return Err(AppError::InvalidRequest(
                 "state parameter contains invalid characters".to_string(),
             ));
@@ -872,12 +886,19 @@ pub async fn logout(
                     hint,
                     Some(&state.config.issuer),
                 )
-                .await {
+                .await
+                {
                     if let Some(aud) = claims.get("aud").and_then(|v| v.as_str()) {
                         // OIDC token 的 aud 使用 client.client_id（字符串），
                         // 这里应按 client_id 查找客户端，再用内部 UUID 做白名单校验。
-                        if let Ok(Some(client)) = ClientRepo::find_by_client_id(&state.db, aud).await {
-                            validated = LogoutService::validate_post_logout_redirect(&state.db, &client.id, redirect).await.is_ok();
+                        if let Ok(Some(client)) =
+                            ClientRepo::find_by_client_id(&state.db, aud).await
+                        {
+                            validated = LogoutService::validate_post_logout_redirect(
+                                &state.db, &client.id, redirect,
+                            )
+                            .await
+                            .is_ok();
                         }
                     }
                 }
@@ -922,7 +943,8 @@ pub async fn logout(
     let mut response = (
         StatusCode::FOUND,
         [(axum::http::header::LOCATION, final_location)],
-    ).into_response();
+    )
+        .into_response();
     response.headers_mut().insert(
         axum::http::header::SET_COOKIE,
         axum::http::HeaderValue::from_str(&cookie_value).unwrap_or_else(|_| {

@@ -14,12 +14,12 @@ impl EmailVerificationTokenRepo {
         input: CreateEmailVerificationToken,
     ) -> Result<EmailVerificationToken, sqlx::Error> {
         let id = Uuid::new_v4();
-        
+
         sqlx::query_as::<_, EmailVerificationToken>(
             "INSERT INTO email_verification_tokens 
              (id, user_id, new_email, token_hash, expires_at) 
              VALUES ($1, $2, $3, $4, $5) 
-             RETURNING *"
+             RETURNING *",
         )
         .bind(id)
         .bind(input.user_id)
@@ -36,7 +36,7 @@ impl EmailVerificationTokenRepo {
         token_hash: &str,
     ) -> Result<Option<EmailVerificationToken>, sqlx::Error> {
         sqlx::query_as::<_, EmailVerificationToken>(
-            "SELECT * FROM email_verification_tokens WHERE token_hash = $1 AND verified_at IS NULL"
+            "SELECT * FROM email_verification_tokens WHERE token_hash = $1 AND verified_at IS NULL",
         )
         .bind(token_hash)
         .fetch_optional(pool)
@@ -49,7 +49,7 @@ impl EmailVerificationTokenRepo {
         token_id: Uuid,
     ) -> Result<EmailVerificationToken, sqlx::Error> {
         sqlx::query_as::<_, EmailVerificationToken>(
-            "UPDATE email_verification_tokens SET verified_at = NOW() WHERE id = $1 RETURNING *"
+            "UPDATE email_verification_tokens SET verified_at = NOW() WHERE id = $1 RETURNING *",
         )
         .bind(token_id)
         .fetch_one(pool)
@@ -57,14 +57,13 @@ impl EmailVerificationTokenRepo {
     }
 
     /// Revoke all pending tokens for a user
-    pub async fn revoke_all_for_user(
-        pool: &PgPool,
-        user_id: Uuid,
-    ) -> Result<(), sqlx::Error> {
-        sqlx::query("DELETE FROM email_verification_tokens WHERE user_id = $1 AND verified_at IS NULL")
-            .bind(user_id)
-            .execute(pool)
-            .await?;
+    pub async fn revoke_all_for_user(pool: &PgPool, user_id: Uuid) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "DELETE FROM email_verification_tokens WHERE user_id = $1 AND verified_at IS NULL",
+        )
+        .bind(user_id)
+        .execute(pool)
+        .await?;
         Ok(())
     }
 

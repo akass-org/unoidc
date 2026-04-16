@@ -14,8 +14,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Load database URL from .env file
     dotenvy::dotenv().ok();
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     // Connect to database
     let pool = sqlx::PgPool::connect(&database_url).await?;
@@ -28,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
         ON CONFLICT (key) DO UPDATE SET
             value = EXCLUDED.value,
             updated_at = CURRENT_TIMESTAMP
-        "#
+        "#,
     )
     .bind(key)
     .bind(value)

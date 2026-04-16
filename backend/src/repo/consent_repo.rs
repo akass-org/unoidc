@@ -41,7 +41,10 @@ impl ConsentRepo {
     }
 
     /// 获取用户的所有授权记录
-    pub async fn find_user_consents(pool: &PgPool, user_id: Uuid) -> Result<Vec<Consent>, sqlx::Error> {
+    pub async fn find_user_consents(
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<Vec<Consent>, sqlx::Error> {
         sqlx::query_as::<_, Consent>(
             r#"
             SELECT * FROM user_consents

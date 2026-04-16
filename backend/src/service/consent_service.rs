@@ -74,7 +74,10 @@ impl ConsentService {
     }
 
     /// 获取用户的所有授权记录
-    pub async fn get_user_consents(pool: &PgPool, user_id: Uuid) -> Result<Vec<Consent>, anyhow::Error> {
+    pub async fn get_user_consents(
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<Vec<Consent>, anyhow::Error> {
         ConsentRepo::find_user_consents(pool, user_id)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get user consents: {}", e))

@@ -8,9 +8,9 @@ use sqlx::PgPool;
 async fn main() -> anyhow::Result<()> {
     // 加载 .env 文件
     dotenvy::dotenv().ok();
-    
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set (in .env or environment)");
+
+    let database_url =
+        std::env::var("DATABASE_URL").expect("DATABASE_URL must be set (in .env or environment)");
 
     println!("Connecting to database...");
     let pool = PgPool::connect(&database_url).await?;
@@ -21,9 +21,7 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     println!("Creating schema...");
-    sqlx::query("CREATE SCHEMA public")
-        .execute(&pool)
-        .await?;
+    sqlx::query("CREATE SCHEMA public").execute(&pool).await?;
 
     println!("Granting permissions...");
     sqlx::query("GRANT ALL ON SCHEMA public TO postgres")

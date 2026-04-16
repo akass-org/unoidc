@@ -75,17 +75,15 @@ pub fn extract_session_cookie(headers: &HeaderMap, session_secret: &str) -> Opti
 ///
 /// 先 split '=' 再比较 name，避免 `session` 匹配到 `session_id`
 fn extract_cookie_value(cookie_str: &str, name: &str) -> Option<String> {
-    cookie_str
-        .split(';')
-        .find_map(|cookie| {
-            let cookie = cookie.trim();
-            let (cookie_name, value) = cookie.split_once('=')?;
-            if cookie_name.trim() == name {
-                Some(value.to_string())
-            } else {
-                None
-            }
-        })
+    cookie_str.split(';').find_map(|cookie| {
+        let cookie = cookie.trim();
+        let (cookie_name, value) = cookie.split_once('=')?;
+        if cookie_name.trim() == name {
+            Some(value.to_string())
+        } else {
+            None
+        }
+    })
 }
 
 /// 检查用户是否可以访问指定客户端（通过组关系）

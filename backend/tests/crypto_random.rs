@@ -23,7 +23,9 @@ fn generate_secure_token_url_safe() {
 
     // 令牌应该是 URL 安全的（Base64 URL 编码）
     // 只包含字母、数字、连字符和下划线
-    assert!(token.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+    assert!(token
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
 }
 
 #[test]
@@ -34,7 +36,9 @@ fn generate_authorization_code() {
     assert!(code.len() >= 32);
 
     // 应该是 URL 安全的
-    assert!(code.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+    assert!(code
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
 }
 
 #[test]
@@ -45,7 +49,9 @@ fn generate_refresh_token() {
     assert!(token.len() >= 64);
 
     // 应该是 URL 安全的
-    assert!(token.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+    assert!(token
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
 }
 
 #[test]
@@ -56,7 +62,9 @@ fn generate_session_id() {
     assert!(session_id.len() >= 32);
 
     // 应该是 URL 安全的
-    assert!(session_id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+    assert!(session_id
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
 }
 
 #[test]
@@ -67,7 +75,11 @@ fn generate_pkce_code_verifier() {
     assert!(verifier.len() >= 43 && verifier.len() <= 128);
 
     // 应该是 URL 安全的
-    assert!(verifier.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '~' || c == '.'));
+    assert!(verifier.chars().all(|c| c.is_alphanumeric()
+        || c == '-'
+        || c == '_'
+        || c == '~'
+        || c == '.'));
 }
 
 #[test]
@@ -78,5 +90,7 @@ fn generate_csrf_token() {
     assert!(token.len() >= 32);
 
     // 应该是 URL 安全的
-    assert!(token.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+    assert!(token
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
 }

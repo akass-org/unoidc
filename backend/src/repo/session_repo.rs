@@ -25,7 +25,10 @@ impl SessionRepo {
     }
 
     /// 根据 session_id 查找会话
-    pub async fn find_by_session_id(pool: &PgPool, session_id: &str) -> Result<Option<Session>, sqlx::Error> {
+    pub async fn find_by_session_id(
+        pool: &PgPool,
+        session_id: &str,
+    ) -> Result<Option<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
             SELECT * FROM user_sessions WHERE session_id = $1
@@ -39,8 +42,8 @@ impl SessionRepo {
     /// 创建会话
     pub async fn create(pool: &PgPool, input: CreateSession) -> Result<Session, sqlx::Error> {
         let id = Uuid::new_v4();
-        let session_id = crate::crypto::generate_session_id()
-            .expect("Failed to generate session ID");
+        let session_id =
+            crate::crypto::generate_session_id().expect("Failed to generate session ID");
         let now = OffsetDateTime::now_utc();
         let expires_at = now + time::Duration::seconds(input.duration_seconds);
 
@@ -139,7 +142,10 @@ impl SessionRepo {
     }
 
     /// 获取用户的所有活跃会话
-    pub async fn find_user_sessions(pool: &PgPool, user_id: Uuid) -> Result<Vec<Session>, sqlx::Error> {
+    pub async fn find_user_sessions(
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<Vec<Session>, sqlx::Error> {
         let now = OffsetDateTime::now_utc();
 
         sqlx::query_as::<_, Session>(

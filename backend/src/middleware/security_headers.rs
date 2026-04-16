@@ -32,7 +32,7 @@ pub async fn security_headers_middleware(request: Request<Body>, next: Next) -> 
              connect-src 'self'; \
              frame-ancestors 'none'; \
              base-uri 'self'; \
-             form-action 'self'"
+             form-action 'self'",
         ),
     );
 
@@ -43,10 +43,7 @@ pub async fn security_headers_middleware(request: Request<Body>, next: Next) -> 
     );
 
     // 防止嵌入 iframe（点击劫持保护）
-    headers.insert(
-        "x-frame-options",
-        HeaderValue::from_static("DENY"),
-    );
+    headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
 
     // 控制 Referer 头泄露
     headers.insert(
@@ -57,9 +54,7 @@ pub async fn security_headers_middleware(request: Request<Body>, next: Next) -> 
     // 限制浏览器 API
     headers.insert(
         "permissions-policy",
-        HeaderValue::from_static(
-            "camera=(), microphone=(), geolocation=(), payment=()"
-        ),
+        HeaderValue::from_static("camera=(), microphone=(), geolocation=(), payment=()"),
     );
 
     response

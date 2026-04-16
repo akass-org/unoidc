@@ -1,15 +1,15 @@
-import { useEffect, useRef, type ReactNode } from 'react'
-import { X } from 'lucide-react'
-import { Button } from './Button'
+import { useEffect, useRef, type ReactNode } from "react";
+import { X } from "lucide-react";
+import { Button } from "./Button";
 
 interface ModalProps {
-  isOpen: boolean
-  onClose: () => void
-  title: string
-  description?: string
-  children: ReactNode
-  footer?: ReactNode
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  description?: string;
+  children: ReactNode;
+  footer?: ReactNode;
+  size?: "sm" | "md" | "lg" | "xl";
 }
 
 export function Modal({
@@ -19,40 +19,40 @@ export function Modal({
   description,
   children,
   footer,
-  size = 'md',
+  size = "md",
 }: ModalProps) {
-  const overlayRef = useRef<HTMLDivElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    
+      if (e.key === "Escape") onClose();
+    };
+
     if (isOpen) {
-      document.addEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'hidden'
+      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = "hidden";
     }
-    
+
     return () => {
-      document.removeEventListener('keydown', handleEscape)
-      document.body.style.overflow = ''
-    }
-  }, [isOpen, onClose])
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "";
+    };
+  }, [isOpen, onClose]);
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === overlayRef.current) {
-      onClose()
+      onClose();
     }
-  }
+  };
 
   const sizes = {
-    sm: 'max-w-md',
-    md: 'max-w-lg',
-    lg: 'max-w-2xl',
-    xl: 'max-w-4xl',
-  }
+    sm: "max-w-md",
+    md: "max-w-lg",
+    lg: "max-w-2xl",
+    xl: "max-w-4xl",
+  };
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   return (
     <div
@@ -70,9 +70,7 @@ export function Modal({
         <div className="flex items-start justify-between p-5 border-b border-gray-200 dark:border-white/[0.06]">
           <div>
             <h2 className="text-base font-bold text-gray-900 dark:text-white">{title}</h2>
-            {description && (
-              <p className="text-sm text-gray-500 mt-1">{description}</p>
-            )}
+            {description && <p className="text-sm text-gray-500 mt-1">{description}</p>}
           </div>
           <button
             onClick={onClose}
@@ -81,9 +79,9 @@ export function Modal({
             <X className="w-4 h-4" />
           </button>
         </div>
-        
+
         <div className="p-5">{children}</div>
-        
+
         {footer && (
           <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-white/[0.02] rounded-b-xl">
             {footer}
@@ -91,22 +89,22 @@ export function Modal({
         )}
       </div>
     </div>
-  )
+  );
 }
 
-interface ConfirmModalProps extends Omit<ModalProps, 'children' | 'footer'> {
-  onConfirm: () => void
-  confirmText?: string
-  cancelText?: string
-  variant?: 'danger' | 'primary'
-  loading?: boolean
+interface ConfirmModalProps extends Omit<ModalProps, "children" | "footer"> {
+  onConfirm: () => void;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: "danger" | "primary";
+  loading?: boolean;
 }
 
 export function ConfirmModal({
   onConfirm,
-  confirmText = '确认',
-  cancelText = '取消',
-  variant = 'primary',
+  confirmText = "确认",
+  cancelText = "取消",
+  variant = "primary",
   loading,
   ...props
 }: ConfirmModalProps) {
@@ -119,7 +117,7 @@ export function ConfirmModal({
             {cancelText}
           </Button>
           <Button
-            variant={variant === 'danger' ? 'danger' : 'primary'}
+            variant={variant === "danger" ? "danger" : "primary"}
             onClick={onConfirm}
             loading={loading}
           >
@@ -130,5 +128,5 @@ export function ConfirmModal({
     >
       <p className="text-gray-600 dark:text-gray-400 text-sm">{props.description}</p>
     </Modal>
-  )
+  );
 }

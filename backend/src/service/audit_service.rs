@@ -23,18 +23,14 @@ impl AuditService {
         ip_address: Option<String>,
         user_agent: Option<String>,
     ) -> Result<AuditLog, sqlx::Error> {
-        let create_log = CreateAuditLog::success(
-            "login",
-            "user_session",
-            session_id,
-        )
-        .with_actor(user_id)
-        .with_correlation_id(correlation_id.unwrap_or_default())
-        .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
-        .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
-        .with_metadata(serde_json::json!({
-            "event": "login_success"
-        }));
+        let create_log = CreateAuditLog::success("login", "user_session", session_id)
+            .with_actor(user_id)
+            .with_correlation_id(correlation_id.unwrap_or_default())
+            .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
+            .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
+            .with_metadata(serde_json::json!({
+                "event": "login_success"
+            }));
 
         let log = AuditLogRepo::create(pool, create_log).await?;
         info!(user_id = %user_id, session_id = %session_id, "Audit log: login success");
@@ -50,19 +46,14 @@ impl AuditService {
         ip_address: Option<String>,
         user_agent: Option<String>,
     ) -> Result<AuditLog, sqlx::Error> {
-        let create_log = CreateAuditLog::failure(
-            "login",
-            "user_session",
-            username,
-            reason_code,
-        )
-        .with_correlation_id(correlation_id.unwrap_or_default())
-        .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
-        .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
-        .with_metadata(serde_json::json!({
-            "event": "login_failure",
-            "username": username
-        }));
+        let create_log = CreateAuditLog::failure("login", "user_session", username, reason_code)
+            .with_correlation_id(correlation_id.unwrap_or_default())
+            .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
+            .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
+            .with_metadata(serde_json::json!({
+                "event": "login_failure",
+                "username": username
+            }));
 
         let log = AuditLogRepo::create(pool, create_log).await?;
         info!(
@@ -81,14 +72,10 @@ impl AuditService {
         ip_address: Option<String>,
         user_agent: Option<String>,
     ) -> Result<AuditLog, sqlx::Error> {
-        let mut create_log = CreateAuditLog::success(
-            "logout",
-            "user_session",
-            session_id,
-        )
-        .with_correlation_id(correlation_id.unwrap_or_default())
-        .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
-        .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()));
+        let mut create_log = CreateAuditLog::success("logout", "user_session", session_id)
+            .with_correlation_id(correlation_id.unwrap_or_default())
+            .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
+            .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()));
 
         if let Some(uid) = user_id {
             create_log = create_log.with_actor(uid);
@@ -109,18 +96,15 @@ impl AuditService {
         ip_address: Option<String>,
         user_agent: Option<String>,
     ) -> Result<AuditLog, sqlx::Error> {
-        let mut create_log = CreateAuditLog::success(
-            "token_issued",
-            token_type,
-            Uuid::new_v4().to_string(),
-        )
-        .with_correlation_id(correlation_id.unwrap_or_default())
-        .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
-        .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
-        .with_metadata(serde_json::json!({
-            "event": "token_issued",
-            "token_type": token_type
-        }));
+        let mut create_log =
+            CreateAuditLog::success("token_issued", token_type, Uuid::new_v4().to_string())
+                .with_correlation_id(correlation_id.unwrap_or_default())
+                .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
+                .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
+                .with_metadata(serde_json::json!({
+                    "event": "token_issued",
+                    "token_type": token_type
+                }));
 
         if let Some(uid) = user_id {
             create_log = create_log.with_actor(uid);
@@ -146,17 +130,14 @@ impl AuditService {
         ip_address: Option<String>,
         user_agent: Option<String>,
     ) -> Result<AuditLog, sqlx::Error> {
-        let mut create_log = CreateAuditLog::success(
-            "token_refresh",
-            "refresh_token",
-            Uuid::new_v4().to_string(),
-        )
-        .with_correlation_id(correlation_id.unwrap_or_default())
-        .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
-        .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
-        .with_metadata(serde_json::json!({
-            "event": "token_refresh"
-        }));
+        let mut create_log =
+            CreateAuditLog::success("token_refresh", "refresh_token", Uuid::new_v4().to_string())
+                .with_correlation_id(correlation_id.unwrap_or_default())
+                .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
+                .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
+                .with_metadata(serde_json::json!({
+                    "event": "token_refresh"
+                }));
 
         if let Some(uid) = user_id {
             create_log = create_log.with_actor(uid);
@@ -229,7 +210,10 @@ impl AuditService {
         } else {
             "***".to_string()
         };
-        error!("Authorization code replay detected: hash_prefix={}", truncated);
+        error!(
+            "Authorization code replay detected: hash_prefix={}",
+            truncated
+        );
         Ok(log)
     }
 
@@ -381,25 +365,19 @@ impl AuditService {
         ip_address: Option<String>,
         user_agent: Option<String>,
     ) -> Result<AuditLog, sqlx::Error> {
-        let create_log = CreateAuditLog::success(
-            "user_created",
-            "user_account",
-            user_id.to_string(),
-        )
-        .with_actor(user_id)
-        .with_correlation_id(correlation_id.unwrap_or_default())
-        .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
-        .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
-        .with_metadata(serde_json::json!({
-            "event": "user_created",
-            "username": username
-        }));
+        let create_log =
+            CreateAuditLog::success("user_created", "user_account", user_id.to_string())
+                .with_actor(user_id)
+                .with_correlation_id(correlation_id.unwrap_or_default())
+                .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
+                .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
+                .with_metadata(serde_json::json!({
+                    "event": "user_created",
+                    "username": username
+                }));
 
         let log = AuditLogRepo::create(pool, create_log).await?;
-        info!(
-            "Audit log: user created {} (id: {})",
-            username, user_id
-        );
+        info!("Audit log: user created {} (id: {})", username, user_id);
         Ok(log)
     }
 
@@ -412,20 +390,16 @@ impl AuditService {
         ip_address: Option<String>,
         user_agent: Option<String>,
     ) -> Result<AuditLog, sqlx::Error> {
-        let create_log = CreateAuditLog::failure(
-            "registration_failure",
-            "user_account",
-            username,
-            reason,
-        )
-        .with_correlation_id(correlation_id.unwrap_or_default())
-        .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
-        .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
-        .with_metadata(serde_json::json!({
-            "event": "registration_failure",
-            "username": username,
-            "reason": reason
-        }));
+        let create_log =
+            CreateAuditLog::failure("registration_failure", "user_account", username, reason)
+                .with_correlation_id(correlation_id.unwrap_or_default())
+                .with_ip(ip_address.unwrap_or_else(|| "unknown".to_string()))
+                .with_user_agent(user_agent.unwrap_or_else(|| "unknown".to_string()))
+                .with_metadata(serde_json::json!({
+                    "event": "registration_failure",
+                    "username": username,
+                    "reason": reason
+                }));
 
         let log = AuditLogRepo::create(pool, create_log).await?;
         info!(
@@ -459,10 +433,7 @@ impl AuditService {
         }));
 
         let log = AuditLogRepo::create(pool, create_log).await?;
-        info!(
-            "Audit log: email changed for user {}",
-            user_id
-        );
+        info!("Audit log: email changed for user {}", user_id);
         Ok(log)
     }
 }

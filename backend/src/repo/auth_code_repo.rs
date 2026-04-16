@@ -12,7 +12,10 @@ pub struct AuthCodeRepo;
 
 impl AuthCodeRepo {
     /// 根据授权码哈希查找
-    pub async fn find_by_hash(pool: &PgPool, code_hash: &str) -> Result<Option<AuthorizationCode>, sqlx::Error> {
+    pub async fn find_by_hash(
+        pool: &PgPool,
+        code_hash: &str,
+    ) -> Result<Option<AuthorizationCode>, sqlx::Error> {
         sqlx::query_as::<_, AuthorizationCode>(
             r#"
             SELECT * FROM authorization_codes WHERE code_hash = $1
@@ -24,12 +27,14 @@ impl AuthCodeRepo {
     }
 
     /// 创建授权码
-    pub async fn create(pool: &PgPool, input: CreateAuthorizationCode) -> Result<AuthorizationCode, sqlx::Error> {
+    pub async fn create(
+        pool: &PgPool,
+        input: CreateAuthorizationCode,
+    ) -> Result<AuthorizationCode, sqlx::Error> {
         let id = Uuid::new_v4();
         let now = OffsetDateTime::now_utc();
         let expires_at = now + time::Duration::minutes(10); // 授权码 10 分钟有效
-        let amr = serde_json::to_value(&input.amr)
-            .map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
+        let amr = serde_json::to_value(&input.amr).map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
 
         sqlx::query_as::<_, AuthorizationCode>(
             r#"
@@ -60,7 +65,10 @@ impl AuthCodeRepo {
 
     /// 原子性消费授权码：仅在未消费时设置 consumed_at 并返回记录
     /// 避免并发请求导致的授权码双花问题
-    pub async fn consume_and_return(pool: &PgPool, code_hash: &str) -> Result<Option<AuthorizationCode>, sqlx::Error> {
+    pub async fn consume_and_return(
+        pool: &PgPool,
+        code_hash: &str,
+    ) -> Result<Option<AuthorizationCode>, sqlx::Error> {
         let now = OffsetDateTime::now_utc();
 
         sqlx::query_as::<_, AuthorizationCode>(

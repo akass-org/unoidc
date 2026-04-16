@@ -263,11 +263,9 @@ pub async fn upload_avatar(
     // 解码、缩放至 256x256、重新编码为 JPEG
     let picture = {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let img = image::load_from_memory(&data).map_err(|_| {
-                AppError::ValidationError {
-                    field: "avatar".to_string(),
-                    message: "无效的图片文件".to_string(),
-                }
+            let img = image::load_from_memory(&data).map_err(|_| AppError::ValidationError {
+                field: "avatar".to_string(),
+                message: "无效的图片文件".to_string(),
             })?;
 
             let resized = img.resize(256, 256, image::imageops::FilterType::Lanczos3);
@@ -373,36 +371,46 @@ pub async fn get_apps(
         if let Ok(Some(client)) =
             crate::repo::ClientRepo::find_by_id(&state.db, consent.client_id).await
         {
-            let scopes: Vec<String> = consent.scope.split_whitespace().map(|s| s.to_string()).collect();
-            apps_by_client_id.insert(client.client_id.clone(), AppResponse {
-                client_id: client.client_id,
-                client_name: client.name,
-                description: client.description,
-                granted_at: Some(format_time_rfc3339(consent.granted_at)),
-                scopes,
-                access_source: "consent".to_string(),
-            });
+            let scopes: Vec<String> = consent
+                .scope
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
+            apps_by_client_id.insert(
+                client.client_id.clone(),
+                AppResponse {
+                    client_id: client.client_id,
+                    client_name: client.name,
+                    description: client.description,
+                    granted_at: Some(format_time_rfc3339(consent.granted_at)),
+                    scopes,
+                    access_source: "consent".to_string(),
+                },
+            );
         }
     }
 
-    let visible_clients = crate::repo::ClientRepo::find_accessible_clients_for_user(&state.db, auth_user.user.id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error while fetching visible apps: {}", e);
-            AppError::InternalServerError {
-                error_code: Some("VISIBLE_APPS_FETCH_ERROR".to_string()),
-            }
-        })?;
+    let visible_clients =
+        crate::repo::ClientRepo::find_accessible_clients_for_user(&state.db, auth_user.user.id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Database error while fetching visible apps: {}", e);
+                AppError::InternalServerError {
+                    error_code: Some("VISIBLE_APPS_FETCH_ERROR".to_string()),
+                }
+            })?;
 
     for client in visible_clients {
-        apps_by_client_id.entry(client.client_id.clone()).or_insert_with(|| AppResponse {
-            client_id: client.client_id,
-            client_name: client.name,
-            description: client.description,
-            granted_at: None,
-            scopes: Vec::new(),
-            access_source: "group".to_string(),
-        });
+        apps_by_client_id
+            .entry(client.client_id.clone())
+            .or_insert_with(|| AppResponse {
+                client_id: client.client_id,
+                client_name: client.name,
+                description: client.description,
+                granted_at: None,
+                scopes: Vec::new(),
+                access_source: "group".to_string(),
+            });
     }
 
     let mut apps: Vec<AppResponse> = apps_by_client_id.into_values().collect();
@@ -445,7 +453,11 @@ pub async fn get_revoked_apps(
         if let Ok(Some(client)) =
             crate::repo::ClientRepo::find_by_id(&state.db, consent.client_id).await
         {
-            let scopes: Vec<String> = consent.scope.split_whitespace().map(|s| s.to_string()).collect();
+            let scopes: Vec<String> = consent
+                .scope
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
             apps.push(AppResponse {
                 client_id: client.client_id,
                 client_name: client.name,
@@ -574,7 +586,10 @@ pub async fn get_audit_logs(
                 user_agent: row.user_agent.unwrap_or_else(|| "unknown".to_string()),
                 outcome: row.outcome,
                 reason: row.reason_code,
-                created_at: row.created_at.format(&Rfc3339).unwrap_or_else(|_| row.created_at.to_string()),
+                created_at: row
+                    .created_at
+                    .format(&Rfc3339)
+                    .unwrap_or_else(|_| row.created_at.to_string()),
             }
         })
         .collect();
@@ -615,7 +630,11 @@ pub async fn get_consents(
         if let Ok(Some(client)) =
             crate::repo::ClientRepo::find_by_id(&state.db, consent.client_id).await
         {
-            let scopes: Vec<String> = consent.scope.split_whitespace().map(|s| s.to_string()).collect();
+            let scopes: Vec<String> = consent
+                .scope
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
             responses.push(ConsentResponse {
                 client_id: client.client_id,
                 client_name: client.name,
@@ -661,14 +680,18 @@ pub async fn revoke_consent(
         })?;
 
     // Step 2: 吊销该用户对该客户端的所有 refresh token（立即生效）
-    crate::repo::RefreshTokenRepo::revoke_user_client_tokens(&state.db, auth_user.user.id, client.id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error while revoking tokens: {}", e);
-            AppError::InternalServerError {
-                error_code: Some("TOKEN_REVOKE_ERROR".to_string()),
-            }
-        })?;
+    crate::repo::RefreshTokenRepo::revoke_user_client_tokens(
+        &state.db,
+        auth_user.user.id,
+        client.id,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Database error while revoking tokens: {}", e);
+        AppError::InternalServerError {
+            error_code: Some("TOKEN_REVOKE_ERROR".to_string()),
+        }
+    })?;
 
     // 记录审计日志
     let ip_address = extract_audit_ip(&headers, &addr, &state.config.trusted_proxy_ips);
@@ -713,14 +736,15 @@ pub async fn restore_consent(
         })?;
 
     // 查找该用户之前对该客户端的授权记录（可能已撤销）
-    let previous_consent = crate::repo::ConsentRepo::find_revoked_consent(&state.db, auth_user.user.id, client.id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error while finding previous consent: {}", e);
-            AppError::InternalServerError {
-                error_code: Some("CONSENT_FETCH_ERROR".to_string()),
-            }
-        })?;
+    let previous_consent =
+        crate::repo::ConsentRepo::find_revoked_consent(&state.db, auth_user.user.id, client.id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Database error while finding previous consent: {}", e);
+                AppError::InternalServerError {
+                    error_code: Some("CONSENT_FETCH_ERROR".to_string()),
+                }
+            })?;
 
     // 用之前的 scope 重新授权，如果没有历史记录则用默认 scope
     let scope = previous_consent
@@ -790,7 +814,9 @@ pub async fn request_email_change(
     })?;
 
     // 验证新邮箱是否已被其他用户使用
-    if let Ok(Some(existing)) = crate::repo::UserRepo::find_by_email(&state.db, &req.new_email).await {
+    if let Ok(Some(existing)) =
+        crate::repo::UserRepo::find_by_email(&state.db, &req.new_email).await
+    {
         if existing.id != auth_user.user.id {
             return Err(AppError::BusinessError {
                 code: "EMAIL_ALREADY_EXISTS".to_string(),
@@ -800,16 +826,13 @@ pub async fn request_email_change(
     }
 
     // 生成验证 token
-    let plain_token = EmailVerificationService::request_email_change(
-        &state.db,
-        &auth_user.user,
-        &req.new_email,
-    )
-    .await
-    .map_err(|e| AppError::BusinessError {
-        code: "EMAIL_CHANGE_REQUEST_FAILED".to_string(),
-        message: e.to_string(),
-    })?;
+    let plain_token =
+        EmailVerificationService::request_email_change(&state.db, &auth_user.user, &req.new_email)
+            .await
+            .map_err(|e| AppError::BusinessError {
+                code: "EMAIL_CHANGE_REQUEST_FAILED".to_string(),
+                message: e.to_string(),
+            })?;
 
     // 发送验证邮件到新邮箱
     if let Some(email_svc) = &state.email_service {
@@ -818,11 +841,7 @@ pub async fn request_email_change(
             state.config.app_base_url, plain_token
         );
         if let Err(e) = email_svc
-            .send_email_change_verification(
-                &req.new_email,
-                &auth_user.user.username,
-                &verify_url,
-            )
+            .send_email_change_verification(&req.new_email, &auth_user.user.username, &verify_url)
             .await
         {
             tracing::error!("Failed to send email verification: {}", e);

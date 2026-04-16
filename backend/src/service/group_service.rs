@@ -102,14 +102,20 @@ impl GroupService {
     }
 
     /// 获取用户所属的组
-    pub async fn get_user_groups(pool: &PgPool, user_id: Uuid) -> Result<Vec<Group>, anyhow::Error> {
+    pub async fn get_user_groups(
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<Vec<Group>, anyhow::Error> {
         GroupRepo::find_user_groups(pool, user_id)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get user groups: {}", e))
     }
 
     /// 获取组中的所有用户 ID
-    pub async fn get_group_user_ids(pool: &PgPool, group_id: Uuid) -> Result<Vec<Uuid>, anyhow::Error> {
+    pub async fn get_group_user_ids(
+        pool: &PgPool,
+        group_id: Uuid,
+    ) -> Result<Vec<Uuid>, anyhow::Error> {
         GroupRepo::find_group_user_ids(pool, group_id)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get group users: {}", e))

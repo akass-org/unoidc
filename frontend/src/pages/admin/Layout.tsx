@@ -1,20 +1,14 @@
-import { Outlet, NavLink } from 'react-router-dom'
-import { 
-  Users, 
-  Tags, 
-  Shield, 
-  ClipboardList, 
-  Settings
-} from 'lucide-react'
-import { LayoutHeader } from '#src/components/LayoutHeader'
+import { Outlet, NavLink } from "react-router-dom";
+import { Users, Tags, Shield, ClipboardList, Settings } from "lucide-react";
+import { LayoutHeader } from "#src/components/LayoutHeader";
 
 const navItems = [
-  { to: '/admin/users', label: '用户管理', icon: Users },
-  { to: '/admin/groups', label: '用户组', icon: Tags },
-  { to: '/admin/clients', label: '应用管理', icon: Shield },
-  { to: '/admin/audit-logs', label: '审计日志', icon: ClipboardList },
-  { to: '/admin/settings', label: '系统设置', icon: Settings },
-]
+  { to: "/admin/users", label: "用户管理", icon: Users },
+  { to: "/admin/groups", label: "用户组", icon: Tags },
+  { to: "/admin/clients", label: "应用管理", icon: Shield },
+  { to: "/admin/audit-logs", label: "审计日志", icon: ClipboardList },
+  { to: "/admin/settings", label: "系统设置", icon: Settings },
+];
 
 export function AdminLayout() {
   return (
@@ -27,7 +21,7 @@ export function AdminLayout() {
           <aside className="lg:w-48 flex-shrink-0">
             <nav className="space-y-0.5 sticky top-20">
               {navItems.map((item) => {
-                const Icon = item.icon
+                const Icon = item.icon;
                 return (
                   <NavLink
                     key={item.to}
@@ -35,15 +29,15 @@ export function AdminLayout() {
                     className={({ isActive }) =>
                       `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all ${
                         isActive
-                          ? 'bg-black text-white dark:bg-white dark:text-black font-medium'
-                          : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04]'
+                          ? "bg-black text-white dark:bg-white dark:text-black font-medium"
+                          : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04]"
                       }`
                     }
                   >
                     <Icon className="w-4 h-4" />
                     {item.label}
                   </NavLink>
-                )
+                );
               })}
             </nav>
           </aside>
@@ -55,5 +49,5 @@ export function AdminLayout() {
         </div>
       </div>
     </div>
-  )
+  );
 }

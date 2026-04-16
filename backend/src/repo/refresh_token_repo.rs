@@ -12,7 +12,10 @@ pub struct RefreshTokenRepo;
 
 impl RefreshTokenRepo {
     /// 根据令牌哈希查找（带行锁，用于防止竞态条件）
-    pub async fn find_by_hash_for_update(pool: &PgPool, token_hash: &str) -> Result<Option<RefreshToken>, sqlx::Error> {
+    pub async fn find_by_hash_for_update(
+        pool: &PgPool,
+        token_hash: &str,
+    ) -> Result<Option<RefreshToken>, sqlx::Error> {
         sqlx::query_as::<_, RefreshToken>(
             r#"
             SELECT * FROM refresh_tokens WHERE token_hash = $1 FOR UPDATE
@@ -24,7 +27,10 @@ impl RefreshTokenRepo {
     }
 
     /// 根据令牌哈希查找
-    pub async fn find_by_hash(pool: &PgPool, token_hash: &str) -> Result<Option<RefreshToken>, sqlx::Error> {
+    pub async fn find_by_hash(
+        pool: &PgPool,
+        token_hash: &str,
+    ) -> Result<Option<RefreshToken>, sqlx::Error> {
         sqlx::query_as::<_, RefreshToken>(
             r#"
             SELECT * FROM refresh_tokens WHERE token_hash = $1
@@ -36,7 +42,10 @@ impl RefreshTokenRepo {
     }
 
     /// 创建刷新令牌
-    pub async fn create(pool: &PgPool, input: CreateRefreshToken) -> Result<RefreshToken, sqlx::Error> {
+    pub async fn create(
+        pool: &PgPool,
+        input: CreateRefreshToken,
+    ) -> Result<RefreshToken, sqlx::Error> {
         let id = Uuid::new_v4();
         let now = OffsetDateTime::now_utc();
 
@@ -163,7 +172,10 @@ impl RefreshTokenRepo {
     }
 
     /// 检测令牌重放攻击（父令牌被重用）
-    pub async fn detect_replay(pool: &PgPool, parent_token_hash: &str) -> Result<bool, sqlx::Error> {
+    pub async fn detect_replay(
+        pool: &PgPool,
+        parent_token_hash: &str,
+    ) -> Result<bool, sqlx::Error> {
         let result: (i64,) = sqlx::query_as(
             r#"
             SELECT COUNT(*)
@@ -182,7 +194,10 @@ impl RefreshTokenRepo {
     ///
     /// 只要发现当前 token 的祖先出现“撤销”或“分叉替换”就判定为重放风险
     /// 防止攻击者使用多代之前的旧 token 进行重放
-    pub async fn detect_family_replay(pool: &PgPool, token_hash: &str) -> Result<bool, sqlx::Error> {
+    pub async fn detect_family_replay(
+        pool: &PgPool,
+        token_hash: &str,
+    ) -> Result<bool, sqlx::Error> {
         // 递归 CTE 查询：追踪整个 token 族谱
         let result: (i64,) = sqlx::query_as(
             r#"

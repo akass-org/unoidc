@@ -66,6 +66,10 @@ image = { version = "0.25", features = ["jpeg", "png", "webp", "gif"] }
 # Email
 lettre = { version = "0.11", default-features = false, features = ["builder", "hostname", "smtp-transport"] }
 
+# WebAuthn
+webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation", "danger-credential-internals"] }
+webauthn-rs-proto = "0.5.4"
+
 [dev-dependencies]
 scopeguard = "1.2.0"
 tokio-test = "0.4"

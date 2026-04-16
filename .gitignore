@@ -81,3 +81,4 @@ htmlcov/
 
 # 坑逼AI生成的垃圾文件
 *.md
+.planning/

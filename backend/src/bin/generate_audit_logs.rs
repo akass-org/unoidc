@@ -1,37 +1,37 @@
 use sqlx::postgres::PgPool;
-use uuid::Uuid;
 use std::error::Error;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().ok();
-    
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://localhost/unoidc".to_string());
-    
+
+    let database_url =
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/unoidc".to_string());
+
     let pool = PgPool::connect(&database_url).await?;
-    
+
     println!("正在生成测试审计日志...");
-    
+
     // 获取第一个用户
     let user = sqlx::query!("SELECT id FROM users LIMIT 1")
         .fetch_optional(&pool)
         .await?;
-    
+
     // 获取第一个客户端
     let client = sqlx::query!("SELECT id FROM clients LIMIT 1")
         .fetch_optional(&pool)
         .await?;
-    
+
     if user.is_none() {
         eprintln!("没有找到用户，请先创建一个用户");
         return Ok(());
     }
-    
+
     let user_id = user.map(|u| u.id);
     let client_id = client.map(|c| c.id);
-    
+
     // 插入登录成功事件
     for i in 0..3 {
         let _ = sqlx::query!(
@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .execute(&pool)
         .await;
     }
-    
+
     // 插入登出事件
     let _ = sqlx::query!(
         r#"
@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .execute(&pool)
     .await;
-    
+
     // 插入令牌发放事件
     if client_id.is_some() {
         let _ = sqlx::query!(
@@ -119,7 +119,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .execute(&pool)
         .await;
     }
-    
+
     // 插入登录失败事件
     let _ = sqlx::query!(
         r#"
@@ -147,13 +147,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .execute(&pool)
     .await;
-    
+
     let count = sqlx::query!("SELECT COUNT(*) as count FROM audit_logs")
         .fetch_one(&pool)
         .await?;
-    
+
     println!("✓ 测试审计日志已生成!");
     println!("总审计日志数: {}", count.count.unwrap_or(0));
-    
+
     Ok(())
 }

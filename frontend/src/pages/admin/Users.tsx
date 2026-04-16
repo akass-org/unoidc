@@ -1,167 +1,155 @@
-import { useState, useEffect } from 'react'
-import { 
-  Users, 
-  Search, 
-  Plus, 
-  MoreHorizontal, 
-  Key
-} from 'lucide-react'
-import { adminApi } from '#src/api/admin'
-import { useApi } from '#src/hooks'
-import { 
-  Card, 
-  Button, 
+import { useState, useEffect } from "react";
+import { Users, Search, Plus, MoreHorizontal, Key } from "lucide-react";
+import { adminApi } from "#src/api/admin";
+import { useApi } from "#src/hooks";
+import {
+  Card,
+  Button,
   Input,
   Modal,
   Badge,
   Avatar,
   Table,
   EmptyState,
-  useToast
-} from '#src/components/ui'
-import { getErrorMessage } from '#src/api/client'
+  useToast,
+} from "#src/components/ui";
+import { getErrorMessage } from "#src/api/client";
 
 // Animation keyframes
-const fadeIn = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`
-const slideUp = `@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`
+const fadeIn = `@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`;
+const slideUp = `@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`;
 
 interface User {
-  id: string
-  username: string
-  email: string
-  display_name: string
-  picture?: string
-  is_admin: boolean
-  is_active: boolean
-  created_at: string
+  id: string;
+  username: string;
+  email: string;
+  display_name: string;
+  picture?: string;
+  is_admin: boolean;
+  is_active: boolean;
+  created_at: string;
 }
 
 export function AdminUsers() {
-  const [users, setUsers] = useState<User[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
-  const [search, setSearch] = useState('')
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null)
-  const [resetPasswordSuccess, setResetPasswordSuccess] = useState(false)
-  const { addToast } = useToast()
+  const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+  const [search, setSearch] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
+  const [resetPasswordSuccess, setResetPasswordSuccess] = useState(false);
+  const { addToast } = useToast();
 
   // Form states
   const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    display_name: '',
-    password: '',
+    username: "",
+    email: "",
+    display_name: "",
+    password: "",
     is_admin: false,
-  })
+  });
 
   // Load users
   useEffect(() => {
-    loadUsers()
-  }, [])
+    loadUsers();
+  }, []);
 
   // Filter users
   useEffect(() => {
-    const filtered = users.filter(u =>
-      u.username.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.display_name.toLowerCase().includes(search.toLowerCase())
-    )
-    setFilteredUsers(filtered)
-  }, [users, search])
+    const filtered = users.filter(
+      (u) =>
+        u.username.toLowerCase().includes(search.toLowerCase()) ||
+        u.email.toLowerCase().includes(search.toLowerCase()) ||
+        u.display_name.toLowerCase().includes(search.toLowerCase()),
+    );
+    setFilteredUsers(filtered);
+  }, [users, search]);
 
   const loadUsers = async () => {
     try {
-      const data = await adminApi.getUsers() as User[]
-      setUsers(data)
+      const data = (await adminApi.getUsers()) as User[];
+      setUsers(data);
     } catch (err) {
       addToast({
-        type: 'error',
-        title: '加载失败',
+        type: "error",
+        title: "加载失败",
         message: getErrorMessage(err),
-      })
+      });
     }
-  }
+  };
 
-  const { loading: creating, execute: createUser } = useApi(
-    adminApi.createUser,
-    {
-      successMessage: '用户创建成功',
-      onSuccess: () => {
-        setShowCreateModal(false)
-        setFormData({ username: '', email: '', display_name: '', password: '', is_admin: false })
-        loadUsers()
-      }
-    }
-  )
+  const { loading: creating, execute: createUser } = useApi(adminApi.createUser, {
+    successMessage: "用户创建成功",
+    onSuccess: () => {
+      setShowCreateModal(false);
+      setFormData({ username: "", email: "", display_name: "", password: "", is_admin: false });
+      loadUsers();
+    },
+  });
 
   const { loading: updating, execute: updateUser } = useApi(
     (id: string, data: Record<string, unknown>) => adminApi.updateUser(id, data),
     {
-      successMessage: '用户更新成功',
+      successMessage: "用户更新成功",
       onSuccess: () => {
-        setEditingUser(null)
-        loadUsers()
-      }
-    }
-  )
+        setEditingUser(null);
+        loadUsers();
+      },
+    },
+  );
 
   const { loading: resetting, execute: resetPassword } = useApi(
     (id: string) => adminApi.resetUserPassword(id),
     {
       onSuccess: () => {
-        setResetPasswordSuccess(true)
-        loadUsers()
-      }
-    }
-  )
+        setResetPasswordSuccess(true);
+        loadUsers();
+      },
+    },
+  );
 
   const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    await createUser(formData)
-  }
+    e.preventDefault();
+    await createUser(formData);
+  };
 
   const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editingUser) return
+    e.preventDefault();
+    if (!editingUser) return;
     await updateUser(editingUser.id, {
       display_name: editingUser.display_name,
       email: editingUser.email,
       is_admin: editingUser.is_admin,
       is_active: editingUser.is_active,
-    })
-  }
+    });
+  };
 
   const handleResetPassword = async () => {
-    if (!resetPasswordUser) return
-    await resetPassword(resetPasswordUser.id)
-  }
+    if (!resetPasswordUser) return;
+    await resetPassword(resetPasswordUser.id);
+  };
 
   const formatDate = (dateStr: string) => {
-    if (!dateStr || typeof dateStr !== 'string') return '-'
+    if (!dateStr || typeof dateStr !== "string") return "-";
 
-    let normalized = dateStr.trim()
-    if (normalized.includes(' ') && !normalized.includes('T')) {
-      normalized = normalized.replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T')
+    let normalized = dateStr.trim();
+    if (normalized.includes(" ") && !normalized.includes("T")) {
+      normalized = normalized.replace(/^(\d{4}-\d{2}-\d{2}) /, "$1T");
     }
-    normalized = normalized.replace(/(\d{2}:\d{2}:\d{2})\.(\d{6})\d+/, '$1.$2')
+    normalized = normalized.replace(/(\d{2}:\d{2}:\d{2})\.(\d{6})\d+/, "$1.$2");
 
-    const date = new Date(normalized)
-    if (Number.isNaN(date.getTime())) return '-'
-    return date.toLocaleDateString('zh-CN')
-  }
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return "-";
+    return date.toLocaleDateString("zh-CN");
+  };
 
   const columns = [
     {
-      key: 'user',
-      title: '用户',
+      key: "user",
+      title: "用户",
       render: (user: User) => (
         <div className="flex items-center gap-3">
-          <Avatar
-            name={user.display_name || user.username}
-            src={user.picture}
-            size="sm"
-          />
+          <Avatar name={user.display_name || user.username} src={user.picture} size="sm" />
           <div>
             <p className="text-sm text-gray-900 dark:text-white">{user.display_name}</p>
             <p className="text-xs text-gray-500 dark:text-gray-600">@{user.username}</p>
@@ -170,45 +158,39 @@ export function AdminUsers() {
       ),
     },
     {
-      key: 'email',
-      title: '邮箱',
-      render: (user: User) => (
-        <span className="text-sm text-gray-500">{user.email}</span>
-      ),
+      key: "email",
+      title: "邮箱",
+      render: (user: User) => <span className="text-sm text-gray-500">{user.email}</span>,
     },
     {
-      key: 'role',
-      title: '角色',
-      render: (user: User) => (
-        user.is_admin ? (
-          <Badge variant="warning">管理员</Badge>
-        ) : (
-          <Badge>普通用户</Badge>
-        )
-      ),
+      key: "role",
+      title: "角色",
+      render: (user: User) =>
+        user.is_admin ? <Badge variant="warning">管理员</Badge> : <Badge>普通用户</Badge>,
     },
     {
-      key: 'status',
-      title: '状态',
-      render: (user: User) => (
+      key: "status",
+      title: "状态",
+      render: (user: User) =>
         user.is_active ? (
           <Badge variant="success">活跃</Badge>
         ) : (
           <Badge variant="error">禁用</Badge>
-        )
-      ),
+        ),
     },
     {
-      key: 'created',
-      title: '创建时间',
+      key: "created",
+      title: "创建时间",
       render: (user: User) => (
-        <span className="text-sm text-gray-500 dark:text-gray-600">{formatDate(user.created_at)}</span>
+        <span className="text-sm text-gray-500 dark:text-gray-600">
+          {formatDate(user.created_at)}
+        </span>
       ),
     },
     {
-      key: 'actions',
-      title: '',
-      width: '80px',
+      key: "actions",
+      title: "",
+      width: "80px",
       render: (user: User) => (
         <div className="flex items-center gap-1">
           <button
@@ -228,20 +210,20 @@ export function AdminUsers() {
         </div>
       ),
     },
-  ]
+  ];
 
   return (
-    <div className="space-y-5" style={{ animation: 'slideUp 0.3s ease-out' }}>
-      <style>{fadeIn}{slideUp}</style>
+    <div className="space-y-5" style={{ animation: "slideUp 0.3s ease-out" }}>
+      <style>
+        {fadeIn}
+        {slideUp}
+      </style>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">用户管理</h1>
           <p className="text-sm text-gray-500 mt-0.5">管理系统用户和权限</p>
         </div>
-        <Button 
-          onClick={() => setShowCreateModal(true)}
-          size="sm"
-        >
+        <Button onClick={() => setShowCreateModal(true)} size="sm">
           <Plus className="w-4 h-4" />
           添加用户
         </Button>
@@ -265,19 +247,25 @@ export function AdminUsers() {
       <div className="grid grid-cols-3 gap-3">
         <Card className="text-center py-4">
           <p className="text-2xl font-bold text-gray-900 dark:text-white">{users.length}</p>
-          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">总用户</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">
+            总用户
+          </p>
         </Card>
         <Card className="text-center py-4">
           <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-            {users.filter(u => u.is_active).length}
+            {users.filter((u) => u.is_active).length}
           </p>
-          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">活跃用户</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">
+            活跃用户
+          </p>
         </Card>
         <Card className="text-center py-4">
           <p className="text-2xl font-bold text-gray-600 dark:text-gray-300">
-            {users.filter(u => u.is_admin).length}
+            {users.filter((u) => u.is_admin).length}
           </p>
-          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">管理员</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-600 uppercase tracking-wider mt-1">
+            管理员
+          </p>
         </Card>
       </div>
 
@@ -308,10 +296,7 @@ export function AdminUsers() {
             <Button variant="ghost" onClick={() => setShowCreateModal(false)}>
               取消
             </Button>
-            <Button 
-              onClick={handleCreate} 
-              loading={creating}
-            >
+            <Button onClick={handleCreate} loading={creating}>
               创建
             </Button>
           </>
@@ -371,10 +356,7 @@ export function AdminUsers() {
               <Button variant="ghost" onClick={() => setEditingUser(null)}>
                 取消
               </Button>
-              <Button 
-                onClick={handleUpdate} 
-                loading={updating}
-              >
+              <Button onClick={handleUpdate} loading={updating}>
                 保存
               </Button>
             </>
@@ -421,17 +403,19 @@ export function AdminUsers() {
         <Modal
           isOpen={!!resetPasswordUser}
           onClose={() => {
-            setResetPasswordUser(null)
-            setResetPasswordSuccess(false)
+            setResetPasswordUser(null);
+            setResetPasswordSuccess(false);
           }}
           title="重置密码"
           description={`为 ${resetPasswordUser.display_name} 重置密码`}
           footer={
             resetPasswordSuccess ? (
-              <Button onClick={() => {
-                setResetPasswordUser(null)
-                setResetPasswordSuccess(false)
-              }}>
+              <Button
+                onClick={() => {
+                  setResetPasswordUser(null);
+                  setResetPasswordSuccess(false);
+                }}
+              >
                 完成
               </Button>
             ) : (
@@ -439,11 +423,7 @@ export function AdminUsers() {
                 <Button variant="ghost" onClick={() => setResetPasswordUser(null)}>
                   取消
                 </Button>
-                <Button 
-                  onClick={handleResetPassword}
-                  loading={resetting}
-                  variant="danger"
-                >
+                <Button onClick={handleResetPassword} loading={resetting} variant="danger">
                   重置
                 </Button>
               </>
@@ -453,7 +433,9 @@ export function AdminUsers() {
           {resetPasswordSuccess ? (
             <div className="space-y-4">
               <div className="p-4 bg-emerald-50 dark:bg-emerald-500/[0.08] border border-emerald-200 dark:border-emerald-500/[0.16] rounded-lg">
-                <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">密码已成功重置</p>
+                <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+                  密码已成功重置
+                </p>
               </div>
               <p className="text-sm text-gray-500 dark:text-gray-600">
                 用户需要使用新密码登录。如用户忘记密码，可通过管理员再次重置。
@@ -467,5 +449,5 @@ export function AdminUsers() {
         </Modal>
       )}
     </div>
-  )
+  );
 }

@@ -24,9 +24,7 @@ mod capture {
     impl CaptureLayer {
         pub fn new() -> (Self, Arc<Mutex<Vec<String>>>) {
             let logs = Arc::new(Mutex::new(Vec::new()));
-            let layer = Self {
-                logs: logs.clone(),
-            };
+            let layer = Self { logs: logs.clone() };
             (layer, logs)
         }
     }
@@ -94,7 +92,7 @@ fn test_password_not_logged_in_plaintext() {
 
     // 哈希值本身是可以记录的（因为它是安全的）
     assert!(
-        log_message.contains(&hash[..20]),  // 只检查前 20 个字符
+        log_message.contains(&hash[..20]), // 只检查前 20 个字符
         "Hash should be safe to log"
     );
 }
@@ -110,7 +108,7 @@ fn test_token_not_logged_in_full() {
 
     // 确保不包含完整的 token
     assert!(
-        !log_message.contains(&token[9..]),  // 不应该包含第 9 个字符之后的字符
+        !log_message.contains(&token[9..]), // 不应该包含第 9 个字符之后的字符
         "Log message should not contain full token"
     );
 
@@ -128,7 +126,7 @@ fn test_client_secret_redaction() {
 
     // 创建脱敏后的版本
     let redacted = if secret.len() > 8 {
-        format!("{}...{}", &secret[..4], &secret[secret.len()-4..])
+        format!("{}...{}", &secret[..4], &secret[secret.len() - 4..])
     } else {
         "***".to_string()
     };
@@ -250,7 +248,7 @@ fn test_redaction_helper_function() {
         match sensitive_type {
             "password" | "secret" | "token" => {
                 if value.len() > 8 {
-                    format!("{}...{}", &value[..4], &value[value.len()-4..])
+                    format!("{}...{}", &value[..4], &value[value.len() - 4..])
                 } else {
                     "***".to_string()
                 }
